@@ -9,6 +9,14 @@ struct CrossPointStatus: Codable, Equatable {
     let uptime: Int
     let device: String
 }
+
+struct ReaderPreferences: Equatable, Sendable {
+    var startupApp = 1
+    var pocketDailySleepCover = true
+    var sleepTimeoutMinutes = 10
+    var fontSize = 1
+}
+
 actor CrossPointClient {
     enum ClientError: LocalizedError {
         case invalidAddress
@@ -34,9 +42,54 @@ actor CrossPointClient {
         guard let url = URL(string: "http://\(host):\(port)/api/status") else {
             throw ClientError.invalidAddress
         }
-        let (data, response) = try await session.data(from: url)
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4
+        let (data, response) = try await session.data(for: request)
         try Self.requireSuccess(response)
         return try JSONDecoder().decode(CrossPointStatus.self, from: data)
+    }
+
+    func preferences(host: String, port: Int) async throws -> ReaderPreferences {
+        guard let url = URL(string: "http://\(host):\(port)/api/settings") else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 6
+        let (data, response) = try await session.data(for: request)
+        try Self.requireSuccess(response)
+        guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            throw ClientError.unexpectedMessage("invalid settings JSON")
+        }
+        let values = Dictionary(uniqueKeysWithValues: rows.compactMap { row -> (String, Int)? in
+            guard let key = row["key"] as? String else { return nil }
+            if let value = row["value"] as? Int { return (key, value) }
+            if let value = row["value"] as? NSNumber { return (key, value.intValue) }
+            return nil
+        })
+        return ReaderPreferences(
+            startupApp: values["startupApp"] ?? 1,
+            pocketDailySleepCover: (values["pocketDailySleepCover"] ?? 1) != 0,
+            sleepTimeoutMinutes: values["sleepTimeoutMinutes"] ?? 10,
+            fontSize: values["fontSize"] ?? 1
+        )
+    }
+
+    func save(preferences: ReaderPreferences, host: String, port: Int) async throws {
+        guard let url = URL(string: "http://\(host):\(port)/api/settings") else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 6
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "startupApp": preferences.startupApp,
+            "pocketDailySleepCover": preferences.pocketDailySleepCover ? 1 : 0,
+            "sleepTimeoutMinutes": preferences.sleepTimeoutMinutes,
+            "fontSize": preferences.fontSize,
+        ])
+        let (_, response) = try await session.data(for: request)
+        try Self.requireSuccess(response)
     }
 
     func upload(

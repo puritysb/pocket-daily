@@ -20,13 +20,57 @@ final class PocketModel: ObservableObject {
     @Published var message = "Wake your reader and open File Transfer or Nearby Sync."
     @Published var isWorking = false
     @Published var uploadProgress: Double = 0
+    @Published var preferences: ReaderPreferences?
+    @Published var preferencesDirty = false
 
     private let client = CrossPointClient()
+    private let localDiscovery = LocalReaderDiscovery()
     private var activeHost = "192.168.4.1"
+    private var activeHTTPPort = 80
     private var activeWebSocketPort = 81
+    private var discoveryTask: Task<Void, Never>?
 
     func connectToExistingHotspot() {
         Task { await verify(host: "192.168.4.1", port: 80) }
+    }
+
+    func findOnLocalNetwork() {
+        discoveryTask?.cancel()
+        discoveryTask = Task {
+            isWorking = true
+            message = "Checking the current Wi-Fi and nearby hotspot…"
+            defer { isWorking = false }
+
+            let bonjourTask = Task { await localDiscovery.first(timeout: .seconds(5)) }
+            let candidates = ["crosspoint.local", "192.168.4.1"]
+            let found: (String, CrossPointStatus)? = await withTaskGroup(of: (String, CrossPointStatus)?.self) { group in
+                for host in candidates {
+                    group.addTask { [client] in
+                        guard let status = try? await client.status(host: host, port: 80) else { return nil }
+                        return (host, status)
+                    }
+                }
+                for await result in group {
+                    if let result {
+                        group.cancelAll()
+                        return result
+                    }
+                }
+                return nil
+            }
+
+            guard !Task.isCancelled else { return }
+            if let (host, status) = found {
+                localDiscovery.stop()
+                bonjourTask.cancel()
+                await accept(status: status, host: host, httpPort: 80, webSocketPort: 81)
+            } else if let endpoint = await bonjourTask.value,
+                      let status = try? await client.status(host: endpoint.host, port: endpoint.port) {
+                await accept(status: status, host: endpoint.host, httpPort: endpoint.port, webSocketPort: 81)
+            } else if readerStatus == nil {
+                message = "X3 was not visible. On X3 open Nearby Sync, or open Create Hotspot and join its Wi-Fi."
+            }
+        }
     }
 
     func useNearbyLease(_ lease: HotspotLease) {
@@ -51,13 +95,57 @@ final class PocketModel: ObservableObject {
         isWorking = true
         defer { isWorking = false }
         do {
-            readerStatus = try await client.status(host: host, port: httpPort)
-            activeHost = host
-            activeWebSocketPort = webSocketPort
-            message = "Connected to \(readerStatus?.device ?? "Pocket")."
+            let status = try await client.status(host: host, port: httpPort)
+            await accept(status: status, host: host, httpPort: httpPort, webSocketPort: webSocketPort)
         } catch {
             readerStatus = nil
+            preferences = nil
             message = "Reader not found. Open Create Hotspot on the reader and try again."
+        }
+    }
+
+    private func accept(status: CrossPointStatus, host: String, httpPort: Int, webSocketPort: Int) async {
+        readerStatus = status
+        activeHost = host
+        activeHTTPPort = httpPort
+        activeWebSocketPort = webSocketPort
+        preferences = try? await client.preferences(host: host, port: httpPort)
+        preferencesDirty = false
+        message = "Connected to \(status.device)."
+    }
+
+    func setStartupPocketDaily(_ enabled: Bool) {
+        preferences?.startupApp = enabled ? 1 : 0
+        preferencesDirty = true
+    }
+
+    func setPocketDailySleepCover(_ enabled: Bool) {
+        preferences?.pocketDailySleepCover = enabled
+        preferencesDirty = true
+    }
+
+    func setSleepTimeout(_ minutes: Int) {
+        preferences?.sleepTimeoutMinutes = minutes
+        preferencesDirty = true
+    }
+
+    func setFontSize(_ size: Int) {
+        preferences?.fontSize = size
+        preferencesDirty = true
+    }
+
+    func savePreferences() {
+        guard let preferences else { return }
+        Task {
+            isWorking = true
+            defer { isWorking = false }
+            do {
+                try await client.save(preferences: preferences, host: activeHost, port: activeHTTPPort)
+                preferencesDirty = false
+                message = "Settings were applied to X3."
+            } catch {
+                message = error.localizedDescription
+            }
         }
     }
 

@@ -22,6 +22,7 @@ final class NearbySyncController: NSObject, ObservableObject {
     private var commandCharacteristic: CBCharacteristic?
     private var eventCharacteristic: CBCharacteristic?
     private var pendingHotspotRequestID: String?
+    private var scanTimeout: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -39,10 +40,19 @@ final class NearbySyncController: NSObject, ObservableObject {
             withServices: [NearbySyncProtocol.service],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
+        scanTimeout?.cancel()
+        scanTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled, let self, self.state == .scanning else { return }
+            self.central.stopScan()
+            self.state = .failed("No Nearby Sync signal. Open Nearby Sync on X3, then try again.")
+        }
     }
 
     func disconnect() {
         central.stopScan()
+        scanTimeout?.cancel()
+        scanTimeout = nil
         if let peripheral { central.cancelPeripheralConnection(peripheral) }
         peripheral = nil
         statusCharacteristic = nil
@@ -88,6 +98,8 @@ extension NearbySyncController: CBCentralManagerDelegate {
         Task { @MainActor in
             guard self.peripheral == nil else { return }
             central.stopScan()
+            scanTimeout?.cancel()
+            scanTimeout = nil
             self.peripheral = peripheral
             peripheral.delegate = self
             state = .connecting(peripheral.name ?? "Pocket")
