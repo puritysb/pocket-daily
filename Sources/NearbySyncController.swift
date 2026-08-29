@@ -45,7 +45,7 @@ final class NearbySyncController: NSObject, ObservableObject {
             try? await Task.sleep(for: .seconds(12))
             guard !Task.isCancelled, let self, self.state == .scanning else { return }
             self.central.stopScan()
-            self.state = .failed("No Nearby Sync signal. Open Nearby Sync on X3, then try again.")
+            self.state = .failed("No Nearby Sync signal. Open Nearby Sync on the reader, then try again.")
         }
     }
 

@@ -1,6 +1,6 @@
 # Pocket Apple app
 
-Pocket is the account-free companion for Crosspoint Pocket readers. Bluetooth
+Pocket is the account-free companion for Xteink X3 and X4 Crosspoint readers. Bluetooth
 performs secure discovery and hands the app a temporary private Wi-Fi lease;
 the existing CrossPoint WebSocket endpoint carries books, learning packs, and
 firmware to the SD card.

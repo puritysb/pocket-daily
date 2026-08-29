@@ -61,6 +61,9 @@ struct ContentView: View {
         .onChange(of: nearby.hotspotLease) { _, lease in
             if let lease { model.useNearbyLease(lease) }
         }
+        .onChange(of: nearby.state) { _, state in
+            if case let .connected(status) = state { model.selectHardware(named: status.model) }
+        }
         .task { model.findOnLocalNetwork() }
     }
 
@@ -71,8 +74,9 @@ struct ContentView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     previewHeader
-                    X3DevicePreview(section: selection, status: model.readerStatus)
+                    PocketDevicePreview(hardware: model.hardware, section: selection, status: model.readerStatus)
                         .frame(maxWidth: 430)
+                        .frame(height: 590)
                 }
                 .padding(.horizontal, 34)
                 .padding(.vertical, 24)
@@ -96,7 +100,7 @@ struct ContentView: View {
                     }
                     .pickerStyle(.segmented)
                     previewHeader
-                    X3DevicePreview(section: selection, status: model.readerStatus)
+                    PocketDevicePreview(hardware: model.hardware, section: selection, status: model.readerStatus)
                         .frame(maxWidth: 390)
                     inspector
                 }
@@ -146,7 +150,7 @@ struct ContentView: View {
             Spacer()
             HStack(spacing: 8) {
                 Circle().fill(model.readerStatus == nil ? Color.secondary : Color.green).frame(width: 8, height: 8)
-                Text(model.readerStatus == nil ? "X3 not connected" : "X3 connected").font(.caption)
+                Text(model.readerStatus == nil ? "\(model.hardware.rawValue) not connected" : "\(model.hardware.rawValue) connected").font(.caption)
             }
             .padding(18)
         }
@@ -157,7 +161,7 @@ struct ContentView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(selection.title).font(.title2.weight(.semibold))
-                Text("528 × 792 device preview · not a live framebuffer")
+                Text("\(model.hardware.screenWidth) × \(model.hardware.screenHeight) · \(model.hardware.controlSummary) · preview")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -166,6 +170,15 @@ struct ContentView: View {
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 9).padding(.vertical, 5)
                     .background(Color.green.opacity(0.12), in: Capsule())
+            } else {
+                Picker("Device", selection: $model.preferredHardware) {
+                    ForEach(PocketHardware.allCases) { hardware in
+                        Text(hardware.rawValue).tag(hardware)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 112)
             }
         }
         .frame(maxWidth: 520)
@@ -205,7 +218,7 @@ private struct ConnectionInspector: View {
             HStack {
                 Circle().fill(model.readerStatus == nil ? Color.secondary : Color.green).frame(width: 9, height: 9)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.readerStatus?.device ?? "Xteink X3").fontWeight(.semibold)
+                    Text(model.readerStatus?.device ?? model.hardware.displayName).fontWeight(.semibold)
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

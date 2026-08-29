@@ -22,6 +22,7 @@ final class PocketModel: ObservableObject {
     @Published var uploadProgress: Double = 0
     @Published var preferences: ReaderPreferences?
     @Published var preferencesDirty = false
+    @Published var preferredHardware: PocketHardware = .x3
 
     private let client = CrossPointClient()
     private let localDiscovery = LocalReaderDiscovery()
@@ -29,6 +30,14 @@ final class PocketModel: ObservableObject {
     private var activeHTTPPort = 80
     private var activeWebSocketPort = 81
     private var discoveryTask: Task<Void, Never>?
+
+    var hardware: PocketHardware {
+        readerStatus.flatMap { PocketHardware(deviceName: $0.device) } ?? preferredHardware
+    }
+
+    func selectHardware(named name: String) {
+        if let hardware = PocketHardware(deviceName: name) { preferredHardware = hardware }
+    }
 
     func connectToExistingHotspot() {
         Task { await verify(host: "192.168.4.1", port: 80) }
@@ -68,7 +77,7 @@ final class PocketModel: ObservableObject {
                       let status = try? await client.status(host: endpoint.host, port: endpoint.port) {
                 await accept(status: status, host: endpoint.host, httpPort: endpoint.port, webSocketPort: 81)
             } else if readerStatus == nil {
-                message = "X3 was not visible. On X3 open Nearby Sync, or open Create Hotspot and join its Wi-Fi."
+                message = "No Pocket reader was visible. Open Nearby Sync, or open Create Hotspot and join the reader's Wi-Fi."
             }
         }
     }
@@ -106,6 +115,7 @@ final class PocketModel: ObservableObject {
 
     private func accept(status: CrossPointStatus, host: String, httpPort: Int, webSocketPort: Int) async {
         readerStatus = status
+        selectHardware(named: status.device)
         activeHost = host
         activeHTTPPort = httpPort
         activeWebSocketPort = webSocketPort

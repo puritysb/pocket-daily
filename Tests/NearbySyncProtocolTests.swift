@@ -16,6 +16,15 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertThrowsError(try PocketDeviceStatus(record: "V=1;V=2;MODEL=X3;ID=A;CAP=AP"))
     }
 
+    func testMapsBothSupportedHardwareModels() throws {
+        XCTAssertEqual(PocketHardware(deviceName: "X3"), .x3)
+        XCTAssertEqual(PocketHardware(deviceName: "Xteink X4"), .x4)
+        XCTAssertNil(PocketHardware(deviceName: "X5"))
+
+        let status = try PocketDeviceStatus(record: "V=1;MODEL=X4;ID=12345678;FW=2.0;CAP=AP,WS,SD")
+        XCTAssertEqual(PocketHardware(deviceName: status.model), .x4)
+    }
+
     func testParsesHotspotLease() throws {
         let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-89AB A1B2C3D4E5F6 192.168.4.1 80 81 300")
         XCTAssertEqual(lease.requestID, "12ABCDEF")
