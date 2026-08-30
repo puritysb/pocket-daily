@@ -37,39 +37,50 @@ enum HotspotJoiner {
                     .max(by: { $0.rssiValue < $1.rssiValue })
             }
             let ssidData = Data(ssid.utf8)
-            let deadline = ContinuousClock.now + .seconds(20)
+            let deadline = ContinuousClock.now + .seconds(25)
             var lastScanError: Error?
+            var lastAssociationError: Error?
+            var retryDelay = Duration.milliseconds(650)
             while ContinuousClock.now < deadline {
                 // macOS System Settings refreshes CoreWLAN's cache even when a
                 // directed scan returns no rows. Prefer that fresh cache, then
-                // fall back to both broadcast and directed scans. ESP32 soft APs
-                // have been observed in the system Wi-Fi list while
-                // scanForNetworks(withName:) still returns an empty set.
-                if let network = matchingNetwork(interface.cachedScanResults()) {
-                    try interface.associate(to: network, password: passphrase)
-                    return
+                // make one directed scan per retry. Back-to-back broadcast and
+                // directed scans can keep CoreWLAN in EBUSY on recent macOS.
+                var network = matchingNetwork(interface.cachedScanResults())
+                if network == nil {
+                    do {
+                        network = matchingNetwork(
+                            try interface.scanForNetworks(withSSID: ssidData, includeHidden: true)
+                        )
+                    } catch {
+                        lastScanError = error
+                    }
                 }
-                do {
-                    let networks = try interface.scanForNetworks(withName: nil)
-                    if let network = matchingNetwork(networks) {
+
+                if let network {
+                    do {
                         try interface.associate(to: network, password: passphrase)
                         return
+                    } catch {
+                        // The system Wi-Fi service may still be completing the
+                        // scan that exposed the ESP32 AP. Treat EBUSY and other
+                        // transient association failures as retryable until the
+                        // handoff deadline instead of immediately falling back.
+                        lastAssociationError = error
                     }
-                } catch {
-                    lastScanError = error
                 }
-                do {
-                    let networks = try interface.scanForNetworks(withSSID: ssidData, includeHidden: true)
-                    if let network = matchingNetwork(networks) {
-                        try interface.associate(to: network, password: passphrase)
-                        return
-                    }
-                } catch {
-                    lastScanError = error
-                }
-                try await Task.sleep(for: .milliseconds(500))
+
+                try await Task.sleep(for: retryDelay)
+                retryDelay = min(retryDelay + .milliseconds(250), .milliseconds(1_650))
             }
 
+            if let lastAssociationError {
+                let error = lastAssociationError as NSError
+                throw HotspotJoinError.associationFailed(
+                    ssid,
+                    "\(error.domain):\(error.code) \(error.localizedDescription)"
+                )
+            }
             if let lastScanError { throw lastScanError }
             throw HotspotJoinError.networkNotFound(ssid)
         }.value
@@ -133,6 +144,7 @@ enum HotspotJoinError: LocalizedError, Equatable {
     case noWiFiInterface
     case locationPermissionRequired
     case networkNotFound(String)
+    case associationFailed(String, String)
 
     var errorDescription: String? {
         switch self {
@@ -142,6 +154,8 @@ enum HotspotJoinError: LocalizedError, Equatable {
             "Allow Pocket to use Location Services so it can find the reader's temporary Wi-Fi network."
         case let .networkNotFound(ssid):
             "Pocket could not find \(ssid). You can still join it manually below."
+        case let .associationFailed(ssid, reason):
+            "Pocket found \(ssid) but could not join it (\(reason)). Retry automatic join or use the manual fallback."
         }
     }
 }

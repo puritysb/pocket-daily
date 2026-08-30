@@ -68,14 +68,28 @@ final class NearbySyncController: NSObject, ObservableObject {
         scanTimeout?.cancel()
         scanTimeout = Task { [weak self] in
             // A Pocket Daily Sync press performs a clean-heap reader restart
-            // before BLE advertising. Keep discovery open long enough for the
-            // user to press either side first without a timing race.
-            try? await Task.sleep(for: .seconds(30))
+            // before BLE advertising. Prefer the low-noise service-filtered
+            // scan, but fall back to the authenticated Pocket name when macOS
+            // omits a 128-bit service UUID from its filtered scan cache.
+            try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled, let self, self.state == .scanning else { return }
             self.central.stopScan()
-            self.record("BLE scan timed out without a Pocket service")
+            self.record("Filtered BLE scan found no service; trying Pocket name fallback")
+            self.central.scanForPeripherals(
+                withServices: nil,
+                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+            )
+
+            try? await Task.sleep(for: .seconds(22))
+            guard !Task.isCancelled, self.state == .scanning else { return }
+            self.central.stopScan()
+            self.record("BLE scan timed out after service and Pocket name searches")
             self.state = .failed("No Pocket Sync signal. Open Pocket Daily on the reader, press Sync, then try again.")
         }
+    }
+
+    nonisolated static func isPocketAdvertisement(name: String?, serviceUUIDs: [CBUUID]) -> Bool {
+        serviceUUIDs.contains(NearbySyncProtocol.service) || name?.hasPrefix("Pocket-") == true
     }
 
     func disconnect() {
@@ -156,13 +170,17 @@ extension NearbySyncController: CBCentralManagerDelegate {
     ) {
         Task { @MainActor in
             guard self.peripheral == nil else { return }
-            record("Pocket device discovered: \(peripheral.name ?? "unnamed") RSSI=\(RSSI)")
+            let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+            let serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
+            let name = advertisedName ?? peripheral.name
+            guard Self.isPocketAdvertisement(name: name, serviceUUIDs: serviceUUIDs) else { return }
+            record("Pocket device discovered: \(name ?? "unnamed") RSSI=\(RSSI)")
             central.stopScan()
             scanTimeout?.cancel()
             scanTimeout = nil
             self.peripheral = peripheral
             peripheral.delegate = self
-            state = .connecting(peripheral.name ?? "Pocket")
+            state = .connecting(name ?? "Pocket")
             central.connect(peripheral)
         }
     }

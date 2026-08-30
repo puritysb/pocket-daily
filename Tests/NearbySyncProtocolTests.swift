@@ -1,7 +1,23 @@
+import CoreBluetooth
 import XCTest
 @testable import Pocket
 
 final class NearbySyncProtocolTests: XCTestCase {
+    func testPocketAdvertisementFallbackAcceptsServiceOrNameOnly() {
+        XCTAssertTrue(NearbySyncController.isPocketAdvertisement(
+            name: nil,
+            serviceUUIDs: [NearbySyncProtocol.service]
+        ))
+        XCTAssertTrue(NearbySyncController.isPocketAdvertisement(
+            name: "Pocket-AF70",
+            serviceUUIDs: []
+        ))
+        XCTAssertFalse(NearbySyncController.isPocketAdvertisement(
+            name: "Nearby Headphones",
+            serviceUUIDs: []
+        ))
+    }
+
     func testCRC32MatchesWireFormat() {
         var crc = CRC32()
         crc.update(Data("123456789".utf8))
