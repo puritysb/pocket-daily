@@ -2,14 +2,20 @@ import XCTest
 @testable import Pocket
 
 final class NearbySyncProtocolTests: XCTestCase {
+    func testCRC32MatchesWireFormat() {
+        var crc = CRC32()
+        crc.update(Data("123456789".utf8))
+        XCTAssertEqual(crc.finalized, 0xCBF4_3926)
+    }
+
     func testParsesRequiredStatusAndIgnoresUnknownFields() throws {
         let status = try PocketDeviceStatus(
-            record: "V=1;MODEL=X3;ID=89ABCDEF;FW=1.4.1;CAP=AP,WS,SD;FUTURE=ignored"
+            record: "V=1;MODEL=X3;ID=89ABCDEF;FW=1.4.1;CAP=AP,HTTP,SD,COMMIT1;FUTURE=ignored"
         )
         XCTAssertEqual(status.protocolVersion, 1)
         XCTAssertEqual(status.model, "X3")
         XCTAssertEqual(status.deviceID, "89ABCDEF")
-        XCTAssertEqual(status.capabilities, ["AP", "WS", "SD"])
+        XCTAssertEqual(status.capabilities, ["AP", "HTTP", "SD", "COMMIT1"])
     }
 
     func testRejectsDuplicateStatusFields() {
@@ -21,7 +27,7 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertEqual(PocketHardware(deviceName: "Xteink X4"), .x4)
         XCTAssertNil(PocketHardware(deviceName: "X5"))
 
-        let status = try PocketDeviceStatus(record: "V=1;MODEL=X4;ID=12345678;FW=2.0;CAP=AP,WS,SD")
+        let status = try PocketDeviceStatus(record: "V=1;MODEL=X4;ID=12345678;FW=2.0;CAP=AP,HTTP,SD,COMMIT1")
         XCTAssertEqual(PocketHardware(deviceName: status.model), .x4)
     }
 
@@ -32,6 +38,51 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertEqual(lease.passphrase, "A1B2C3D4E5F6")
         XCTAssertEqual(lease.webSocketPort, 81)
         XCTAssertEqual(lease.leaseSeconds, 300)
+    }
+
+    func testClassifiesPersistedHeapCrash() {
+        let report = """
+        CrossPoint version: 1.4.1-test
+
+        Reset reason: panic
+
+        Panic reason: abort() was called on core 0
+
+        Last logs:
+        [120] NEARBY started
+        [130] HEAP pair: free=6004 largest=2420
+
+        Stack memory:
+        0x12345678: 0x00000000
+        """
+        let diagnostic = CrashDiagnostic(report: report)
+        XCTAssertEqual(diagnostic.version, "1.4.1-test")
+        XCTAssertEqual(diagnostic.resetReason, "panic")
+        XCTAssertTrue(diagnostic.reason.contains("abort"))
+        XCTAssertEqual(diagnostic.lastEvent, "[130] HEAP pair: free=6004 largest=2420")
+        XCTAssertTrue(diagnostic.analysis.contains("memory pressure"))
+    }
+
+    func testClassifiesResetWithoutPanicMessage() {
+        let report = """
+        CrossPoint version: 1.4.1-test
+
+        Reset reason: task watchdog
+
+        Panic reason:
+
+        Runtime breadcrumb: nearby:connected-awaiting-auth
+
+        Last logs:
+        [130] NEARBY ready heap=21000 largest=12000
+
+        Stack memory:
+        """
+        let diagnostic = CrashDiagnostic(report: report)
+        XCTAssertEqual(diagnostic.resetReason, "task watchdog")
+        XCTAssertEqual(diagnostic.reason, "No panic message was captured.")
+        XCTAssertEqual(diagnostic.breadcrumb, "nearby:connected-awaiting-auth")
+        XCTAssertTrue(diagnostic.analysis.contains("watchdog"))
     }
 
     func testCopiesLearningPackToSDLayoutWithoutOverwriting() throws {

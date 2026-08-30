@@ -15,18 +15,42 @@ final class NearbySyncController: NSObject, ObservableObject {
 
     @Published private(set) var state: State = .idle
     @Published private(set) var hotspotLease: HotspotLease?
+    @Published private(set) var traceEntries: [String] = []
 
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var statusCharacteristic: CBCharacteristic?
     private var commandCharacteristic: CBCharacteristic?
     private var eventCharacteristic: CBCharacteristic?
+    private var pendingStatus: PocketDeviceStatus?
+    private var eventNotificationsReady = false
     private var pendingHotspotRequestID: String?
     private var scanTimeout: Task<Void, Never>?
 
     override init() {
         super.init()
+        traceEntries = Self.loadTrace()
+        record("Pocket BLE controller initialized")
         central = CBCentralManager(delegate: self, queue: .main)
+    }
+
+    var traceReport: String { traceEntries.joined(separator: "\n") }
+
+    var traceAnalysis: String {
+        let lower = traceReport.lowercased()
+        if lower.contains("connect failed") && lower.contains("timed out") {
+            return "The reader was discovered, but the BLE link timed out before GATT setup completed."
+        }
+        if lower.contains("authentication rejected") {
+            return "BLE reached pairing but authentication was rejected. Remove a stale bond and retry."
+        }
+        if lower.contains("device discovered") && !lower.contains("gatt service discovered") {
+            return "The reader was visible, but service discovery did not complete."
+        }
+        if lower.contains("status received") {
+            return "BLE discovery and the encrypted status exchange completed."
+        }
+        return "The local trace is retained even if the reader reboots before HTTP diagnostics are available."
     }
 
     func scan() {
@@ -35,6 +59,7 @@ final class NearbySyncController: NSObject, ObservableObject {
             return
         }
         disconnect()
+        record("BLE scan started")
         state = .scanning
         central.scanForPeripherals(
             withServices: [NearbySyncProtocol.service],
@@ -42,10 +67,14 @@ final class NearbySyncController: NSObject, ObservableObject {
         )
         scanTimeout?.cancel()
         scanTimeout = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(12))
+            // A Pocket Daily Sync press performs a clean-heap reader restart
+            // before BLE advertising. Keep discovery open long enough for the
+            // user to press either side first without a timing race.
+            try? await Task.sleep(for: .seconds(30))
             guard !Task.isCancelled, let self, self.state == .scanning else { return }
             self.central.stopScan()
-            self.state = .failed("No Nearby Sync signal. Open Nearby Sync on the reader, then try again.")
+            self.record("BLE scan timed out without a Pocket service")
+            self.state = .failed("No Pocket Sync signal. Open Pocket Daily on the reader, press Sync, then try again.")
         }
     }
 
@@ -58,6 +87,8 @@ final class NearbySyncController: NSObject, ObservableObject {
         statusCharacteristic = nil
         commandCharacteristic = nil
         eventCharacteristic = nil
+        pendingStatus = nil
+        eventNotificationsReady = false
         pendingHotspotRequestID = nil
         hotspotLease = nil
         if central.state == .poweredOn { state = .idle }
@@ -70,12 +101,40 @@ final class NearbySyncController: NSObject, ObservableObject {
             throw NearbySyncError.malformedRecord
         }
         pendingHotspotRequestID = requestID
+        record("Authenticated hotspot handoff requested")
         state = .switchingToHotspot
         peripheral.writeValue(command, for: commandCharacteristic, type: .withResponse)
     }
 
     private func fail(_ error: Error) {
+        record("BLE operation failed: \(error.localizedDescription)")
         state = .failed(error.localizedDescription)
+    }
+
+    private func record(_ message: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        traceEntries.append("\(timestamp) \(message)")
+        if traceEntries.count > 80 { traceEntries.removeFirst(traceEntries.count - 80) }
+        let report = traceReport
+        let url = Self.traceURL
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? report.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static var traceURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("Pocket", isDirectory: true).appendingPathComponent("nearby-sync.log")
+    }
+
+    private static func loadTrace() -> [String] {
+        guard let report = try? String(contentsOf: traceURL, encoding: .utf8) else { return [] }
+        return Array(report.components(separatedBy: .newlines).filter { !$0.isEmpty }.suffix(80))
+    }
+
+    private func publishConnectedIfReady() {
+        guard eventNotificationsReady, let pendingStatus else { return }
+        state = .connected(pendingStatus)
     }
 }
 extension NearbySyncController: CBCentralManagerDelegate {
@@ -97,6 +156,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
     ) {
         Task { @MainActor in
             guard self.peripheral == nil else { return }
+            record("Pocket device discovered: \(peripheral.name ?? "unnamed") RSSI=\(RSSI)")
             central.stopScan()
             scanTimeout?.cancel()
             scanTimeout = nil
@@ -108,7 +168,10 @@ extension NearbySyncController: CBCentralManagerDelegate {
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        Task { @MainActor in peripheral.discoverServices([NearbySyncProtocol.service]) }
+        Task { @MainActor in
+            record("BLE link connected; discovering GATT service")
+            peripheral.discoverServices([NearbySyncProtocol.service])
+        }
     }
 
     nonisolated func centralManager(
@@ -116,7 +179,11 @@ extension NearbySyncController: CBCentralManagerDelegate {
         didFailToConnect peripheral: CBPeripheral,
         error: Error?
     ) {
-        Task { @MainActor in fail(error ?? NearbySyncError.notConnected) }
+        Task { @MainActor in
+            let reason = error ?? NearbySyncError.notConnected
+            record("BLE connect failed: \(reason.localizedDescription)")
+            fail(reason)
+        }
     }
 
     nonisolated func centralManager(
@@ -126,6 +193,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
     ) {
         Task { @MainActor in
             self.peripheral = nil
+            record("BLE link disconnected\(error.map { ": \($0.localizedDescription)" } ?? "")")
             if hotspotLease == nil, let error { fail(error) }
             else if hotspotLease == nil { state = .idle }
         }
@@ -140,6 +208,7 @@ extension NearbySyncController: CBPeripheralDelegate {
                 fail(NearbySyncError.missingCharacteristic)
                 return
             }
+            record("Pocket GATT service discovered")
             peripheral.discoverCharacteristics(
                 [NearbySyncProtocol.status, NearbySyncProtocol.command, NearbySyncProtocol.event],
                 for: service
@@ -161,6 +230,7 @@ extension NearbySyncController: CBPeripheralDelegate {
                 fail(NearbySyncError.missingCharacteristic)
                 return
             }
+            record("Pocket GATT characteristics discovered")
             peripheral.setNotifyValue(true, for: eventCharacteristic)
             peripheral.readValue(for: statusCharacteristic)
         }
@@ -180,7 +250,9 @@ extension NearbySyncController: CBPeripheralDelegate {
 
             do {
                 if characteristic.uuid == NearbySyncProtocol.status {
-                    state = .connected(try PocketDeviceStatus(record: record))
+                    pendingStatus = try PocketDeviceStatus(record: record)
+                    self.record("Encrypted Pocket status received")
+                    publishConnectedIfReady()
                 } else if characteristic.uuid == NearbySyncProtocol.event {
                     let parts = record.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
                     if parts.first == "AP" {
@@ -195,6 +267,22 @@ extension NearbySyncController: CBPeripheralDelegate {
             } catch {
                 fail(error)
             }
+        }
+    }
+
+
+    nonisolated func peripheral(
+        _ peripheral: CBPeripheral,
+        didUpdateNotificationStateFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+        Task { @MainActor in
+            if let error { fail(error); return }
+            guard characteristic.uuid == NearbySyncProtocol.event else { return }
+            eventNotificationsReady = characteristic.isNotifying
+            record(characteristic.isNotifying ? "Encrypted event notifications active"
+                                               : "Event notifications inactive")
+            publishConnectedIfReady()
         }
     }
 

@@ -62,7 +62,10 @@ struct ContentView: View {
             if let lease { model.useNearbyLease(lease) }
         }
         .onChange(of: nearby.state) { _, state in
-            if case let .connected(status) = state { model.selectHardware(named: status.model) }
+            if case let .connected(status) = state {
+                model.selectHardware(named: status.model)
+                do { try nearby.requestHotspot() } catch { model.message = error.localizedDescription }
+            }
         }
         .task { model.findOnLocalNetwork() }
     }
@@ -195,6 +198,10 @@ struct ContentView: View {
                 .buttonStyle(.borderless).disabled(model.isWorking)
 #endif
             DeviceSettingsInspector(model: model)
+            if let diagnostic = model.crashDiagnostic {
+                DiagnosticsInspector(diagnostic: diagnostic)
+            }
+            ConnectionTraceInspector(nearby: nearby)
             if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
             Text(model.message)
                 .font(.caption).foregroundStyle(.secondary)
@@ -227,18 +234,26 @@ private struct ConnectionInspector: View {
             Button(model.readerStatus == nil ? "Find & Connect" : "Reconnect") { onConnect() }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
             if case .connected = nearby.state {
-                Button("Start private transfer link") {
+                Button("Retry private transfer link") {
                     do { try nearby.requestHotspot() } catch { model.message = error.localizedDescription }
                 }
                 .buttonStyle(.bordered)
             }
-            if let lease = nearby.hotspotLease {
+            if let lease = nearby.hotspotLease, model.manualHotspotFallback {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Join Wi-Fi manually on Mac").font(.caption.weight(.semibold))
+                    Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))
+                    if model.locationPermissionRequired {
+                        Text("Location access lets Pocket join this temporary network automatically. Pocket never reads your coordinates.")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Open Location Settings") { model.openLocationSettings() }
+                            .buttonStyle(.bordered)
+                        Button("Retry automatic join") { model.findOnLocalNetwork() }
+                            .buttonStyle(.borderedProminent)
+                    }
                     Text(lease.ssid)
                     Text(lease.passphrase).textSelection(.enabled)
                     Button("Verify connection") {
-                        Task { await model.verify(host: lease.host, httpPort: lease.httpPort, webSocketPort: lease.webSocketPort) }
+                        Task { await model.verifyNearbyLease(lease) }
                     }
                 }
                 .font(.caption.monospaced())
@@ -320,6 +335,68 @@ private struct DeviceSettingsInspector: View {
             } else {
                 Text("Connect to load settings from the reader.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct DiagnosticsInspector: View {
+    let diagnostic: CrashDiagnostic
+    @State private var expanded = false
+
+    var body: some View {
+        InspectorCard(title: "DIAGNOSTICS", symbol: "waveform.path.ecg") {
+            Text("Recorded device crash").font(.callout.weight(.semibold))
+            Text(diagnostic.version).font(.caption.monospaced()).textSelection(.enabled)
+            Text("Reset: \(diagnostic.resetReason)").font(.caption).textSelection(.enabled)
+            Text(diagnostic.reason).font(.caption).textSelection(.enabled)
+            if let breadcrumb = diagnostic.breadcrumb {
+                Text("Checkpoint: \(breadcrumb)").font(.caption.monospaced()).textSelection(.enabled)
+            }
+            Text(diagnostic.analysis).font(.caption).foregroundStyle(.secondary)
+            Text("Last event: \(diagnostic.lastEvent)")
+                .font(.caption2.monospaced()).textSelection(.enabled)
+            HStack {
+                Button(expanded ? "Hide raw report" : "Show raw report") { expanded.toggle() }
+                    .buttonStyle(.bordered)
+                ShareLink("Export report", item: diagnostic.report)
+            }
+            if expanded {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(diagnostic.report)
+                        .font(.system(size: 10, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: 220)
+                .padding(8)
+                .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+}
+
+private struct ConnectionTraceInspector: View {
+    @ObservedObject var nearby: NearbySyncController
+    @State private var expanded = false
+
+    var body: some View {
+        InspectorCard(title: "CONNECTION LOG", symbol: "point.3.connected.trianglepath.dotted") {
+            Text(nearby.traceAnalysis).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button(expanded ? "Hide log" : "Show log") { expanded.toggle() }.buttonStyle(.bordered)
+                ShareLink("Export log", item: nearby.traceReport)
+            }
+            if expanded {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(nearby.traceReport)
+                        .font(.system(size: 10, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: 180)
+                .padding(8)
+                .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: 8))
             }
         }
     }

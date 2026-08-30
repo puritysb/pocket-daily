@@ -17,19 +17,23 @@ final class PocketModel: ObservableObject {
     }
 
     @Published var readerStatus: CrossPointStatus?
-    @Published var message = "Wake your reader and open File Transfer or Nearby Sync."
+    @Published var message = "Wake your reader, open Pocket Daily, and press Sync."
     @Published var isWorking = false
     @Published var uploadProgress: Double = 0
     @Published var preferences: ReaderPreferences?
+    @Published var crashDiagnostic: CrashDiagnostic?
     @Published var preferencesDirty = false
     @Published var preferredHardware: PocketHardware = .x3
+    @Published var manualHotspotFallback = false
+    @Published var locationPermissionRequired = false
 
     private let client = CrossPointClient()
     private let localDiscovery = LocalReaderDiscovery()
     private var activeHost = "192.168.4.1"
     private var activeHTTPPort = 80
-    private var activeWebSocketPort = 81
     private var discoveryTask: Task<Void, Never>?
+    private var connectionAttempt = 0
+    private var nearbyLease: HotspotLease?
 
     var hardware: PocketHardware {
         readerStatus.flatMap { PocketHardware(deviceName: $0.device) } ?? preferredHardware
@@ -44,6 +48,16 @@ final class PocketModel: ObservableObject {
     }
 
     func findOnLocalNetwork() {
+        if let nearbyLease {
+            if manualHotspotFallback {
+                useNearbyLease(nearbyLease)
+            } else {
+                Task { await verifyNearbyLease(nearbyLease) }
+            }
+            return
+        }
+        connectionAttempt += 1
+        let attempt = connectionAttempt
         discoveryTask?.cancel()
         discoveryTask = Task {
             isWorking = true
@@ -68,44 +82,82 @@ final class PocketModel: ObservableObject {
                 return nil
             }
 
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, attempt == connectionAttempt else { return }
             if let (host, status) = found {
                 localDiscovery.stop()
                 bonjourTask.cancel()
-                await accept(status: status, host: host, httpPort: 80, webSocketPort: 81)
+                await accept(status: status, host: host, httpPort: 80)
             } else if let endpoint = await bonjourTask.value,
                       let status = try? await client.status(host: endpoint.host, port: endpoint.port) {
-                await accept(status: status, host: endpoint.host, httpPort: endpoint.port, webSocketPort: 81)
+                await accept(status: status, host: endpoint.host, httpPort: endpoint.port)
             } else if readerStatus == nil {
-                message = "No Pocket reader was visible. Open Nearby Sync, or open Create Hotspot and join the reader's Wi-Fi."
+                message = "No Pocket reader was visible. In Pocket Daily, press Sync; or use File Transfer → Create Hotspot."
             }
         }
     }
 
     func useNearbyLease(_ lease: HotspotLease) {
+        connectionAttempt += 1
+        discoveryTask?.cancel()
+        localDiscovery.stop()
+        nearbyLease = lease
+        manualHotspotFallback = false
+        locationPermissionRequired = false
+        readerStatus = nil
+        preferences = nil
         Task {
             isWorking = true
             defer { isWorking = false }
             do {
                 try await HotspotJoiner.join(lease)
-                try await Task.sleep(for: .milliseconds(800))
-                await verify(host: lease.host, httpPort: lease.httpPort, webSocketPort: lease.webSocketPort)
+                await waitForReader(lease)
             } catch {
+                manualHotspotFallback = true
+#if os(macOS)
+                locationPermissionRequired = (error as? HotspotJoinError) == .locationPermissionRequired
+#else
+                locationPermissionRequired = false
+#endif
                 message = error.localizedDescription
             }
         }
     }
 
-    func verify(host: String, port: Int) async {
-        await verify(host: host, httpPort: port, webSocketPort: 81)
+    func openLocationSettings() {
+#if os(macOS)
+        HotspotJoiner.openLocationSettings()
+#endif
     }
 
-    func verify(host: String, httpPort: Int, webSocketPort: Int) async {
+    func verifyNearbyLease(_ lease: HotspotLease) async {
+        nearbyLease = lease
+        isWorking = true
+        defer { isWorking = false }
+        await waitForReader(lease)
+    }
+
+    private func waitForReader(_ lease: HotspotLease) async {
+        message = "Waiting for Pocket's private transfer link…"
+        let deadline = ContinuousClock.now + .seconds(18)
+        while ContinuousClock.now < deadline {
+            if let status = try? await client.status(host: lease.host, port: lease.httpPort) {
+                await accept(status: status, host: lease.host, httpPort: lease.httpPort)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        readerStatus = nil
+        preferences = nil
+        if nearbyLease == lease { nearbyLease = nil }
+        message = "Private link not ready. Join \(lease.ssid), then tap Verify connection."
+    }
+
+    func verify(host: String, port: Int) async {
         isWorking = true
         defer { isWorking = false }
         do {
-            let status = try await client.status(host: host, port: httpPort)
-            await accept(status: status, host: host, httpPort: httpPort, webSocketPort: webSocketPort)
+            let status = try await client.status(host: host, port: port)
+            await accept(status: status, host: host, httpPort: port)
         } catch {
             readerStatus = nil
             preferences = nil
@@ -113,15 +165,21 @@ final class PocketModel: ObservableObject {
         }
     }
 
-    private func accept(status: CrossPointStatus, host: String, httpPort: Int, webSocketPort: Int) async {
+    private func accept(status: CrossPointStatus, host: String, httpPort: Int) async {
         readerStatus = status
         selectHardware(named: status.device)
         activeHost = host
         activeHTTPPort = httpPort
-        activeWebSocketPort = webSocketPort
+        manualHotspotFallback = false
+        locationPermissionRequired = false
         preferences = try? await client.preferences(host: host, port: httpPort)
+        if status.crashReportAvailable == true {
+            crashDiagnostic = try? await client.crashDiagnostic(host: host, port: httpPort)
+        }
         preferencesDirty = false
-        message = "Connected to \(status.device)."
+        message = crashDiagnostic == nil
+            ? "Connected to \(status.device)."
+            : "Connected to \(status.device). A saved crash report is available below."
     }
 
     func setStartupPocketDaily(_ enabled: Bool) {
@@ -152,7 +210,7 @@ final class PocketModel: ObservableObject {
             do {
                 try await client.save(preferences: preferences, host: activeHost, port: activeHTTPPort)
                 preferencesDirty = false
-                message = "Settings were applied to X3."
+                message = "Settings were applied to \(hardware.rawValue)."
             } catch {
                 message = error.localizedDescription
             }
@@ -165,16 +223,20 @@ final class PocketModel: ObservableObject {
             uploadProgress = 0
             defer { isWorking = false }
             do {
-                try await client.upload(
+                let isFirmware = url.pathExtension.lowercased() == "bin"
+                let path = try await client.uploadAtomically(
                     fileURL: url,
+                    publishedFilename: isFirmware ? "update.bin" : nil,
                     destination: destination(for: url),
                     host: activeHost,
-                    port: activeWebSocketPort
+                    port: activeHTTPPort
                 ) { [weak self] sent, total in
                     Task { @MainActor in self?.uploadProgress = total > 0 ? Double(sent) / Double(total) : 0 }
                 }
                 uploadProgress = 1
-                message = "\(url.lastPathComponent) was sent to Pocket."
+                message = isFirmware
+                    ? "Firmware staged and verified at \(path). Install it from Settings → System → Update firmware."
+                    : "\(url.lastPathComponent) was verified and published at \(path)."
             } catch {
                 message = error.localizedDescription
             }

@@ -33,5 +33,7 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Pocket connects directly to your reader to sync books, study data, and firmware.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Pocket uses location permission only to find and join your nearby reader's temporary Wi-Fi network.</string>
 </dict>
 </plist>
