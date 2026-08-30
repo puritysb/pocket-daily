@@ -1,5 +1,19 @@
 import Foundation
 
+struct ConnectionHeartbeat {
+    static let failureLimit = 3
+    private(set) var consecutiveFailures = 0
+
+    mutating func recordSuccess() {
+        consecutiveFailures = 0
+    }
+
+    mutating func recordFailure() -> Bool {
+        consecutiveFailures += 1
+        return consecutiveFailures >= Self.failureLimit
+    }
+}
+
 @MainActor
 final class PocketModel: ObservableObject {
     private static let lastReaderHostKey = "Pocket.lastReaderHost"
@@ -34,6 +48,7 @@ final class PocketModel: ObservableObject {
     private var activeHost = "192.168.4.1"
     private var activeHTTPPort = 80
     private var discoveryTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
     private var connectionAttempt = 0
     private var nearbyLease: HotspotLease?
 
@@ -59,6 +74,7 @@ final class PocketModel: ObservableObject {
             return
         }
         connectionAttempt += 1
+        heartbeatTask?.cancel()
         let attempt = connectionAttempt
         discoveryTask?.cancel()
         discoveryTask = Task {
@@ -162,6 +178,7 @@ final class PocketModel: ObservableObject {
 
     func useNearbyLease(_ lease: HotspotLease) {
         connectionAttempt += 1
+        heartbeatTask?.cancel()
         discoveryTask?.cancel()
         localDiscovery.stop()
         nearbyLease = lease
@@ -194,6 +211,8 @@ final class PocketModel: ObservableObject {
     }
 
     func verifyNearbyLease(_ lease: HotspotLease) async {
+        connectionAttempt += 1
+        heartbeatTask?.cancel()
         nearbyLease = lease
         isWorking = true
         defer { isWorking = false }
@@ -217,6 +236,8 @@ final class PocketModel: ObservableObject {
     }
 
     func verify(host: String, port: Int) async {
+        connectionAttempt += 1
+        heartbeatTask?.cancel()
         isWorking = true
         defer { isWorking = false }
         do {
@@ -250,6 +271,36 @@ final class PocketModel: ObservableObject {
         message = crashDiagnostic == nil
             ? "Connected to \(status.device)."
             : "Connected to \(status.device). A saved crash report is available below."
+        startHeartbeat(host: host, port: httpPort)
+    }
+
+    private func startHeartbeat(host: String, port: Int) {
+        heartbeatTask?.cancel()
+        let attempt = connectionAttempt
+        heartbeatTask = Task { @MainActor [weak self] in
+            var heartbeat = ConnectionHeartbeat()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard let self, !Task.isCancelled,
+                      attempt == self.connectionAttempt,
+                      self.readerStatus != nil else { return }
+                if self.isWorking { continue }
+
+                do {
+                    let status = try await self.client.status(host: host, port: port, timeout: 3)
+                    heartbeat.recordSuccess()
+                    self.readerStatus = status
+                } catch {
+                    guard heartbeat.recordFailure() else { continue }
+                    self.readerStatus = nil
+                    self.preferences = nil
+                    self.preferencesDirty = false
+                    self.nearbyLease = nil
+                    self.message = "Pocket connection ended. Open Nearby Sync and reconnect."
+                    return
+                }
+            }
+        }
     }
 
     func setStartupPocketDaily(_ enabled: Bool) {

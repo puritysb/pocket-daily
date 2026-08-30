@@ -3,6 +3,17 @@ import XCTest
 @testable import Pocket
 
 final class NearbySyncProtocolTests: XCTestCase {
+    func testConnectionHeartbeatRequiresConsecutiveFailures() {
+        var heartbeat = ConnectionHeartbeat()
+        XCTAssertFalse(heartbeat.recordFailure())
+        XCTAssertFalse(heartbeat.recordFailure())
+        heartbeat.recordSuccess()
+        XCTAssertEqual(heartbeat.consecutiveFailures, 0)
+        XCTAssertFalse(heartbeat.recordFailure())
+        XCTAssertFalse(heartbeat.recordFailure())
+        XCTAssertTrue(heartbeat.recordFailure())
+    }
+
     func testPocketAdvertisementFallbackAcceptsServiceOrNameOnly() {
         XCTAssertTrue(NearbySyncController.isPocketAdvertisement(
             name: nil,
