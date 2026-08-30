@@ -2,6 +2,8 @@ import Foundation
 
 @MainActor
 final class PocketModel: ObservableObject {
+    private static let lastReaderHostKey = "Pocket.lastReaderHost"
+
     enum StorageError: LocalizedError {
         case invalidSDRoot
         case destinationExists(String)
@@ -47,7 +49,7 @@ final class PocketModel: ObservableObject {
         Task { await verify(host: "192.168.4.1", port: 80) }
     }
 
-    func findOnLocalNetwork() {
+    func findOnLocalNetwork(retryIfMissing: Bool = true) {
         if let nearbyLease {
             if manualHotspotFallback {
                 useNearbyLease(nearbyLease)
@@ -65,21 +67,39 @@ final class PocketModel: ObservableObject {
             defer { isWorking = false }
 
             let bonjourTask = Task { await localDiscovery.first(timeout: .seconds(5)) }
-            let candidates = ["crosspoint.local", "192.168.4.1"]
-            let found: (String, CrossPointStatus)? = await withTaskGroup(of: (String, CrossPointStatus)?.self) { group in
-                for host in candidates {
-                    group.addTask { [client] in
-                        guard let status = try? await client.status(host: host, port: 80) else { return nil }
-                        return (host, status)
-                    }
-                }
-                for await result in group {
-                    if let result {
-                        group.cancelAll()
-                        return result
-                    }
-                }
-                return nil
+            let lastHost = UserDefaults.standard.string(forKey: Self.lastReaderHostKey)
+            if let lastHost, !lastHost.isEmpty,
+               let status = try? await client.status(host: lastHost, port: 80, timeout: 3) {
+                guard !Task.isCancelled, attempt == connectionAttempt else { return }
+                localDiscovery.stop()
+                bonjourTask.cancel()
+                await accept(status: status, host: lastHost, httpPort: 80)
+                return
+            }
+
+            // Bonjour handles crosspoint.local separately. Keeping hostname DNS
+            // resolution in this task group can delay cancellation even after a
+            // nearby IP has already answered.
+            var candidates = ["192.168.4.1"]
+                + LocalReaderDiscovery.localIPv4Candidates()
+            if let lastHost, !lastHost.isEmpty {
+                candidates.removeAll { $0 == lastHost }
+            }
+            let priorityCount = min(12, candidates.count)
+            let priority = await probe(
+                hosts: Array(candidates.prefix(priorityCount)),
+                timeout: 1.2,
+                batchSize: 1
+            )
+            let found: (String, CrossPointStatus)?
+            if let priority {
+                found = priority
+            } else {
+                found = await probe(
+                    hosts: Array(candidates.dropFirst(priorityCount)),
+                    timeout: 0.8,
+                    batchSize: 8
+                )
             }
 
             guard !Task.isCancelled, attempt == connectionAttempt else { return }
@@ -91,9 +111,53 @@ final class PocketModel: ObservableObject {
                       let status = try? await client.status(host: endpoint.host, port: endpoint.port) {
                 await accept(status: status, host: endpoint.host, httpPort: endpoint.port)
             } else if readerStatus == nil {
-                message = "No Pocket reader was visible. In Pocket Daily, press Sync; or use File Transfer → Create Hotspot."
+                if retryIfMissing {
+                    message = "Reader not ready yet. Retrying nearby addresses…"
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(for: .milliseconds(800))
+                        guard let self, self.readerStatus == nil,
+                              attempt == self.connectionAttempt else { return }
+                        self.findOnLocalNetwork(retryIfMissing: false)
+                    }
+                } else {
+                    message = "No Pocket reader was visible. In Pocket Daily, press Sync; or use File Transfer → Create Hotspot."
+                }
             }
         }
+    }
+
+    private func probe(
+        hosts: [String],
+        timeout: TimeInterval,
+        batchSize: Int = 8
+    ) async -> (String, CrossPointStatus)? {
+        guard !hosts.isEmpty else { return nil }
+        for start in stride(from: 0, to: hosts.count, by: batchSize) {
+            if Task.isCancelled { return nil }
+            let end = min(start + batchSize, hosts.count)
+            let batch = hosts[start ..< end]
+            let found: (String, CrossPointStatus)? = await withTaskGroup(
+                of: (String, CrossPointStatus)?.self
+            ) { group in
+                for host in batch {
+                    group.addTask { [client] in
+                        guard let status = try? await client.status(host: host, port: 80, timeout: timeout) else {
+                            return nil
+                        }
+                        return (host, status)
+                    }
+                }
+                for await result in group {
+                    if let result {
+                        group.cancelAll()
+                        return result
+                    }
+                }
+                return nil
+            }
+            if let found { return found }
+        }
+        return nil
     }
 
     func useNearbyLease(_ lease: HotspotLease) {
@@ -167,14 +231,20 @@ final class PocketModel: ObservableObject {
 
     private func accept(status: CrossPointStatus, host: String, httpPort: Int) async {
         readerStatus = status
+        UserDefaults.standard.set(host, forKey: Self.lastReaderHostKey)
         selectHardware(named: status.device)
         activeHost = host
         activeHTTPPort = httpPort
         manualHotspotFallback = false
         locationPermissionRequired = false
         preferences = try? await client.preferences(host: host, port: httpPort)
-        if status.crashReportAvailable == true {
-            crashDiagnostic = try? await client.crashDiagnostic(host: host, port: httpPort)
+        crashDiagnostic = nil
+        if status.crashReportAvailable == true, let bytes = status.crashReportBytes, bytes > 0,
+           let diagnostic = try? await client.crashDiagnostic(host: host, port: httpPort, expectedBytes: bytes) {
+            crashDiagnostic = diagnostic
+            _ = try? await Task.detached(priority: .utility) {
+                try CrashReportArchive.store(report: diagnostic.report, device: status.device)
+            }.value
         }
         preferencesDirty = false
         message = crashDiagnostic == nil
@@ -229,7 +299,9 @@ final class PocketModel: ObservableObject {
                     publishedFilename: isFirmware ? "update.bin" : nil,
                     destination: destination(for: url),
                     host: activeHost,
-                    port: activeHTTPPort
+                    port: activeHTTPPort,
+                    uploadChunkBytes: readerStatus?.uploadChunkBytes,
+                    uploadStreamPort: readerStatus?.uploadStreamPort
                 ) { [weak self] sent, total in
                     Task { @MainActor in self?.uploadProgress = total > 0 ? Double(sent) / Double(total) : 0 }
                 }

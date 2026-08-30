@@ -27,12 +27,17 @@ enum PocketSection: String, CaseIterable, Identifiable {
 }
 
 struct ContentView: View {
+    private enum FileImportAction {
+        case wirelessUpload
+        case sdSource
+        case sdRoot
+    }
+
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController()
     @State private var selection: PocketSection = .today
     @State private var importing = false
-    @State private var choosingSDSource = false
-    @State private var choosingSDRoot = false
+    @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
 
     var body: some View {
@@ -40,22 +45,27 @@ struct ContentView: View {
             if proxy.size.width >= 920 { desktopStudio } else { compactStudio }
         }
         .background(PocketPalette.workspace)
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.epub, .data], allowsMultipleSelection: false) {
-            if case let .success(urls) = $0, let url = urls.first { model.upload(url) }
-        }
-        .fileImporter(isPresented: $choosingSDSource, allowedContentTypes: [.epub, .data], allowsMultipleSelection: false) {
-            if case let .success(urls) = $0, let url = urls.first {
+        .fileImporter(
+            isPresented: $importing,
+            allowedContentTypes: importAction == .sdRoot ? [.folder] : [.epub, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case let .success(urls) = result, let url = urls.first else { return }
+            switch importAction {
+            case .wirelessUpload:
+                model.upload(url)
+            case .sdSource:
                 sdSource = url
                 Task {
                     try? await Task.sleep(for: .milliseconds(150))
-                    choosingSDRoot = true
+                    importAction = .sdRoot
+                    importing = true
                 }
-            }
-        }
-        .fileImporter(isPresented: $choosingSDRoot, allowedContentTypes: [.folder], allowsMultipleSelection: false) {
-            if case let .success(urls) = $0, let root = urls.first, let sdSource {
-                model.copyToSD(sdSource, root: root)
-                self.sdSource = nil
+            case .sdRoot:
+                if let sdSource {
+                    model.copyToSD(sdSource, root: url)
+                    self.sdSource = nil
+                }
             }
         }
         .onChange(of: nearby.hotspotLease) { _, lease in
@@ -192,9 +202,15 @@ struct ContentView: View {
             ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
             TransferDropZone(isEnabled: model.readerStatus != nil && !model.isWorking) { urls in
                 if let first = urls.first { model.upload(first) }
-            } choose: { importing = true }
+            } choose: {
+                importAction = .wirelessUpload
+                importing = true
+            }
 #if os(macOS)
-            Button("Copy directly to SD card…") { choosingSDSource = true }
+            Button("Copy directly to SD card…") {
+                importAction = .sdSource
+                importing = true
+            }
                 .buttonStyle(.borderless).disabled(model.isWorking)
 #endif
             DeviceSettingsInspector(model: model)

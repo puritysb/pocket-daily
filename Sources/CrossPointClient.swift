@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import Network
 
 struct CrossPointStatus: Codable, Equatable {
     let version: String
@@ -10,6 +12,8 @@ struct CrossPointStatus: Codable, Equatable {
     let device: String
     let crashReportAvailable: Bool?
     let crashReportBytes: Int?
+    let uploadChunkBytes: Int?
+    let uploadStreamPort: Int?
 }
 
 struct CrashDiagnostic: Equatable, Sendable {
@@ -69,6 +73,34 @@ struct ReaderPreferences: Equatable, Sendable {
     var fontSize = 1
 }
 
+enum CrashReportArchive {
+    static func store(report: String, device: String, directory: URL? = nil) throws -> URL {
+        let data = Data(report.utf8)
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let safeDevice = device.lowercased().filter { $0.isLetter || $0.isNumber }
+        let root = directory ?? defaultDirectory
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("\(safeDevice.isEmpty ? "pocket" : safeDevice)-\(digest.prefix(16)).txt")
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    private static var defaultDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("Pocket", isDirectory: true)
+            .appendingPathComponent("crash-reports", isDirectory: true)
+    }
+}
+
+private struct PocketPreferencesResponse: Decodable {
+    let startupApp: Int
+    let pocketDailySleepCover: Int
+    let sleepTimeoutMinutes: Int
+    let fontSize: Int
+}
+
 private struct PocketCommitResponse: Decodable {
     let size: Int64
     let crc32: String
@@ -126,6 +158,164 @@ private final class HTTPUploadDelegate: NSObject, URLSessionDataDelegate, URLSes
     }
 }
 
+private final class PocketStreamUploader: @unchecked Sendable {
+    private enum StreamError: LocalizedError {
+        case invalidPort
+        case invalidPath
+        case disconnected
+        case invalidResponse(String)
+        case verificationFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidPort: "The reader's upload port is invalid."
+            case .invalidPath: "The destination path cannot be sent."
+            case .disconnected: "The reader disconnected before verifying the upload."
+            case let .invalidResponse(message): "Unexpected reader response: \(message)"
+            case .verificationFailed: "The reader reported a different file size or checksum."
+            }
+        }
+    }
+
+    private let connection: NWConnection
+    private let input: FileHandle
+    private let total: Int64
+    private let remotePath: String
+    private let progress: @Sendable (Int64, Int64) -> Void
+    private let queue = DispatchQueue(label: "org.crosspoint.pocket.upload-stream")
+    private var continuation: CheckedContinuation<UInt32, Error>?
+    private var sent: Int64 = 0
+    private var crc = CRC32()
+    private var response = Data()
+
+    init(
+        fileURL: URL,
+        host: String,
+        port: Int,
+        remotePath: String,
+        total: Int64,
+        progress: @escaping @Sendable (Int64, Int64) -> Void
+    ) throws {
+        guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(exactly: port) ?? 0), port > 0 else {
+            throw StreamError.invalidPort
+        }
+        guard remotePath.hasPrefix("/"), !remotePath.contains("\n"), !remotePath.contains("\r") else {
+            throw StreamError.invalidPath
+        }
+        connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
+        input = try FileHandle(forReadingFrom: fileURL)
+        self.total = total
+        self.remotePath = remotePath
+        self.progress = progress
+    }
+
+    deinit {
+        try? input.close()
+        connection.cancel()
+    }
+
+    func upload() async throws -> UInt32 {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            connection.stateUpdateHandler = { [weak self] state in
+                guard let self else { return }
+                switch state {
+                case .ready:
+                    self.sendHeader()
+                case let .failed(error):
+                    self.finish(.failure(error))
+                case .cancelled:
+                    if self.continuation != nil { self.finish(.failure(StreamError.disconnected)) }
+                default:
+                    break
+                }
+            }
+            connection.start(queue: queue)
+            queue.asyncAfter(deadline: .now() + 900) { [weak self] in
+                guard let self, self.continuation != nil else { return }
+                self.finish(.failure(URLError(.timedOut)))
+            }
+        }
+    }
+
+    private func sendHeader() {
+        let header = Data("POCKET-PUT/1\nPath: \(remotePath)\nSize: \(total)\n\n".utf8)
+        connection.send(content: header, completion: .contentProcessed { [weak self] error in
+            guard let self else { return }
+            if let error { self.finish(.failure(error)) } else { self.sendNextChunk() }
+        })
+    }
+
+    private func sendNextChunk() {
+        do {
+            guard let chunk = try input.read(upToCount: 16 * 1024), !chunk.isEmpty else {
+                receiveReply()
+                return
+            }
+            crc.update(chunk)
+            connection.send(content: chunk, completion: .contentProcessed { [weak self] error in
+                guard let self else { return }
+                if let error {
+                    self.finish(.failure(error))
+                    return
+                }
+                self.sent += Int64(chunk.count)
+                self.progress(self.sent, self.total)
+                self.sendNextChunk()
+            })
+        } catch {
+            finish(.failure(error))
+        }
+    }
+
+    private func receiveReply() {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 160) { [weak self] data, _, isComplete, error in
+            guard let self else { return }
+            if let data { self.response.append(data) }
+            if let error {
+                self.finish(.failure(error))
+                return
+            }
+            if self.response.count > 256 {
+                self.finish(.failure(StreamError.invalidResponse("response too large")))
+                return
+            }
+            if let newline = self.response.firstIndex(of: 0x0A) {
+                let line = String(decoding: self.response[..<newline], as: UTF8.self)
+                self.verify(line: line)
+            } else if isComplete {
+                self.finish(.failure(StreamError.disconnected))
+            } else {
+                self.receiveReply()
+            }
+        }
+    }
+
+    private func verify(line: String) {
+        let fields = line.split(separator: " ", omittingEmptySubsequences: true)
+        guard fields.count == 3, fields[0] == "OK",
+              let readerSize = Int64(fields[1]),
+              let readerCRC = UInt32(fields[2], radix: 16)
+        else {
+            finish(.failure(StreamError.invalidResponse(line)))
+            return
+        }
+        guard sent == total, readerSize == total, readerCRC == crc.finalized else {
+            finish(.failure(StreamError.verificationFailed))
+            return
+        }
+        finish(.success(readerCRC))
+    }
+
+    private func finish(_ result: Result<UInt32, Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        try? input.close()
+        connection.cancel()
+        continuation.resume(with: result)
+    }
+}
+
 actor CrossPointClient {
     enum ClientError: LocalizedError {
         case invalidAddress
@@ -149,58 +339,73 @@ actor CrossPointClient {
         self.session = session
     }
 
-    func status(host: String = "192.168.4.1", port: Int = 80) async throws -> CrossPointStatus {
+    func status(
+        host: String = "192.168.4.1",
+        port: Int = 80,
+        timeout: TimeInterval = 4
+    ) async throws -> CrossPointStatus {
         guard let url = URL(string: "http://\(host):\(port)/api/status") else {
             throw ClientError.invalidAddress
         }
         var request = URLRequest(url: url)
-        request.timeoutInterval = 4
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = timeout
+        request.setValue("close", forHTTPHeaderField: "Connection")
         let (data, response) = try await session.data(for: request)
         try Self.requireSuccess(response)
         return try JSONDecoder().decode(CrossPointStatus.self, from: data)
     }
 
-    func crashDiagnostic(host: String, port: Int) async throws -> CrashDiagnostic {
-        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/crash-report") else {
-            throw ClientError.invalidAddress
+    func crashDiagnostic(host: String, port: Int, expectedBytes: Int) async throws -> CrashDiagnostic {
+        guard expectedBytes > 0, expectedBytes <= 65_536 else {
+            throw ClientError.unexpectedMessage("invalid crash report size")
         }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 8
-        let (data, response) = try await session.data(for: request)
-        try Self.requireSuccess(response, body: data)
-        guard let report = String(data: data, encoding: .utf8), !report.isEmpty else {
+
+        var reportData = Data()
+        reportData.reserveCapacity(expectedBytes)
+        while reportData.count < expectedBytes {
+            guard let url = Self.url(
+                host: host,
+                port: port,
+                path: "/api/pocket/v1/crash-report",
+                query: ["offset": String(reportData.count)]
+            ) else { throw ClientError.invalidAddress }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 4
+            request.setValue("close", forHTTPHeaderField: "Connection")
+            let (chunk, response) = try await session.data(for: request)
+            try Self.requireSuccess(response, body: chunk)
+            guard !chunk.isEmpty, reportData.count + chunk.count <= expectedBytes else {
+                throw ClientError.unexpectedMessage("invalid crash report chunk")
+            }
+            reportData.append(chunk)
+        }
+
+        guard let report = String(data: reportData, encoding: .utf8), !report.isEmpty else {
             throw ClientError.unexpectedMessage("empty crash report")
         }
         return CrashDiagnostic(report: report)
     }
 
     func preferences(host: String, port: Int) async throws -> ReaderPreferences {
-        guard let url = URL(string: "http://\(host):\(port)/api/settings") else {
+        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
             throw ClientError.invalidAddress
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 6
         let (data, response) = try await session.data(for: request)
         try Self.requireSuccess(response)
-        guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            throw ClientError.unexpectedMessage("invalid settings JSON")
-        }
-        let values = Dictionary(uniqueKeysWithValues: rows.compactMap { row -> (String, Int)? in
-            guard let key = row["key"] as? String else { return nil }
-            if let value = row["value"] as? Int { return (key, value) }
-            if let value = row["value"] as? NSNumber { return (key, value.intValue) }
-            return nil
-        })
+        let preferences = try JSONDecoder().decode(PocketPreferencesResponse.self, from: data)
         return ReaderPreferences(
-            startupApp: values["startupApp"] ?? 1,
-            pocketDailySleepCover: (values["pocketDailySleepCover"] ?? 1) != 0,
-            sleepTimeoutMinutes: values["sleepTimeoutMinutes"] ?? 10,
-            fontSize: values["fontSize"] ?? 1
+            startupApp: preferences.startupApp,
+            pocketDailySleepCover: preferences.pocketDailySleepCover != 0,
+            sleepTimeoutMinutes: preferences.sleepTimeoutMinutes,
+            fontSize: preferences.fontSize
         )
     }
 
     func save(preferences: ReaderPreferences, host: String, port: Int) async throws {
-        guard let url = URL(string: "http://\(host):\(port)/api/settings") else {
+        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
             throw ClientError.invalidAddress
         }
         var request = URLRequest(url: url)
@@ -223,6 +428,8 @@ actor CrossPointClient {
         destination: String = "/",
         host: String = "192.168.4.1",
         port: Int = 80,
+        uploadChunkBytes: Int? = nil,
+        uploadStreamPort: Int? = nil,
         progress: @escaping @Sendable (Int64, Int64) -> Void
     ) async throws -> String {
         let filename = publishedFilename ?? fileURL.lastPathComponent
@@ -242,21 +449,77 @@ actor CrossPointClient {
 
         let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
         let total = Int64(values.fileSize ?? 0)
-        let boundary = "PocketBoundary-\(UUID().uuidString)"
-        let multipart = try Self.makeMultipartBody(
-            source: fileURL,
-            uploadFilename: stagingName,
-            boundary: boundary
-        )
-        defer { try? FileManager.default.removeItem(at: multipart.url) }
+        let crc32: UInt32
+        if let streamPort = uploadStreamPort, streamPort > 0 {
+            let stagingPath = Self.join(normalizedDestination, stagingName)
+            let uploader = try PocketStreamUploader(
+                fileURL: fileURL,
+                host: host,
+                port: streamPort,
+                remotePath: stagingPath,
+                total: total,
+                progress: progress
+            )
+            crc32 = try await uploader.upload()
+        } else if let advertisedChunk = uploadChunkBytes, advertisedChunk > 0, total > 0 {
+            let chunkSize = min(max(advertisedChunk, 1_024), 64 * 1_024)
+            let input = try FileHandle(forReadingFrom: fileURL)
+            defer { try? input.close() }
+            var crc = CRC32()
+            var offset: Int64 = 0
+            while let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty {
+                try Task.checkCancellation()
+                crc.update(chunk)
+                let boundary = "PocketBoundary-\(UUID().uuidString)"
+                let multipart = try Self.makeMultipartBody(
+                    data: chunk,
+                    uploadFilename: stagingName,
+                    boundary: boundary
+                )
+                defer { try? FileManager.default.removeItem(at: multipart) }
+                guard let chunkURL = Self.url(
+                    host: host,
+                    port: port,
+                    path: "/upload",
+                    query: ["path": normalizedDestination, "offset": String(offset)]
+                ) else { throw ClientError.invalidAddress }
 
-        var uploadRequest = URLRequest(url: uploadURL)
-        uploadRequest.httpMethod = "POST"
-        uploadRequest.timeoutInterval = 900
-        uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        let uploader = HTTPUploadDelegate(progress: progress)
-        let (uploadData, uploadResponse) = try await uploader.upload(request: uploadRequest, bodyFile: multipart.url)
-        try Self.requireSuccess(uploadResponse, body: uploadData)
+                var uploadRequest = URLRequest(url: chunkURL)
+                uploadRequest.httpMethod = "POST"
+                uploadRequest.timeoutInterval = 60
+                uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                let chunkStart = offset
+                let chunkCount = Int64(chunk.count)
+                let uploader = HTTPUploadDelegate { sent, expected in
+                    let payloadSent = expected > 0 ? min(chunkCount, chunkCount * sent / expected) : 0
+                    progress(chunkStart + payloadSent, total)
+                }
+                let (uploadData, uploadResponse) = try await uploader.upload(request: uploadRequest, bodyFile: multipart)
+                try Self.requireSuccess(uploadResponse, body: uploadData)
+                try? FileManager.default.removeItem(at: multipart)
+                offset += chunkCount
+                progress(offset, total)
+            }
+            guard offset == total else { throw ClientError.verificationFailed }
+            crc32 = crc.finalized
+        } else {
+            let boundary = "PocketBoundary-\(UUID().uuidString)"
+            let multipart = try Self.makeMultipartBody(
+                source: fileURL,
+                uploadFilename: stagingName,
+                boundary: boundary
+            )
+            defer { try? FileManager.default.removeItem(at: multipart.url) }
+
+            var uploadRequest = URLRequest(url: uploadURL)
+            uploadRequest.httpMethod = "POST"
+            uploadRequest.timeoutInterval = 900
+            uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            let uploader = HTTPUploadDelegate(progress: progress)
+            let (uploadData, uploadResponse) = try await uploader.upload(request: uploadRequest, bodyFile: multipart.url)
+            try Self.requireSuccess(uploadResponse, body: uploadData)
+            crc32 = multipart.crc32
+        }
 
         let stagingPath = Self.join(normalizedDestination, stagingName)
         let targetPath = Self.join(normalizedDestination, filename)
@@ -268,13 +531,13 @@ actor CrossPointClient {
             "staging": stagingPath,
             "target": targetPath,
             "size": total,
-            "crc32": String(format: "%08X", multipart.crc32),
+            "crc32": String(format: "%08X", crc32),
         ])
         let (commitData, commitResponse) = try await session.data(for: commitRequest)
         try Self.requireSuccess(commitResponse, body: commitData)
         let committed = try JSONDecoder().decode(PocketCommitResponse.self, from: commitData)
         guard committed.size == total,
-              committed.crc32.caseInsensitiveCompare(String(format: "%08X", multipart.crc32)) == .orderedSame else {
+              committed.crc32.caseInsensitiveCompare(String(format: "%08X", crc32)) == .orderedSame else {
             throw ClientError.verificationFailed
         }
         return targetPath
@@ -301,6 +564,16 @@ actor CrossPointClient {
         }
         try output.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
         return (temp, crc.finalized)
+    }
+
+    private static func makeMultipartBody(data: Data, uploadFilename: String, boundary: String) throws -> URL {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pocket-upload-\(UUID().uuidString)")
+        let prefix = "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(uploadFilename)\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+        var body = Data(prefix.utf8)
+        body.append(data)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        try body.write(to: temp, options: .atomic)
+        return temp
     }
 
     private static func normalizedDirectory(_ path: String) -> String {
