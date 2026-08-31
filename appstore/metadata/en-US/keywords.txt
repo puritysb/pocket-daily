@@ -1,0 +1,1 @@
+e-reader,epub,japanese,kanji,jlpt,offline,study,reading,local,sd card

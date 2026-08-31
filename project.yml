@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     CURRENT_PROJECT_VERSION: 1
-    MARKETING_VERSION: 0.1.0
+    MARKETING_VERSION: 1.0.0
     GENERATE_INFOPLIST_FILE: NO
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 targets:
@@ -24,6 +24,7 @@ targets:
         CFBundleName: Pocket Daily
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.
         NSLocalNetworkUsageDescription: Pocket Daily connects directly to your reader to sync books, study data, and firmware.
@@ -34,6 +35,7 @@ targets:
           NSAllowsLocalNetworking: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
     entitlements:
@@ -42,6 +44,7 @@ targets:
         com.apple.developer.networking.HotspotConfiguration: true
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily
         PRODUCT_NAME: Pocket
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -57,6 +60,8 @@ targets:
         CFBundleName: Pocket Daily
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.education
         NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.
         NSLocalNetworkUsageDescription: Pocket Daily connects directly to your reader to sync books, study data, and firmware.
         NSLocationWhenInUseUsageDescription: Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
@@ -75,6 +80,7 @@ targets:
         com.apple.security.personal-information.location: true
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily
         PRODUCT_NAME: Pocket
         CODE_SIGN_ENTITLEMENTS: Support/PocketMac.entitlements

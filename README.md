@@ -20,6 +20,10 @@ This first vertical slice includes:
 - deterministic parsing tests for status and hotspot lease records
 - automatic retrieval, classification, display, and export of the reader's
   retained crash report, plus a persistent local Bluetooth connection trace
+- a local-only demo mode for App Review and first-run exploration; transfer and
+  device mutation stay disabled until a real reader is connected
+- an original Pocket Daily icon set, App Store metadata, required-size actual UI
+  screenshots, public privacy/support pages, and submission validation tooling
 
 It does not require Pocket Hub, a user account, AgentDeck, or infrastructure
 Wi-Fi. AgentDeck remains an optional device mode outside this app.
@@ -82,3 +86,5 @@ support/warranty implications and requires an explicit acknowledgement.
 
 The review setup, hardware dependency, compatibility wording, and firmware
 safety boundary are documented in [`APP_STORE_REVIEW.md`](APP_STORE_REVIEW.md).
+The complete staged submission package is under [`appstore/`](appstore/); run
+`scripts/validate_app_store.sh` before every App Store Connect upload.

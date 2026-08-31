@@ -42,6 +42,7 @@ final class PocketModel: ObservableObject {
     @Published var preferredHardware: PocketHardware = .x3
     @Published var manualHotspotFallback = false
     @Published var locationPermissionRequired = false
+    @Published var isDemoMode = false
 
     private let client = CrossPointClient()
     private let localDiscovery = LocalReaderDiscovery()
@@ -52,8 +53,18 @@ final class PocketModel: ObservableObject {
     private var connectionAttempt = 0
     private var nearbyLease: HotspotLease?
 
+    init() {
+        if let hardwareArgument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--hardware=") }),
+           let hardware = PocketHardware(rawValue: String(hardwareArgument.dropFirst("--hardware=".count)).uppercased()) {
+            preferredHardware = hardware
+        }
+        if ProcessInfo.processInfo.arguments.contains("--demo") {
+            enterDemoMode()
+        }
+    }
+
     var hardware: PocketHardware {
-        readerStatus.flatMap { PocketHardware(deviceName: $0.device) } ?? preferredHardware
+        isDemoMode ? preferredHardware : (readerStatus.flatMap { PocketHardware(deviceName: $0.device) } ?? preferredHardware)
     }
 
     func selectHardware(named name: String) {
@@ -61,10 +72,12 @@ final class PocketModel: ObservableObject {
     }
 
     func connectToExistingHotspot() {
+        exitDemoMode()
         Task { await verify(host: "192.168.4.1", port: 80) }
     }
 
     func findOnLocalNetwork(retryIfMissing: Bool = true) {
+        exitDemoMode()
         if let nearbyLease {
             if manualHotspotFallback {
                 useNearbyLease(nearbyLease)
@@ -140,6 +153,45 @@ final class PocketModel: ObservableObject {
                 }
             }
         }
+    }
+
+    func enterDemoMode() {
+        connectionAttempt += 1
+        discoveryTask?.cancel()
+        heartbeatTask?.cancel()
+        localDiscovery.stop()
+        nearbyLease = nil
+        isWorking = false
+        uploadProgress = 0
+        isDemoMode = true
+        readerStatus = CrossPointStatus(
+            version: "DEMO 1.0",
+            ip: "LOCAL PREVIEW",
+            mode: "DEMO",
+            rssi: -42,
+            freeHeap: 131_072,
+            uptime: 3_600,
+            device: preferredHardware.rawValue,
+            crashReportAvailable: false,
+            crashReportBytes: 0,
+            uploadChunkBytes: nil,
+            uploadStreamPort: nil
+        )
+        preferences = ReaderPreferences()
+        crashDiagnostic = nil
+        preferencesDirty = false
+        manualHotspotFallback = false
+        locationPermissionRequired = false
+        message = "Demo preview is local only. File transfer and device changes are disabled."
+    }
+
+    func exitDemoMode() {
+        guard isDemoMode else { return }
+        isDemoMode = false
+        readerStatus = nil
+        preferences = nil
+        preferencesDirty = false
+        message = "Wake your reader, open Pocket Daily, and press Sync."
     }
 
     private func probe(
@@ -324,6 +376,10 @@ final class PocketModel: ObservableObject {
     }
 
     func savePreferences() {
+        guard !isDemoMode else {
+            message = "Demo preview does not change a reader."
+            return
+        }
         guard let preferences else { return }
         Task {
             isWorking = true
@@ -339,6 +395,10 @@ final class PocketModel: ObservableObject {
     }
 
     func upload(_ url: URL) {
+        guard !isDemoMode else {
+            message = "Connect a reader before sending files."
+            return
+        }
         Task {
             isWorking = true
             uploadProgress = 0

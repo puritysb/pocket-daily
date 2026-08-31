@@ -102,6 +102,24 @@ final class NearbySyncProtocolTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testDemoModeIsExplicitAndLeavesNoConnectedReader() {
+        let model = PocketModel()
+        model.preferredHardware = .x4
+
+        model.enterDemoMode()
+        XCTAssertTrue(model.isDemoMode)
+        XCTAssertEqual(model.hardware, .x4)
+        XCTAssertEqual(model.readerStatus?.mode, "DEMO")
+        XCTAssertNotNil(model.preferences)
+        XCTAssertTrue(model.message.contains("disabled"))
+
+        model.exitDemoMode()
+        XCTAssertFalse(model.isDemoMode)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertNil(model.preferences)
+    }
+
     func testParsesHotspotLease() throws {
         let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-89AB A1B2C3D4E5F6 192.168.4.1 80 81 300")
         XCTAssertEqual(lease.requestID, "12ABCDEF")

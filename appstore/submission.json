@@ -1,0 +1,29 @@
+{
+  "app_name": "Pocket Daily",
+  "bundle_id": "io.github.puritysb.pocketdaily",
+  "sku": "pocket-daily-universal-2026",
+  "version": "1.0.0",
+  "build": "1",
+  "platforms": ["iOS", "iPadOS", "macOS"],
+  "primary_category": "Education",
+  "secondary_category": "Books",
+  "price": "Free",
+  "in_app_purchases": false,
+  "account_required": false,
+  "age_rating_target": "4+",
+  "content_rights": "Pocket Daily contains only original interface and study examples; users provide their own books, study packs, and firmware files.",
+  "copyright": "2026 SeungBeom Choi",
+  "privacy_policy_url": "https://puritysb.github.io/pocket-daily/privacy/",
+  "support_url": "https://puritysb.github.io/pocket-daily/support/",
+  "marketing_url": "https://puritysb.github.io/pocket-daily/",
+  "app_privacy_answer": "No, we do not collect data from this app",
+  "uses_non_exempt_encryption": false,
+  "release_option": "Manual",
+  "hardware_required": "A separately obtained X3/X4-class device running Pocket Daily or compatible CrossPoint-based firmware is required for live transfer and settings. Built-in demo mode does not require hardware.",
+  "account_fields_still_required": [
+    "App Store Connect app record and Apple-generated app ID",
+    "App Review contact phone number",
+    "Signed distribution archive and uploaded build",
+    "Public review-video URL showing one physical reader transfer"
+  ]
+}

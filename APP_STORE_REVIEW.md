@@ -14,8 +14,13 @@ sponsorship, or endorsement.
 
 ## Review setup
 
-The app's content and device-profile previews are visible without an account or
-reader. Hardware actions require a compatible reader:
+The app has an explicit, local demo mode for review without an account or
+reader. In the DEVICE card, choose **Explore without a reader**, then switch
+between Today, Japanese, Books, and Firmware. Demo settings are populated, but
+file transfer and applying settings are disabled so review data can never be
+mistaken for a connected device.
+
+Live hardware actions require a compatible reader:
 
 1. Open Pocket Daily on the reader and choose Nearby Sync.
 2. In the Apple app, choose Find & Connect.
@@ -24,9 +29,10 @@ reader. Hardware actions require a compatible reader:
 5. The app uses the Hotspot Configuration capability and Apple's confirmation
    UI to join that network, verifies `/api/status`, and enables local transfer.
 
-The developer should attach a current end-to-end review video and offer review
-hardware if requested. No backend, login, purchase, or external account is
-required.
+The developer should attach a current end-to-end physical-reader video following
+[`appstore/review/REVIEW_VIDEO_CHECKLIST.md`](appstore/review/REVIEW_VIDEO_CHECKLIST.md)
+and offer review hardware if requested. No backend, login, purchase, or external
+account is required.
 
 ## Firmware safety boundary
 

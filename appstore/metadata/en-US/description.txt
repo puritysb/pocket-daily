@@ -1,0 +1,22 @@
+Pocket Daily is a private, local-first studio for a compatible pocket e-paper reader.
+
+See the reader before you touch it
+The app mirrors an X3- or X4-shaped reader, including the different button layouts. Move between Today, Japanese, Books, and Firmware to understand what will appear on the e-paper screen.
+
+Build a daily reading ritual
+Prepare a focused daily card, review Japanese study material, and keep your books close. Pocket Daily is designed around short, useful sessions on a device you can carry every day.
+
+Move your own content directly
+Send supported books, Pocket Daily study packs, and compatible firmware over a direct local connection. On Mac, you can also stage files directly to an SD card. Transfers do not pass through a Pocket Daily cloud service.
+
+Safer device management
+Review reader settings, preserve a Daily card while the reader sleeps, and stage firmware only after a clear compatibility warning. Firmware installation still requires confirmation on the reader.
+
+Private by design
+No Pocket Daily account. No ads. No analytics. No cloud relay. Discovery and transfer use Bluetooth and the local network. Files stay between your Apple device, your reader, and storage you choose.
+
+Try before connecting
+Built-in demo mode lets you explore the complete interface without reader hardware. Demo mode never sends files or changes a device.
+
+Compatibility notice
+A separately obtained X3/X4-class reader running Pocket Daily or compatible CrossPoint-based firmware is required for live transfer and settings. Factory firmware and manufacturer cloud services are not supported. Pocket Daily is an independent open-source project and is not affiliated with, sponsored by, or endorsed by any reader manufacturer or the CrossPoint Reader project.

@@ -41,12 +41,20 @@ struct ContentView: View {
 
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController()
-    @State private var selection: PocketSection = .today
+    @State private var selection: PocketSection
     @State private var importing = false
     @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
     @State private var pendingFirmwareTransfer: PendingFirmwareTransfer?
     @State private var showingProjectInfo = false
+
+    init() {
+        let section = ProcessInfo.processInfo.arguments
+            .first(where: { $0.hasPrefix("--section=") })
+            .flatMap { PocketSection(rawValue: String($0.dropFirst("--section=".count))) }
+            ?? .today
+        _selection = State(initialValue: section)
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -93,7 +101,9 @@ struct ContentView: View {
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
         }
-        .task { model.findOnLocalNetwork() }
+        .task {
+            if !model.isDemoMode { model.findOnLocalNetwork() }
+        }
     }
 
     private var desktopStudio: some View {
@@ -191,7 +201,8 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Circle().fill(model.readerStatus == nil ? Color.secondary : PocketPalette.signal).frame(width: 8, height: 8)
-                    Text(model.readerStatus == nil ? "Reader offline" : "Reader connected").font(.caption.weight(.medium))
+                    Text(model.isDemoMode ? "Demo preview" : (model.readerStatus == nil ? "Reader offline" : "Reader connected"))
+                        .font(.caption.weight(.medium))
                 }
                 Button("About & Privacy") { showingProjectInfo = true }
                     .buttonStyle(.plain)
@@ -233,7 +244,7 @@ struct ContentView: View {
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 14) {
             ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
-            TransferDropZone(isEnabled: model.readerStatus != nil && !model.isWorking) { urls in
+            TransferDropZone(isEnabled: model.readerStatus != nil && !model.isDemoMode && !model.isWorking) { urls in
                 if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
             } choose: {
                 importAction = .wirelessUpload
@@ -244,13 +255,13 @@ struct ContentView: View {
                 importAction = .sdSource
                 importing = true
             }
-                .buttonStyle(.borderless).disabled(model.isWorking)
+                .buttonStyle(.borderless).disabled(model.isWorking || model.isDemoMode)
 #endif
             DeviceSettingsInspector(model: model)
             if let diagnostic = model.crashDiagnostic {
                 DiagnosticsInspector(diagnostic: diagnostic)
             }
-            ConnectionTraceInspector(nearby: nearby)
+            if !model.isDemoMode { ConnectionTraceInspector(nearby: nearby) }
             ProjectNotice()
             if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
             Text(model.message)
@@ -260,11 +271,16 @@ struct ContentView: View {
     }
 
     private func connect() {
+        model.exitDemoMode()
         model.findOnLocalNetwork()
         nearby.scan()
     }
 
     private func prepareTransfer(_ url: URL, action: FileImportAction) {
+        guard !model.isDemoMode else {
+            model.message = "Exit demo and connect a reader before sending files."
+            return
+        }
         if url.pathExtension.lowercased() == "bin" {
             pendingFirmwareTransfer = PendingFirmwareTransfer(url: url, action: action)
         } else {
@@ -400,7 +416,7 @@ private struct ProjectInformationSheet: View {
                     ViewThatFits(in: .horizontal) {
                         projectLinks
                         VStack(alignment: .leading, spacing: 10) {
-                            Link("Privacy policy", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/PRIVACY.md")!)
+                Link("Privacy policy", destination: URL(string: "https://puritysb.github.io/pocket-daily/privacy/")!)
                             Link("Open-source notices", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!)
                             Link("Support", destination: URL(string: "https://github.com/puritysb/pocket-daily/issues")!)
                         }
@@ -421,9 +437,9 @@ private struct ProjectInformationSheet: View {
 
     private var projectLinks: some View {
         HStack(spacing: 18) {
-            Link("Privacy policy", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/PRIVACY.md")!)
+                            Link("Privacy policy", destination: URL(string: "https://puritysb.github.io/pocket-daily/privacy/")!)
             Link("Open-source notices", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!)
-            Link("Support", destination: URL(string: "https://github.com/puritysb/pocket-daily/issues")!)
+                            Link("Support", destination: URL(string: "https://puritysb.github.io/pocket-daily/support/")!)
         }
     }
 }
@@ -452,9 +468,9 @@ private struct ProjectNotice: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(spacing: 12) {
-                Link("Privacy", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/PRIVACY.md")!)
+                Link("Privacy", destination: URL(string: "https://puritysb.github.io/pocket-daily/privacy/")!)
                 Link("Notices", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!)
-                Link("Support", destination: URL(string: "https://github.com/puritysb/pocket-daily/issues")!)
+                Link("Support", destination: URL(string: "https://puritysb.github.io/pocket-daily/support/")!)
             }
             .font(.caption.weight(.medium))
         }
@@ -477,8 +493,15 @@ private struct ConnectionInspector: View {
                 Spacer()
                 if model.isWorking { ProgressView().controlSize(.small) }
             }
-            Button(model.readerStatus == nil ? "Find & Connect" : "Reconnect") { onConnect() }
+            Button(model.isDemoMode ? "Exit demo" : (model.readerStatus == nil ? "Find & Connect" : "Reconnect")) {
+                if model.isDemoMode { model.exitDemoMode() } else { onConnect() }
+            }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+            if model.readerStatus == nil, !model.isDemoMode {
+                Button("Explore without a reader") { model.enterDemoMode() }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
+            }
             if case .connected = nearby.state {
                 Button("Retry private transfer link") {
                     do { try nearby.requestHotspot() } catch { model.message = error.localizedDescription }
@@ -510,6 +533,7 @@ private struct ConnectionInspector: View {
     }
 
     private var detail: String {
+        if model.isDemoMode { return "Local demo · transfers disabled" }
         if let status = model.readerStatus { return "\(status.version) · \(status.mode) · \(status.ip)" }
         switch nearby.state {
         case .idle: return "Wake the reader to connect"
@@ -536,7 +560,7 @@ private struct TransferDropZone: View {
                 Text(targeted ? "Drop to send" : "Drop a book, study pack, or firmware")
                     .font(.callout.weight(.medium)).multilineTextAlignment(.center)
                 Text("EPUB · PDL · BIN").font(.caption2.monospaced()).foregroundStyle(.secondary)
-                Button("Choose file…", action: choose).buttonStyle(.bordered)
+                Button("Choose file…", action: choose).buttonStyle(.bordered).disabled(!isEnabled)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
@@ -576,8 +600,8 @@ private struct DeviceSettingsInspector: View {
                     Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
                 }
                 .pickerStyle(.segmented)
-                Button("Apply to \(model.hardware.rawValue)") { model.savePreferences() }
-                    .buttonStyle(.bordered).disabled(!model.preferencesDirty || model.isWorking)
+                Button(model.isDemoMode ? "Demo preview only" : "Apply to \(model.hardware.rawValue)") { model.savePreferences() }
+                    .buttonStyle(.bordered).disabled(model.isDemoMode || !model.preferencesDirty || model.isWorking)
             } else {
                 Text("Connect to load settings from the reader.")
                     .font(.caption).foregroundStyle(.secondary)
