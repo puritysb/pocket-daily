@@ -12,20 +12,26 @@ struct PocketDevicePreview: View {
 
             ZStack {
                 RoundedRectangle(cornerRadius: width * 0.062)
-                    .fill(Color(red: 0.09, green: 0.09, blue: 0.085))
-                    .shadow(color: .black.opacity(0.24), radius: 16, y: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [PocketPalette.deviceTop, PocketPalette.deviceBottom],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: PocketPalette.ink.opacity(0.2), radius: 18, y: 10)
                 RoundedRectangle(cornerRadius: width * 0.046)
                     .stroke(Color.white.opacity(0.14), lineWidth: 1)
                     .padding(width * 0.018)
 
                 VStack(spacing: width * 0.022) {
                     HStack {
-                        Text(hardware.rawValue)
-                            .font(.system(size: width * 0.034, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(0.55))
+                        Label(hardware.profileName, systemImage: "rectangle.portrait")
+                            .font(.system(size: width * 0.028, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.white.opacity(0.72))
                         Spacer()
                         Circle()
-                            .fill(status == nil ? Color.white.opacity(0.25) : Color.green.opacity(0.8))
+                            .fill(status == nil ? Color.white.opacity(0.25) : PocketPalette.signal)
                             .frame(width: width * 0.018)
                     }
                     .padding(.horizontal, width * 0.08)
@@ -37,9 +43,15 @@ struct PocketDevicePreview: View {
                     frontControls(width: width)
                         .frame(height: width * (hardware == .x3 ? 0.105 : 0.095))
 
-                    Text("Xteink")
-                        .font(.system(size: width * 0.028, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.52))
+                    HStack(spacing: width * 0.018) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(PocketPalette.accent)
+                            .frame(width: width * 0.035, height: width * 0.009)
+                        Text("POCKET DAILY")
+                            .font(.system(size: width * 0.024, weight: .semibold, design: .rounded))
+                            .tracking(width * 0.002)
+                            .foregroundStyle(Color.white.opacity(0.62))
+                    }
                         .padding(.bottom, width * 0.026)
                 }
                 .padding(.top, width * 0.038)
@@ -51,7 +63,7 @@ struct PocketDevicePreview: View {
         }
         .aspectRatio(hardware.chassisAspect, contentMode: .fit)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(hardware.displayName) device preview")
+        .accessibilityLabel("Pocket Daily \(hardware.rawValue) compatibility profile preview")
     }
 
     @ViewBuilder

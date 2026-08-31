@@ -5,7 +5,8 @@ enum PocketHardware: String, CaseIterable, Identifiable, Sendable {
     case x4 = "X4"
 
     var id: Self { self }
-    var displayName: String { "Xteink \(rawValue)" }
+    var displayName: String { "\(rawValue)-compatible reader" }
+    var profileName: String { "\(rawValue) PROFILE" }
 
     var screenWidth: Int {
         switch self { case .x3: 528; case .x4: 480 }
@@ -25,8 +26,8 @@ enum PocketHardware: String, CaseIterable, Identifiable, Sendable {
 
     var controlSummary: String {
         switch self {
-        case .x3: "top power · opposed page keys · two front rockers"
-        case .x4: "right-side power/page stack · four front keys"
+        case .x3: "3.7-inch layout · two front rockers"
+        case .x4: "4.3-inch layout · four front keys"
         }
     }
 

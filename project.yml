@@ -21,6 +21,7 @@ targets:
       path: Support/Pocket-Info.plist
       properties:
         CFBundleDisplayName: Pocket Daily
+        CFBundleName: Pocket Daily
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -53,6 +54,7 @@ targets:
       path: Support/PocketMac-Info.plist
       properties:
         CFBundleDisplayName: Pocket Daily
+        CFBundleName: Pocket Daily
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.

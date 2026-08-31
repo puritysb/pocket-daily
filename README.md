@@ -1,7 +1,8 @@
-# Pocket Daily Apple app
+# Pocket Daily
 
-Pocket Daily is the account-free companion for Xteink X3 and X4 readers running compatible
-CrossPoint-based firmware. Bluetooth
+Pocket Daily is the account-free companion for X3/X4 hardware running Pocket
+Daily or compatible CrossPoint-based firmware. It does not connect to the
+manufacturer's factory firmware or cloud service. Bluetooth
 performs secure discovery and hands the app a temporary private Wi-Fi lease;
 verified HTTP staging carries books, learning packs, and firmware to the SD
 card without requiring the home Wi-Fi network.
@@ -26,7 +27,10 @@ Wi-Fi. AgentDeck remains an optional device mode outside this app.
 Pocket Daily is an independent project. It is not affiliated with or endorsed by
 CrossPoint Reader, Xteink, or any device manufacturer. See
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for compatibility and licensing
-acknowledgements.
+acknowledgements and [`PRIVACY.md`](PRIVACY.md) for the local-only data policy.
+
+The app uses a neutral Pocket Daily device-profile illustration rather than
+manufacturer logos, product photography, or official application assets.
 
 ## Build
 
@@ -70,4 +74,11 @@ to that directory.
   the reader's validated Fonts endpoint and is not exposed by this first slice.
 
 The on-device firmware picker validates a `.bin` again before flashing it.
-Transport completion alone never installs firmware automatically.
+Transport completion alone never installs firmware automatically. Before a
+firmware transfer, the app explains the compatibility, recovery, and possible
+support/warranty implications and requires an explicit acknowledgement.
+
+## App Store submission
+
+The review setup, hardware dependency, compatibility wording, and firmware
+safety boundary are documented in [`APP_STORE_REVIEW.md`](APP_STORE_REVIEW.md).

@@ -94,6 +94,14 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertEqual(PocketHardware(deviceName: status.model), .x4)
     }
 
+    func testPublicHardwareNamesDescribeCompatibilityWithoutManufacturerBranding() {
+        for hardware in PocketHardware.allCases {
+            XCTAssertEqual(hardware.displayName, "\(hardware.rawValue)-compatible reader")
+            XCTAssertFalse(hardware.displayName.localizedCaseInsensitiveContains("Xteink"))
+            XCTAssertTrue(hardware.profileName.hasSuffix(" PROFILE"))
+        }
+    }
+
     func testParsesHotspotLease() throws {
         let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-89AB A1B2C3D4E5F6 192.168.4.1 80 81 300")
         XCTAssertEqual(lease.requestID, "12ABCDEF")

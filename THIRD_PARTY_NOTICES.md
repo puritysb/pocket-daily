@@ -9,6 +9,11 @@ CrossPoint Reader and Xteink are names of their respective projects or owners.
 Their use here describes compatibility only and does not imply affiliation,
 sponsorship, or endorsement.
 
+Pocket Daily does not use the Xteink logo, official product photography,
+manuals, application interface assets, cloud service, or factory firmware. The
+app's device-profile illustration is an original, neutral visualization of the
+screen and functional button categories supported by compatible firmware.
+
 Pocket Daily does not bundle CrossPoint Reader firmware, third-party books, or
 the separately licensed Pocket Daily learning datasets in the application
 binary. Firmware and learning-pack releases carry their own license and source
