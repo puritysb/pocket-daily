@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pocket</string>
+	<string>Pocket Daily</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,14 +26,14 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Pocket uses Bluetooth to find and securely pair with your nearby reader.</string>
+	<string>Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_crosspoint._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Pocket connects directly to your reader to sync books, study data, and firmware.</string>
+	<string>Pocket Daily connects directly to your reader to sync books, study data, and firmware.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Pocket uses location permission only to find and join your nearby reader's temporary Wi-Fi network.</string>
+	<string>Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.</string>
 </dict>
 </plist>

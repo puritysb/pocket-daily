@@ -254,7 +254,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.crosspoint.pocket;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -272,7 +272,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.crosspoint.pocket;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -415,7 +415,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.crosspoint.pocket.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pocket.app/Pocket";
@@ -433,7 +433,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.crosspoint.pocket;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = macosx;
 			};
@@ -450,7 +450,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.crosspoint.pocket;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = macosx;
 			};
@@ -465,7 +465,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.crosspoint.pocket.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pocket.app/Pocket";

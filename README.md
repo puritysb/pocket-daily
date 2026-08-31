@@ -1,6 +1,7 @@
-# Pocket Apple app
+# Pocket Daily Apple app
 
-Pocket is the account-free companion for Xteink X3 and X4 Crosspoint readers. Bluetooth
+Pocket Daily is the account-free companion for Xteink X3 and X4 readers running compatible
+CrossPoint-based firmware. Bluetooth
 performs secure discovery and hands the app a temporary private Wi-Fi lease;
 verified HTTP staging carries books, learning packs, and firmware to the SD
 card without requiring the home Wi-Fi network.
@@ -22,12 +23,16 @@ This first vertical slice includes:
 It does not require Pocket Hub, a user account, AgentDeck, or infrastructure
 Wi-Fi. AgentDeck remains an optional device mode outside this app.
 
+Pocket Daily is an independent project. It is not affiliated with or endorsed by
+CrossPoint Reader, Xteink, or any device manufacturer. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for compatibility and licensing
+acknowledgements.
+
 ## Build
 
 The checked-in Xcode project is generated from `project.yml` with XcodeGen:
 
 ```sh
-cd apps/Pocket
 xcodegen generate
 xcodebuild -project Pocket.xcodeproj -scheme Pocket -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build
 xcodebuild -project Pocket.xcodeproj -scheme PocketMac -sdk macosx CODE_SIGNING_ALLOWED=NO build

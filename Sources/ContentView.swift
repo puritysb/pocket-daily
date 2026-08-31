@@ -119,7 +119,7 @@ struct ContentView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Pocket")
+            .navigationTitle("Pocket Daily")
         }
     }
 
@@ -128,7 +128,7 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 Image(systemName: "rectangle.portrait.on.rectangle.portrait")
                     .font(.title3.weight(.semibold))
-                Text("Pocket").font(.title3.weight(.semibold))
+                Text("Pocket Daily").font(.title3.weight(.semibold))
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 20)
@@ -218,6 +218,7 @@ struct ContentView: View {
                 DiagnosticsInspector(diagnostic: diagnostic)
             }
             ConnectionTraceInspector(nearby: nearby)
+            ProjectNotice()
             if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
             Text(model.message)
                 .font(.caption).foregroundStyle(.secondary)
@@ -228,6 +229,21 @@ struct ContentView: View {
     private func connect() {
         model.findOnLocalNetwork()
         nearby.scan()
+    }
+}
+
+private struct ProjectNotice: View {
+    var body: some View {
+        InspectorCard(title: "ABOUT", symbol: "info.circle") {
+            Text("Pocket Daily is an independent open-source companion for compatible pocket e-paper readers. It is not affiliated with or endorsed by CrossPoint Reader or Xteink.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Link(
+                "Open-source notices",
+                destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!
+            )
+            .font(.caption)
+        }
     }
 }
 

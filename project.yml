@@ -1,6 +1,6 @@
 name: Pocket
 options:
-  bundleIdPrefix: org.crosspoint
+  bundleIdPrefix: io.github.puritysb
   deploymentTarget:
     iOS: "17.0"
     macOS: "14.0"
@@ -20,13 +20,13 @@ targets:
     info:
       path: Support/Pocket-Info.plist
       properties:
-        CFBundleDisplayName: Pocket
+        CFBundleDisplayName: Pocket Daily
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
-        NSBluetoothAlwaysUsageDescription: Pocket uses Bluetooth to find and securely pair with your nearby reader.
-        NSLocalNetworkUsageDescription: Pocket connects directly to your reader to sync books, study data, and firmware.
-        NSLocationWhenInUseUsageDescription: Pocket uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
+        NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.
+        NSLocalNetworkUsageDescription: Pocket Daily connects directly to your reader to sync books, study data, and firmware.
+        NSLocationWhenInUseUsageDescription: Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
         NSBonjourServices:
           - _crosspoint._tcp
         NSAppTransportSecurity:
@@ -41,7 +41,7 @@ targets:
         com.apple.developer.networking.HotspotConfiguration: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.crosspoint.pocket
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily
         PRODUCT_NAME: Pocket
         TARGETED_DEVICE_FAMILY: "1,2"
   PocketMac:
@@ -52,12 +52,12 @@ targets:
     info:
       path: Support/PocketMac-Info.plist
       properties:
-        CFBundleDisplayName: Pocket
+        CFBundleDisplayName: Pocket Daily
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSBluetoothAlwaysUsageDescription: Pocket uses Bluetooth to find and securely pair with your nearby reader.
-        NSLocalNetworkUsageDescription: Pocket connects directly to your reader to sync books, study data, and firmware.
-        NSLocationWhenInUseUsageDescription: Pocket uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
+        NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.
+        NSLocalNetworkUsageDescription: Pocket Daily connects directly to your reader to sync books, study data, and firmware.
+        NSLocationWhenInUseUsageDescription: Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
         NSBonjourServices:
           - _crosspoint._tcp
         NSAppTransportSecurity:
@@ -73,7 +73,7 @@ targets:
         com.apple.security.personal-information.location: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.crosspoint.pocket
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily
         PRODUCT_NAME: Pocket
         CODE_SIGN_ENTITLEMENTS: Support/PocketMac.entitlements
   PocketTests:
@@ -85,4 +85,4 @@ targets:
       - target: Pocket
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.crosspoint.pocket.tests
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily.tests

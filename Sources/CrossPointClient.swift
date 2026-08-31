@@ -182,7 +182,7 @@ private final class PocketStreamUploader: @unchecked Sendable {
     private let total: Int64
     private let remotePath: String
     private let progress: @Sendable (Int64, Int64) -> Void
-    private let queue = DispatchQueue(label: "org.crosspoint.pocket.upload-stream")
+    private let queue = DispatchQueue(label: "io.github.puritysb.pocketdaily.upload-stream")
     private var continuation: CheckedContinuation<UInt32, Error>?
     private var sent: Int64 = 0
     private var crc = CRC32()

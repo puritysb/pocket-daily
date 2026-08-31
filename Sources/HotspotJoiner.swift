@@ -151,11 +151,11 @@ enum HotspotJoinError: LocalizedError, Equatable {
         case .noWiFiInterface:
             "No Wi-Fi interface is available on this Mac."
         case .locationPermissionRequired:
-            "Allow Pocket to use Location Services so it can find the reader's temporary Wi-Fi network."
+            "Allow Pocket Daily to use Location Services so it can find the reader's temporary Wi-Fi network."
         case let .networkNotFound(ssid):
-            "Pocket could not find \(ssid). You can still join it manually below."
+            "Pocket Daily could not find \(ssid). You can still join it manually below."
         case let .associationFailed(ssid, reason):
-            "Pocket found \(ssid) but could not join it (\(reason)). Retry automatic join or use the manual fallback."
+            "Pocket Daily found \(ssid) but could not join it (\(reason)). Retry automatic join or use the manual fallback."
         }
     }
 }
