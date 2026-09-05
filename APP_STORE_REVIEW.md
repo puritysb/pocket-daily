@@ -15,10 +15,12 @@ sponsorship, or endorsement.
 ## Review setup
 
 The app has an explicit, local demo mode for review without an account or
-reader. In the DEVICE card, choose **Explore without a reader**, then switch
-between Today, Japanese, Books, and Firmware. Demo settings are populated, but
-file transfer and applying settings are disabled so review data can never be
-mistaken for a connected device.
+reader. In the DEVICE card, choose **Explore without a reader**. Without a
+reader the central rendering is explicitly labeled as a hardware profile. A
+live connection made from Pocket Daily Nearby Sync loads the exact e-paper
+frame captured immediately before the reader opens Sync. Demo settings are
+populated, but file transfer and applying settings are disabled so review data
+can never be mistaken for a connected device.
 
 Live hardware actions require a compatible reader:
 
@@ -41,10 +43,15 @@ must be selected by the user. Before transfer, the app discloses that factory
 firmware is unsupported and that custom firmware can affect device support or
 warranty. The app then stages the file as `/update.bin`; installation requires a
 second explicit confirmation on the reader, which validates the image again.
+Before staging, Pocket Daily rejects an image unless its ESP32-C3 header,
+segments, checksum, SHA-256 trailer when present, and Pocket Nearby Sync product
+identity all validate locally.
 
 ## Privacy
 
 Bluetooth, local-network, and location purpose strings describe the direct
 reader connection. Location is used only where the operating system requires it
 to inspect or join nearby Wi-Fi; coordinates are neither read nor transmitted.
-See [`PRIVACY.md`](PRIVACY.md).
+The bundled privacy manifest declares app-only UserDefaults and user-selected
+file-metadata access; the app does not track or collect data. See
+[`PRIVACY.md`](PRIVACY.md).

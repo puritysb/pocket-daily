@@ -31,12 +31,15 @@ enum HotspotJoiner {
                 throw HotspotJoinError.noWiFiInterface
             }
 
-            let matchingNetwork: (Set<CWNetwork>?) -> CWNetwork? = { networks in
+            let ssidData = Data(ssid.utf8)
+            let strongestNetwork: (Set<CWNetwork>?) -> CWNetwork? = { networks in
+                networks?.max(by: { $0.rssiValue < $1.rssiValue })
+            }
+            let matchingCachedNetwork: (Set<CWNetwork>?) -> CWNetwork? = { networks in
                 networks?
-                    .filter { $0.ssid == ssid }
+                    .filter { $0.ssid == ssid || $0.ssidData == ssidData }
                     .max(by: { $0.rssiValue < $1.rssiValue })
             }
-            let ssidData = Data(ssid.utf8)
             let deadline = ContinuousClock.now + .seconds(25)
             var lastScanError: Error?
             var lastAssociationError: Error?
@@ -46,10 +49,15 @@ enum HotspotJoiner {
                 // directed scan returns no rows. Prefer that fresh cache, then
                 // make one directed scan per retry. Back-to-back broadcast and
                 // directed scans can keep CoreWLAN in EBUSY on recent macOS.
-                var network = matchingNetwork(interface.cachedScanResults())
+                var network = matchingCachedNetwork(interface.cachedScanResults())
                 if network == nil {
                     do {
-                        network = matchingNetwork(
+                        // The directed scan already limits results to this
+                        // exact SSID. On current macOS releases CoreWLAN may
+                        // redact CWNetwork.ssid even after the app has location
+                        // authorization, so filtering the returned rows by the
+                        // redacted property incorrectly discarded the reader.
+                        network = strongestNetwork(
                             try interface.scanForNetworks(withSSID: ssidData, includeHidden: true)
                         )
                     } catch {

@@ -51,12 +51,50 @@ for section in today japanese books firmware; do
   check_image "appstore/screenshots/en-US/mac-16x10/$section.png" 1440 900
 done
 
+review_sample="appstore/review/Pocket-Daily-Review-Sample.epub"
+[[ -s "$review_sample" ]] || fail "Missing generated review transfer sample: $review_sample"
+[[ -s appstore/testflight/TEST_PLAN.md ]] || fail "Missing physical-device TestFlight plan."
+unzip -tqq "$review_sample" || fail "The review EPUB is not a valid ZIP container."
+[[ "$(zipinfo -1 "$review_sample" | head -1)" == "mimetype" ]] || \
+  fail "The review EPUB must store mimetype as its first entry."
+[[ "$(unzip -p "$review_sample" mimetype)" == "application/epub+zip" ]] || \
+  fail "The review EPUB has an invalid mimetype."
+
 check_image "Sources/Assets.xcassets/AppIcon.appiconset/icon-1024.png" 1024 1024
-plutil -lint appstore/ExportOptions.plist >/dev/null
+for release_script in scripts/package_app_store.sh scripts/verify_app_store_distributions.sh; do
+  [[ -x "$release_script" ]] || fail "$release_script must be executable."
+  bash -n "$release_script" || fail "$release_script has invalid shell syntax."
+done
+plutil -lint appstore/ExportOptions.plist appstore/ExportOnlyOptions.plist >/dev/null
+plutil -extract destination raw appstore/ExportOptions.plist | grep -qx upload || \
+  fail "ExportOptions.plist must remain an explicit upload configuration."
+plutil -extract destination raw appstore/ExportOnlyOptions.plist | grep -qx export || \
+  fail "ExportOnlyOptions.plist must remain a local export configuration."
+for export_options in appstore/ExportOptions.plist appstore/ExportOnlyOptions.plist; do
+  plutil -extract method raw "$export_options" | grep -qx app-store-connect || \
+    fail "$export_options must use the app-store-connect method."
+  plutil -extract teamID raw "$export_options" | grep -qx QF36NDHYHD || \
+    fail "$export_options must use organization team QF36NDHYHD."
+  plutil -extract distributionBundleIdentifier raw "$export_options" | \
+    grep -qx bound.serendipity.pocket.daily || \
+    fail "$export_options has the wrong distribution bundle identifier."
+done
+jq empty appstore/privacy_answers.json appstore/age_rating_answers.json appstore/submission.json >/dev/null || \
+  fail "One or more App Store JSON manifests are invalid."
+jq -er '.expected_global_rating' appstore/age_rating_answers.json | grep -qx '4+' || \
+  fail "The prepared age-rating answers must resolve to the intended 4+ rating."
+plutil -lint Sources/PrivacyInfo.xcprivacy >/dev/null
+privacy_apis="$(plutil -extract NSPrivacyAccessedAPITypes json -o - Sources/PrivacyInfo.xcprivacy)"
+grep -q 'CA92.1' <<< "$privacy_apis" || fail "PrivacyInfo.xcprivacy is missing the app-only UserDefaults reason CA92.1."
+grep -q '3B52.1' <<< "$privacy_apis" || fail "PrivacyInfo.xcprivacy is missing the user-selected file metadata reason 3B52.1."
+plutil -extract NSPrivacyTracking raw Sources/PrivacyInfo.xcprivacy | grep -qx false || \
+  fail "PrivacyInfo.xcprivacy must declare tracking as false."
+plutil -extract NSLocationUsageDescription raw Support/PocketMac-Info.plist >/dev/null || \
+  fail "The macOS Info.plist is missing NSLocationUsageDescription."
 plutil -extract ITSAppUsesNonExemptEncryption raw Support/Pocket-Info.plist | grep -qx false || \
   fail "iOS export-compliance flag is not false."
 plutil -extract ITSAppUsesNonExemptEncryption raw Support/PocketMac-Info.plist | grep -qx false || \
   fail "macOS export-compliance flag is not false."
 
 echo "App Store source package is internally valid."
-echo "Account-only work remains: create the app record, add a review phone, upload signed builds, and attach the physical-reader video URL."
+echo "External release work remains: create the App Store Connect record, add the review contact, upload the signed builds, run TestFlight with hardware, and add the physical-reader video URL."

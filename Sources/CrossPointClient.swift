@@ -12,8 +12,12 @@ struct CrossPointStatus: Codable, Equatable {
     let device: String
     let crashReportAvailable: Bool?
     let crashReportBytes: Int?
+    let screenPreviewAvailable: Bool?
+    let screenPreviewBytes: Int?
     let uploadChunkBytes: Int?
     let uploadStreamPort: Int?
+    let uploadStreamResume: Bool?
+    let diagnosticsAffordable: Bool?
 }
 
 struct CrashDiagnostic: Equatable, Sendable {
@@ -158,35 +162,99 @@ private final class HTTPUploadDelegate: NSObject, URLSessionDataDelegate, URLSes
     }
 }
 
-private final class PocketStreamUploader: @unchecked Sendable {
-    private enum StreamError: LocalizedError {
+/// One `POCKET-PUT/1` transfer over the reader's persistent upload socket.
+///
+/// The reader may answer at any moment (`ERROR …` when its SD write fails,
+/// `RESUME <n>` when asked to continue a retained staging file), so replies
+/// are read concurrently with sending instead of only after the last byte.
+/// A stall watchdog matches the reader's own 30-second idle timeout so a
+/// dropped hotspot surfaces as a retryable failure instead of a 15-minute wait.
+final class PocketStreamUploader: @unchecked Sendable {
+    enum StreamError: LocalizedError, Equatable {
         case invalidPort
         case invalidPath
         case disconnected
+        case stalled
+        case timedOut
+        case readerRejected(String)
         case invalidResponse(String)
         case verificationFailed
+
+        /// Transport-class failures where retrying with `Resume: 1` is safe.
+        var isTransient: Bool {
+            switch self {
+            case .disconnected, .stalled: true
+            default: false
+            }
+        }
 
         var errorDescription: String? {
             switch self {
             case .invalidPort: "The reader's upload port is invalid."
             case .invalidPath: "The destination path cannot be sent."
             case .disconnected: "The reader disconnected before verifying the upload."
+            case .stalled: "The reader stopped accepting data."
+            case .timedOut: "The transfer took too long and was cancelled."
+            case let .readerRejected(message): "The reader stopped the transfer: \(message)."
             case let .invalidResponse(message): "Unexpected reader response: \(message)"
             case .verificationFailed: "The reader reported a different file size or checksum."
             }
         }
     }
 
+    enum Reply: Equatable {
+        case ok(size: Int64, crc32: UInt32)
+        case resume(offset: Int64)
+        case error(String)
+        case invalid(String)
+
+        static func parse(_ line: String) -> Reply {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fields = trimmed.split(separator: " ", omittingEmptySubsequences: true)
+            guard let verb = fields.first else { return .invalid(trimmed) }
+            switch verb {
+            case "OK":
+                guard fields.count == 3, let size = Int64(fields[1]), let crc = UInt32(fields[2], radix: 16) else {
+                    return .invalid(trimmed)
+                }
+                return .ok(size: size, crc32: crc)
+            case "RESUME":
+                guard fields.count == 2, let offset = Int64(fields[1]) else { return .invalid(trimmed) }
+                return .resume(offset: offset)
+            case "ERROR":
+                return .error(fields.dropFirst().joined(separator: " "))
+            default:
+                return .invalid(trimmed)
+            }
+        }
+    }
+
+    static let chunkBytes = 16 * 1024
+    static let stallTimeout: Duration = .seconds(30)
+    static let overallTimeout: TimeInterval = 900
+
+    static func header(path: String, size: Int64, resume: Bool) -> Data {
+        var text = "POCKET-PUT/1\nPath: \(path)\nSize: \(size)\n"
+        if resume { text += "Resume: 1\n" }
+        text += "\n"
+        return Data(text.utf8)
+    }
+
     private let connection: NWConnection
     private let input: FileHandle
     private let total: Int64
     private let remotePath: String
+    private let resume: Bool
     private let progress: @Sendable (Int64, Int64) -> Void
-    private let queue = DispatchQueue(label: "io.github.puritysb.pocketdaily.upload-stream")
+    private let queue = DispatchQueue(label: "bound.serendipity.pocket.daily.upload-stream")
     private var continuation: CheckedContinuation<UInt32, Error>?
     private var sent: Int64 = 0
+    private var bytesRead: Int64 = 0
+    private var streaming = false
     private var crc = CRC32()
     private var response = Data()
+    private var lastActivity = ContinuousClock.now
+    private var stallTimer: DispatchSourceTimer?
 
     init(
         fileURL: URL,
@@ -194,6 +262,7 @@ private final class PocketStreamUploader: @unchecked Sendable {
         port: Int,
         remotePath: String,
         total: Int64,
+        resume: Bool = false,
         progress: @escaping @Sendable (Int64, Int64) -> Void
     ) throws {
         guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(exactly: port) ?? 0), port > 0 else {
@@ -206,10 +275,12 @@ private final class PocketStreamUploader: @unchecked Sendable {
         input = try FileHandle(forReadingFrom: fileURL)
         self.total = total
         self.remotePath = remotePath
+        self.resume = resume
         self.progress = progress
     }
 
     deinit {
+        stallTimer?.cancel()
         try? input.close()
         connection.cancel()
     }
@@ -221,6 +292,7 @@ private final class PocketStreamUploader: @unchecked Sendable {
                 guard let self else { return }
                 switch state {
                 case .ready:
+                    self.touch()
                     self.sendHeader()
                 case let .failed(error):
                     self.finish(.failure(error))
@@ -231,28 +303,87 @@ private final class PocketStreamUploader: @unchecked Sendable {
                 }
             }
             connection.start(queue: queue)
-            queue.asyncAfter(deadline: .now() + 900) { [weak self] in
+            startStallTimer()
+            queue.asyncAfter(deadline: .now() + Self.overallTimeout) { [weak self] in
                 guard let self, self.continuation != nil else { return }
-                self.finish(.failure(URLError(.timedOut)))
+                self.finish(.failure(StreamError.timedOut))
             }
         }
     }
 
+    private func touch() {
+        lastActivity = ContinuousClock.now
+    }
+
+    private func startStallTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 5, repeating: 5)
+        timer.setEventHandler { [weak self] in
+            guard let self, self.continuation != nil else { return }
+            if ContinuousClock.now - self.lastActivity > Self.stallTimeout {
+                self.finish(.failure(StreamError.stalled))
+            }
+        }
+        timer.resume()
+        stallTimer = timer
+    }
+
     private func sendHeader() {
-        let header = Data("POCKET-PUT/1\nPath: \(remotePath)\nSize: \(total)\n\n".utf8)
+        let header = Self.header(path: remotePath, size: total, resume: resume)
         connection.send(content: header, completion: .contentProcessed { [weak self] error in
             guard let self else { return }
-            if let error { self.finish(.failure(error)) } else { self.sendNextChunk() }
+            if let error {
+                self.finish(.failure(error))
+                return
+            }
+            self.receiveNextLine()
+            // A resume request must wait for the reader to say where its
+            // retained prefix ends; a fresh upload streams immediately.
+            if !self.resume { self.startStreaming(from: 0) }
         })
+    }
+
+    private func startStreaming(from offset: Int64) {
+        guard !streaming else {
+            finish(.failure(StreamError.invalidResponse("duplicate resume offset")))
+            return
+        }
+        guard offset >= 0, offset <= total else {
+            finish(.failure(StreamError.invalidResponse("resume offset \(offset) exceeds \(total) bytes")))
+            return
+        }
+        streaming = true
+        do {
+            // The reader continues its running CRC across the prefix it kept;
+            // rebuild the same prefix locally so both sides verify the whole file.
+            try input.seek(toOffset: 0)
+            var remaining = offset
+            while remaining > 0 {
+                guard let chunk = try input.read(upToCount: Int(min(remaining, 64 * 1024))), !chunk.isEmpty else {
+                    throw StreamError.invalidResponse("the local file is shorter than the reader's retained prefix")
+                }
+                crc.update(chunk)
+                remaining -= Int64(chunk.count)
+            }
+        } catch {
+            finish(.failure(error))
+            return
+        }
+        sent = offset
+        bytesRead = offset
+        touch()
+        progress(sent, total)
+        sendNextChunk()
     }
 
     private func sendNextChunk() {
         do {
-            guard let chunk = try input.read(upToCount: 16 * 1024), !chunk.isEmpty else {
-                receiveReply()
-                return
+            guard let chunk = try input.read(upToCount: Self.chunkBytes), !chunk.isEmpty else {
+                if bytesRead != total { finish(.failure(StreamError.verificationFailed)) }
+                return  // The receive loop delivers the reader's OK line.
             }
             crc.update(chunk)
+            bytesRead += Int64(chunk.count)
             connection.send(content: chunk, completion: .contentProcessed { [weak self] error in
                 guard let self else { return }
                 if let error {
@@ -260,6 +391,7 @@ private final class PocketStreamUploader: @unchecked Sendable {
                     return
                 }
                 self.sent += Int64(chunk.count)
+                self.touch()
                 self.progress(self.sent, self.total)
                 self.sendNextChunk()
             })
@@ -268,10 +400,13 @@ private final class PocketStreamUploader: @unchecked Sendable {
         }
     }
 
-    private func receiveReply() {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 160) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
-            if let data { self.response.append(data) }
+    private func receiveNextLine() {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 256) { [weak self] data, _, isComplete, error in
+            guard let self, self.continuation != nil else { return }
+            if let data, !data.isEmpty {
+                self.response.append(data)
+                self.touch()
+            }
             if let error {
                 self.finish(.failure(error))
                 return
@@ -280,39 +415,72 @@ private final class PocketStreamUploader: @unchecked Sendable {
                 self.finish(.failure(StreamError.invalidResponse("response too large")))
                 return
             }
-            if let newline = self.response.firstIndex(of: 0x0A) {
-                let line = String(decoding: self.response[..<newline], as: UTF8.self)
-                self.verify(line: line)
-            } else if isComplete {
-                self.finish(.failure(StreamError.disconnected))
-            } else {
-                self.receiveReply()
+            while let newline = self.response.firstIndex(of: 0x0A) {
+                let line = String(decoding: self.response[self.response.startIndex ..< newline], as: UTF8.self)
+                self.response.removeSubrange(self.response.startIndex ... newline)
+                self.handle(Reply.parse(line), raw: line)
+                if self.continuation == nil { return }
             }
+            if isComplete {
+                self.finish(.failure(StreamError.disconnected))
+                return
+            }
+            self.receiveNextLine()
         }
     }
 
-    private func verify(line: String) {
-        let fields = line.split(separator: " ", omittingEmptySubsequences: true)
-        guard fields.count == 3, fields[0] == "OK",
-              let readerSize = Int64(fields[1]),
-              let readerCRC = UInt32(fields[2], radix: 16)
-        else {
+    private func handle(_ reply: Reply, raw: String) {
+        switch reply {
+        case let .resume(offset):
+            guard resume, !streaming else {
+                finish(.failure(StreamError.invalidResponse(raw)))
+                return
+            }
+            startStreaming(from: offset)
+        case let .ok(size, readerCRC):
+            guard bytesRead == total, size == total, readerCRC == crc.finalized else {
+                finish(.failure(StreamError.verificationFailed))
+                return
+            }
+            finish(.success(readerCRC))
+        case let .error(message):
+            finish(.failure(StreamError.readerRejected(message.isEmpty ? "unspecified error" : message)))
+        case let .invalid(line):
             finish(.failure(StreamError.invalidResponse(line)))
-            return
         }
-        guard sent == total, readerSize == total, readerCRC == crc.finalized else {
-            finish(.failure(StreamError.verificationFailed))
-            return
-        }
-        finish(.success(readerCRC))
     }
 
     private func finish(_ result: Result<UInt32, Error>) {
         guard let continuation else { return }
         self.continuation = nil
+        stallTimer?.cancel()
+        stallTimer = nil
         try? input.close()
         connection.cancel()
         continuation.resume(with: result)
+    }
+}
+
+/// Decides whether an interrupted transfer is worth another attempt. Reader
+/// rejections (bad header, SD failure, checksum mismatch) are final; link-level
+/// failures are retried with `Resume: 1` when the reader advertises support.
+enum UploadRetryPolicy {
+    static let maxAttempts = 3
+
+    static func shouldRetry(_ error: Error, attempt: Int, maxAttempts: Int = maxAttempts) -> Bool {
+        guard attempt < maxAttempts else { return false }
+        if error is CancellationError { return false }
+        if let stream = error as? PocketStreamUploader.StreamError { return stream.isTransient }
+        if let urlError = error as? URLError {
+            return [.timedOut, .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet, .cannotFindHost]
+                .contains(urlError.code)
+        }
+        if error is NWError { return true }
+        return (error as NSError).domain == NSPOSIXErrorDomain
+    }
+
+    static func delay(afterAttempt attempt: Int) -> Duration {
+        .seconds(min(max(attempt, 1), 3))
     }
 }
 
@@ -387,6 +555,38 @@ actor CrossPointClient {
         return CrashDiagnostic(report: report)
     }
 
+    func screenPreview(host: String, port: Int, expectedBytes: Int) async throws -> Data {
+        guard expectedBytes >= 64, expectedBytes <= 128 * 1_024 else {
+            throw ClientError.unexpectedMessage("invalid screen preview size")
+        }
+
+        var previewData = Data()
+        previewData.reserveCapacity(expectedBytes)
+        while previewData.count < expectedBytes {
+            guard let url = Self.url(
+                host: host,
+                port: port,
+                path: "/api/pocket/v1/screen-preview",
+                query: ["offset": String(previewData.count)]
+            ) else { throw ClientError.invalidAddress }
+            var request = URLRequest(url: url)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 10
+            request.setValue("close", forHTTPHeaderField: "Connection")
+            let (chunk, response) = try await session.data(for: request)
+            try Self.requireSuccess(response, body: chunk)
+            guard !chunk.isEmpty, previewData.count + chunk.count <= expectedBytes else {
+                throw ClientError.unexpectedMessage("invalid screen preview chunk")
+            }
+            previewData.append(chunk)
+        }
+
+        guard previewData.count == expectedBytes, previewData.starts(with: [0x42, 0x4D]) else {
+            throw ClientError.unexpectedMessage("invalid BMP screen preview")
+        }
+        return previewData
+    }
+
     func preferences(host: String, port: Int) async throws -> ReaderPreferences {
         guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
             throw ClientError.invalidAddress
@@ -430,6 +630,9 @@ actor CrossPointClient {
         port: Int = 80,
         uploadChunkBytes: Int? = nil,
         uploadStreamPort: Int? = nil,
+        uploadStreamResume: Bool = false,
+        note: (@Sendable (String) -> Void)? = nil,
+        reconnect: (@Sendable () async -> Bool)? = nil,
         progress: @escaping @Sendable (Int64, Int64) -> Void
     ) async throws -> String {
         let filename = publishedFilename ?? fileURL.lastPathComponent
@@ -451,16 +654,39 @@ actor CrossPointClient {
         let total = Int64(values.fileSize ?? 0)
         let crc32: UInt32
         if let streamPort = uploadStreamPort, streamPort > 0 {
+            // The staging name stays fixed across attempts so a reader that
+            // retained the interrupted prefix can continue it (`Resume: 1`).
+            // Readers without resume support simply restart the same path.
             let stagingPath = Self.join(normalizedDestination, stagingName)
-            let uploader = try PocketStreamUploader(
-                fileURL: fileURL,
-                host: host,
-                port: streamPort,
-                remotePath: stagingPath,
-                total: total,
-                progress: progress
-            )
-            crc32 = try await uploader.upload()
+            var attempt = 0
+            var resume = false
+            while true {
+                attempt += 1
+                do {
+                    let uploader = try PocketStreamUploader(
+                        fileURL: fileURL,
+                        host: host,
+                        port: streamPort,
+                        remotePath: stagingPath,
+                        total: total,
+                        resume: resume,
+                        progress: progress
+                    )
+                    crc32 = try await uploader.upload()
+                    break
+                } catch {
+                    try Task.checkCancellation()
+                    guard UploadRetryPolicy.shouldRetry(error, attempt: attempt) else { throw error }
+                    note?("Transfer interrupted: \(error.localizedDescription) Reconnecting (attempt \(attempt + 1) of \(UploadRetryPolicy.maxAttempts))…")
+                    try await Task.sleep(for: UploadRetryPolicy.delay(afterAttempt: attempt))
+                    if (try? await status(host: host, port: port, timeout: 3)) == nil {
+                        // The private hotspot itself dropped. Let the caller rejoin
+                        // it before continuing; otherwise report the original failure.
+                        guard let reconnect, await reconnect() else { throw error }
+                    }
+                    resume = uploadStreamResume
+                }
+            }
         } else if let advertisedChunk = uploadChunkBytes, advertisedChunk > 0, total > 0 {
             let chunkSize = min(max(advertisedChunk, 1_024), 64 * 1_024)
             let input = try FileHandle(forReadingFrom: fileURL)

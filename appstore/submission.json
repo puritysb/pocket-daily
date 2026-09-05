@@ -1,6 +1,6 @@
 {
   "app_name": "Pocket Daily",
-  "bundle_id": "io.github.puritysb.pocketdaily",
+  "bundle_id": "bound.serendipity.pocket.daily",
   "sku": "pocket-daily-universal-2026",
   "version": "1.0.0",
   "build": "1",
@@ -11,6 +11,8 @@
   "in_app_purchases": false,
   "account_required": false,
   "age_rating_target": "4+",
+  "age_rating_answers": "appstore/age_rating_answers.json",
+  "testflight_plan": "appstore/testflight/TEST_PLAN.md",
   "content_rights": "Pocket Daily contains only original interface and study examples; users provide their own books, study packs, and firmware files.",
   "copyright": "2026 SeungBeom Choi",
   "privacy_policy_url": "https://puritysb.github.io/pocket-daily/privacy/",
@@ -20,10 +22,23 @@
   "uses_non_exempt_encryption": false,
   "release_option": "Manual",
   "hardware_required": "A separately obtained X3/X4-class device running Pocket Daily or compatible CrossPoint-based firmware is required for live transfer and settings. Built-in demo mode does not require hardware.",
+  "local_release_evidence": {
+    "verified_on": "2026-09-01",
+    "development_team": "QF36NDHYHD",
+    "ios_distribution": "App Store IPA export succeeded with Hotspot Configuration and get-task-allow disabled",
+    "macos_distribution": "Mac App Store PKG export succeeded with App Sandbox and required Bluetooth, network, file, and location entitlements",
+    "tests": "26 iOS simulator tests passed; iOS and macOS release builds passed",
+    "package_validation": "scripts/validate_app_store.sh passed",
+    "release_automation": "scripts/package_app_store.sh passed end to end and emitted release-evidence.json without uploading",
+    "public_urls": "Marketing, support, and privacy URLs returned HTTP 200"
+  },
   "account_fields_still_required": [
     "App Store Connect app record and Apple-generated app ID",
+    "A refreshed Xcode App Store Connect upload token or authorized API key",
     "App Review contact phone number",
-    "Signed distribution archive and uploaded build",
+    "Live confirmation of the current App Privacy and age-rating questionnaires",
+    "Uploaded iOS and macOS builds",
+    "Successful iOS and macOS TestFlight runs with a physical reader",
     "Public review-video URL showing one physical reader transfer"
   ]
 }

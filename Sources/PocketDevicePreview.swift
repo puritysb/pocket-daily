@@ -1,9 +1,14 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 struct PocketDevicePreview: View {
     let hardware: PocketHardware
-    let section: PocketSection
     let status: CrossPointStatus?
+    let screenImageData: Data?
 
     var body: some View {
         GeometryReader { proxy in
@@ -36,7 +41,7 @@ struct PocketDevicePreview: View {
                     }
                     .padding(.horizontal, width * 0.08)
 
-                    EInkSurface(hardware: hardware, section: section, status: status)
+                    EInkSurface(hardware: hardware, status: status, screenImageData: screenImageData)
                         .clipShape(RoundedRectangle(cornerRadius: width * 0.012))
                         .padding(.horizontal, width * 0.067)
 
@@ -63,7 +68,11 @@ struct PocketDevicePreview: View {
         }
         .aspectRatio(hardware.chassisAspect, contentMode: .fit)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Pocket Daily \(hardware.rawValue) compatibility profile preview")
+        .accessibilityLabel(
+            screenImageData == nil
+                ? "Pocket Daily \(hardware.rawValue) hardware profile. No reader frame is available."
+                : "Pocket Daily \(hardware.rawValue) with the exact reader frame captured before Nearby Sync."
+        )
     }
 
     @ViewBuilder
@@ -146,91 +155,71 @@ struct PocketDevicePreview: View {
 
 private struct EInkSurface: View {
     let hardware: PocketHardware
-    let section: PocketSection
     let status: CrossPointStatus?
+    let screenImageData: Data?
 
     var body: some View {
         ZStack {
             Color(red: 0.93, green: 0.92, blue: 0.87)
-            VStack(spacing: 0) {
-                HStack { Text(header); Spacer(); Text("08.29") }
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .padding(.horizontal, 16).padding(.vertical, 13)
-                Rectangle().fill(Color.black.opacity(0.75)).frame(height: 1)
-                content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                HStack { Text(footerLeft); Spacer(); Text(status?.mode ?? "PREVIEW") }
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .padding(.horizontal, 15).padding(.vertical, 10)
-                    .overlay(alignment: .top) { Rectangle().fill(Color.black.opacity(0.65)).frame(height: 1) }
+            if let screenImage {
+                screenImage
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+            } else {
+                VStack(spacing: 0) {
+                    HStack { Text("POCKET DAILY"); Spacer(); Text(hardware.rawValue) }
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .padding(.horizontal, 16).padding(.vertical, 13)
+                    Rectangle().fill(Color.black.opacity(0.75)).frame(height: 1)
+                    content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    HStack { Text("LOCAL COMPANION"); Spacer(); Text(status?.mode ?? "PROFILE") }
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .padding(.horizontal, 15).padding(.vertical, 10)
+                        .overlay(alignment: .top) { Rectangle().fill(Color.black.opacity(0.65)).frame(height: 1) }
+                }
+                .foregroundStyle(Color.black.opacity(0.86))
             }
-            .foregroundStyle(Color.black.opacity(0.86))
         }
         .aspectRatio(hardware.screenAspect, contentMode: .fit)
     }
 
+    private var screenImage: Image? {
+        guard let screenImageData else { return nil }
+#if os(macOS)
+        guard let image = NSImage(data: screenImageData) else { return nil }
+        return Image(nsImage: image)
+#else
+        guard let image = UIImage(data: screenImageData) else { return nil }
+        return Image(uiImage: image)
+#endif
+    }
+
     @ViewBuilder
     private var content: some View {
-        switch section {
-        case .today:
-            VStack(spacing: 14) {
-                Spacer()
-                Text("継").font(.system(size: hardware == .x3 ? 116 : 106, weight: .regular, design: .serif)).minimumScaleFactor(0.7)
-                Text("つぐ").font(.system(size: 27, design: .serif))
-                Rectangle().frame(width: 128, height: 1)
-                Text("이어가다, 계승하다\n잇다, 계속하다")
-                    .font(.system(size: 17, design: .serif)).multilineTextAlignment(.center).lineSpacing(5)
-                Spacer()
-                Text("오늘 한 번 보고 · 저녁에 다시")
-                    .font(.system(size: 10, weight: .medium)).padding(.bottom, 12)
-            }
-        case .japanese:
-            VStack(spacing: 15) {
-                Spacer()
-                Text("継ぐ").font(.system(size: hardware == .x3 ? 66 : 60, design: .serif))
-                Text("다음 읽기를 고르세요").font(.system(size: 13, weight: .medium))
-                HStack(spacing: 8) { answer("つぐ", selected: true); answer("そそぐ", selected: false) }
-                HStack(spacing: 8) { answer("かせぐ", selected: false); answer("つなぐ", selected: false) }
-                Spacer()
-                Text("JLPT N3 · REVIEW 12")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced)).padding(.bottom, 12)
-            }
-            .padding(.horizontal, 16)
-        case .books:
-            VStack(alignment: .leading, spacing: 14) {
-                Text("이어 읽기").font(.system(size: 14, weight: .semibold))
-                Text("吾輩は猫である").font(.system(size: hardware == .x3 ? 33 : 29, design: .serif))
-                Text("夏目漱石").font(.system(size: 15, design: .serif))
-                Rectangle().frame(height: 1)
-                Text("吾輩は猫である。名前はまだ無い。どこで生れたか頓と見当がつかぬ。")
-                    .font(.system(size: 18, design: .serif)).lineSpacing(8)
-                Spacer()
-                Text("42% · 18 min left").font(.system(size: 10, design: .monospaced))
-            }
-            .padding(22)
-        case .firmware:
-            VStack(spacing: 18) {
-                Spacer()
-                Image(systemName: "arrow.down.circle").font(.system(size: 58, weight: .light))
-                Text("Firmware ready").font(.system(size: 22, weight: .semibold))
-                Text("The universal file is staged on SD.\nInstallation starts only on \(hardware.rawValue).")
-                    .font(.system(size: 13)).multilineTextAlignment(.center).lineSpacing(4)
-                Spacer()
-            }
+        VStack(spacing: 15) {
+            Spacer()
+            Image(systemName: "rectangle.portrait")
+                .font(.system(size: hardware == .x3 ? 82 : 74, weight: .ultraLight))
+            Text(hardware.rawValue)
+                .font(.system(size: hardware == .x3 ? 40 : 36, weight: .medium, design: .rounded))
+            Text(status == nil || status?.mode == "DEMO" ? "HARDWARE PROFILE" : "SCREEN PREVIEW UNAVAILABLE")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .tracking(1.1)
+                .multilineTextAlignment(.center)
+            Rectangle().frame(width: 116, height: 1)
+            Text(fallbackDetail)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+            Spacer()
         }
     }
 
-    private func answer(_ text: String, selected: Bool) -> some View {
-        Text(text)
-            .font(.system(size: 15, weight: selected ? .bold : .regular, design: .serif))
-            .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .background(selected ? Color.black.opacity(0.12) : Color.clear)
-            .overlay { RoundedRectangle(cornerRadius: 3).stroke(Color.black.opacity(0.7)) }
-    }
-
-    private var header: String {
-        switch section { case .today: "今日の漢字"; case .japanese: "N3 REVIEW"; case .books: "READING"; case .firmware: "UPDATE" }
-    }
-    private var footerLeft: String {
-        switch section { case .today: "12 / 20"; case .japanese: "3 / 10"; case .books: "PAGE 84"; case .firmware: "SAFE STAGING" }
+    private var fallbackDetail: String {
+        if status != nil, status?.mode != "DEMO" {
+            return "Open Nearby Sync from Pocket Daily\nto capture the exact frame"
+        }
+        return "\(hardware.screenWidth) × \(hardware.screenHeight) e-paper\n\(hardware.controlSummary)"
     }
 }

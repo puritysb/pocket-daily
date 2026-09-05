@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		136F7173D3544851F4C78858 /* CrossPointClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */; };
 		155AFF494DFA0F44C318B8D1 /* PocketDevicePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */; };
+		1E97B607E7232858CBBA4EEF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
+		24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
 		374169613A2E5437B2A68A8E /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
 		414190AE73C31EAC36A10175 /* HotspotJoiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */; };
 		4CF8D4056513B87B732EF3EF /* PocketDevicePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */; };
@@ -17,9 +19,11 @@
 		5FC465C4E6E19DEB66B54775 /* NearbySyncProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED14B15E886AE48D45407B10 /* NearbySyncProtocol.swift */; };
 		6D83E7AC8B7407AAADF0A8BF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9C7C8282C265F6B6B6EADC4 /* Assets.xcassets */; };
 		70C1388C6930C40CA2BFE011 /* PocketHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C61AC1FD88CD54C5818106 /* PocketHardware.swift */; };
+		84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
 		86E634244B23C47205D8B382 /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
 		894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */; };
 		A6208CA1D1EDD27DDD132C2F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF86CD3C8490B57EB11E8071 /* ContentView.swift */; };
+		AA79057983FE52D7AAC2E7FB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		AE0834455F19D805D51A9AD3 /* PocketModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */; };
 		AFCC025CE7AAFFD337020926 /* PocketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78DAF0568606DE01F034EB9F /* PocketApp.swift */; };
 		B24CAEF1B71AD9BD50DA9B1A /* HotspotJoiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */; };
@@ -43,8 +47,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		037226D140697D15166E6091 /* FirmwareImageValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareImageValidator.swift; sourceTree = "<group>"; };
 		05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketModel.swift; sourceTree = "<group>"; };
 		16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncProtocolTests.swift; sourceTree = "<group>"; };
+		3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketDevicePreview.swift; sourceTree = "<group>"; };
 		78DAF0568606DE01F034EB9F /* PocketApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketApp.swift; sourceTree = "<group>"; };
 		92C61AC1FD88CD54C5818106 /* PocketHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketHardware.swift; sourceTree = "<group>"; };
@@ -67,6 +73,7 @@
 				B9C7C8282C265F6B6B6EADC4 /* Assets.xcassets */,
 				CF86CD3C8490B57EB11E8071 /* ContentView.swift */,
 				9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */,
+				037226D140697D15166E6091 /* FirmwareImageValidator.swift */,
 				A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */,
 				98C5706F004643C8427F5DEF /* LocalReaderDiscovery.swift */,
 				DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */,
@@ -75,6 +82,7 @@
 				6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */,
 				92C61AC1FD88CD54C5818106 /* PocketHardware.swift */,
 				05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */,
+				3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -172,6 +180,18 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					7D169845C7D92117E36B994A = {
+						DevelopmentTeam = QF36NDHYHD;
+						ProvisioningStyle = Automatic;
+					};
+					A835E4A168196F4AB43F0648 = {
+						DevelopmentTeam = QF36NDHYHD;
+						ProvisioningStyle = Automatic;
+					};
+					F8A65D44EA5474162880886B = {
+						DevelopmentTeam = QF36NDHYHD;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = BBF6F3C78A2CCDE05E8C6E37 /* Build configuration list for PBXProject "Pocket" */;
@@ -201,6 +221,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F0467630F25610778EA380E1 /* Assets.xcassets in Resources */,
+				AA79057983FE52D7AAC2E7FB /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -209,6 +230,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6D83E7AC8B7407AAADF0A8BF /* Assets.xcassets in Resources */,
+				1E97B607E7232858CBBA4EEF /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,6 +251,7 @@
 			files = (
 				E72A0BD7BB8E36855DA96247 /* ContentView.swift in Sources */,
 				FEAC785F7C5914FA98BBB52B /* CrossPointClient.swift in Sources */,
+				24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */,
 				414190AE73C31EAC36A10175 /* HotspotJoiner.swift in Sources */,
 				BB1B2115ACA29E87C9F1A51A /* LocalReaderDiscovery.swift in Sources */,
 				374169613A2E5437B2A68A8E /* NearbySyncController.swift in Sources */,
@@ -246,6 +269,7 @@
 			files = (
 				A6208CA1D1EDD27DDD132C2F /* ContentView.swift in Sources */,
 				136F7173D3544851F4C78858 /* CrossPointClient.swift in Sources */,
+				84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */,
 				B24CAEF1B71AD9BD50DA9B1A /* HotspotJoiner.swift in Sources */,
 				FD2AC3093EE1E6638E02BFAE /* LocalReaderDiscovery.swift in Sources */,
 				86E634244B23C47205D8B382 /* NearbySyncController.swift in Sources */,
@@ -279,7 +303,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -297,7 +321,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -337,9 +361,11 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = QF36NDHYHD;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -397,9 +423,11 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = QF36NDHYHD;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -440,7 +468,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pocket.app/Pocket";
@@ -458,7 +486,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = macosx;
 			};
@@ -475,7 +503,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily;
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = macosx;
 			};
@@ -490,7 +518,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.puritysb.pocketdaily.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pocket.app/Pocket";

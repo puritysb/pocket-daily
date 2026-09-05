@@ -9,6 +9,8 @@ settings:
     SWIFT_VERSION: "5.0"
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 1.0.0
+    DEVELOPMENT_TEAM: QF36NDHYHD
+    CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: NO
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 targets:
@@ -45,7 +47,7 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily
+        PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily
         PRODUCT_NAME: Pocket
         TARGETED_DEVICE_FAMILY: "1,2"
   PocketMac:
@@ -64,7 +66,7 @@ targets:
         LSApplicationCategoryType: public.app-category.education
         NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.
         NSLocalNetworkUsageDescription: Pocket Daily connects directly to your reader to sync books, study data, and firmware.
-        NSLocationWhenInUseUsageDescription: Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
+        NSLocationUsageDescription: Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
         NSBonjourServices:
           - _crosspoint._tcp
         NSAppTransportSecurity:
@@ -81,7 +83,7 @@ targets:
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily
+        PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily
         PRODUCT_NAME: Pocket
         CODE_SIGN_ENTITLEMENTS: Support/PocketMac.entitlements
   PocketTests:
@@ -93,4 +95,4 @@ targets:
       - target: Pocket
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.puritysb.pocketdaily.tests
+        PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily.tests

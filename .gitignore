@@ -4,3 +4,8 @@ DerivedData/
 build/
 *.xcuserstate
 xcuserdata/
+
+# Local agent state
+.claude/settings.local.json
+.claude/worktrees/
+.codex/

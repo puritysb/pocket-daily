@@ -7,5 +7,9 @@
   "account": false,
   "cloud_relay": false,
   "local_network_data_leaves_device": false,
-  "notes": "User-selected files and device diagnostics move only between the user's Apple device, local reader, and user-selected storage. Crash reports are saved locally and exported only by an explicit user action."
+  "required_reason_apis": {
+    "NSPrivacyAccessedAPICategoryUserDefaults": ["CA92.1"],
+    "NSPrivacyAccessedAPICategoryFileTimestamp": ["3B52.1"]
+  },
+  "notes": "User-selected files and device diagnostics move only between the user's Apple device, local reader, and user-selected storage. Crash reports are saved locally and exported only by an explicit user action. UserDefaults stores the last reader address inside this app, and file metadata is read only for files or folders explicitly selected by the user."
 }

@@ -42,9 +42,19 @@ The checked-in Xcode project is generated from `project.yml` with XcodeGen:
 
 ```sh
 xcodegen generate
-xcodebuild -project Pocket.xcodeproj -scheme Pocket -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project Pocket.xcodeproj -scheme PocketMac -sdk macosx CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project Pocket.xcodeproj -scheme Pocket -sdk iphonesimulator -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project Pocket.xcodeproj -scheme PocketMac -sdk macosx -derivedDataPath .build/mac CODE_SIGNING_ALLOWED=NO build
+xcodebuild test -project Pocket.xcodeproj -scheme Pocket -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.6' -derivedDataPath .build/tests CODE_SIGNING_ALLOWED=NO
 ```
+
+Use an available simulator name and OS when the example runtime is not
+installed. Treat `project.yml` as the source of truth: regenerate with XcodeGen
+after project or file-membership changes, and do not hand-edit
+`Pocket.xcodeproj/project.pbxproj`.
+
+Agent-assisted work starts with [`AGENTS.md`](AGENTS.md). Stable product and
+engineering constraints are in [`CLAUDE.md`](CLAUDE.md), while dated durable
+handoff context is in [`docs/PROJECT_MEMORY.md`](docs/PROJECT_MEMORY.md).
 
 For local macOS hardware testing, sign the built app with a Developer ID
 identity and `Support/PocketMacDeveloperID.entitlements`. This keeps Bluetooth,

@@ -1,0 +1,44 @@
+{
+  "questionnaire_snapshot": "2026-09-01",
+  "expected_global_rating": "4+",
+  "made_for_kids": false,
+  "override": "Not Applicable",
+  "in_app_controls": {
+    "parental_controls": false,
+    "age_assurance": false
+  },
+  "capabilities": {
+    "user_generated_content": false,
+    "messaging_and_chat": false,
+    "advertising": false,
+    "social_media": false,
+    "unrestricted_web_access": false
+  },
+  "mature_themes": {
+    "profanity_or_crude_humor": "None",
+    "horror_or_fear_themes": "None",
+    "alcohol_tobacco_or_drug_references": "None"
+  },
+  "medical_or_wellness": {
+    "health_or_wellness_topics": false,
+    "medical_or_treatment_information": "None"
+  },
+  "sexuality_or_nudity": {
+    "mature_or_suggestive_themes": "None",
+    "sexual_content_or_nudity": "None",
+    "graphic_sexual_content_or_nudity": "None"
+  },
+  "violence": {
+    "cartoon_or_fantasy_violence": "None",
+    "realistic_violence": "None",
+    "prolonged_graphic_or_sadistic_realistic_violence": "None",
+    "guns_or_other_weapons": "None"
+  },
+  "chance_based_activities": {
+    "simulated_gambling": "None",
+    "contests": "None",
+    "gambling": false,
+    "loot_boxes": false
+  },
+  "review_note": "Pocket Daily has no embedded browser, public content feed, messaging, advertising, commerce, health content, violence, gambling, or user account. User-selected local files are transferred to the user's reader and are not published or shared through the app. Confirm these answers against the live App Store Connect questionnaire before submission."
+}

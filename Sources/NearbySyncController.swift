@@ -277,6 +277,7 @@ extension NearbySyncController: CBPeripheralDelegate {
                         let lease = try HotspotLease(record: record)
                         guard lease.requestID == pendingHotspotRequestID else { return }
                         hotspotLease = lease
+                        self.record("Authenticated hotspot lease received")
                     } else if parts.first == "ERR", parts.count >= 3,
                               parts[1] == pendingHotspotRequestID {
                         throw NearbySyncError.rejected(parts[2])

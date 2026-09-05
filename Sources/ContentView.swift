@@ -1,31 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum PocketSection: String, CaseIterable, Identifiable {
-    case today, japanese, books, firmware
-
-    var id: Self { self }
-    var title: String {
-        switch self { case .today: "Today"; case .japanese: "Japanese"; case .books: "Books"; case .firmware: "Firmware" }
-    }
-    var subtitle: String {
-        switch self {
-        case .today: "Daily card"
-        case .japanese: "JLPT N3 · 148"
-        case .books: "On your SD card"
-        case .firmware: "Safe staged update"
-        }
-    }
-    var symbol: String {
-        switch self {
-        case .today: "sun.max"
-        case .japanese: "character.book.closed"
-        case .books: "books.vertical"
-        case .firmware: "shippingbox"
-        }
-    }
-}
-
 struct ContentView: View {
     private enum FileImportAction {
         case wirelessUpload
@@ -41,20 +16,11 @@ struct ContentView: View {
 
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController()
-    @State private var selection: PocketSection
     @State private var importing = false
     @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
     @State private var pendingFirmwareTransfer: PendingFirmwareTransfer?
     @State private var showingProjectInfo = false
-
-    init() {
-        let section = ProcessInfo.processInfo.arguments
-            .first(where: { $0.hasPrefix("--section=") })
-            .flatMap { PocketSection(rawValue: String($0.dropFirst("--section=".count))) }
-            ?? .today
-        _selection = State(initialValue: section)
-    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -108,12 +74,15 @@ struct ContentView: View {
 
     private var desktopStudio: some View {
         HStack(spacing: 0) {
-            libraryRail.frame(width: 224)
-            Divider()
             ScrollView {
                 VStack(spacing: 18) {
+                    desktopHeader
                     previewHeader
-                    PocketDevicePreview(hardware: model.hardware, section: selection, status: model.readerStatus)
+                    PocketDevicePreview(
+                        hardware: model.hardware,
+                        status: model.readerStatus,
+                        screenImageData: model.readerScreenImageData
+                    )
                         .frame(maxWidth: 430)
                         .frame(height: 590)
                 }
@@ -133,14 +102,12 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
-                    Picker("Surface", selection: $selection) {
-                        ForEach(PocketSection.allCases) { section in
-                            Label(section.title, systemImage: section.symbol).tag(section)
-                        }
-                    }
-                    .pickerStyle(.segmented)
                     previewHeader
-                    PocketDevicePreview(hardware: model.hardware, section: selection, status: model.readerStatus)
+                    PocketDevicePreview(
+                        hardware: model.hardware,
+                        status: model.readerStatus,
+                        screenImageData: model.readerScreenImageData
+                    )
                         .frame(maxWidth: 390)
                     inspector
                 }
@@ -155,88 +122,56 @@ struct ContentView: View {
         }
     }
 
-    private var libraryRail: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                PocketMark()
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Pocket Daily").font(.title3.weight(.semibold))
-                    Text("READER STUDIO")
-                        .font(.system(size: 9, weight: .semibold, design: .rounded))
-                        .tracking(1.1)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 20)
-
-            Text("LIBRARY")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 18)
-                .padding(.top, 8)
-                .padding(.bottom, 6)
-
-            ForEach(PocketSection.allCases) { section in
-                Button {
-                    selection = section
-                } label: {
-                    HStack(spacing: 11) {
-                        Image(systemName: section.symbol).frame(width: 20)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(section.title).fontWeight(.medium)
-                            Text(section.subtitle).font(.caption2).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(selection == section ? PocketPalette.selection : .clear, in: RoundedRectangle(cornerRadius: 9))
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 7)
-            }
-            Spacer()
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Circle().fill(model.readerStatus == nil ? Color.secondary : PocketPalette.signal).frame(width: 8, height: 8)
-                    Text(model.isDemoMode ? "Demo preview" : (model.readerStatus == nil ? "Reader offline" : "Reader connected"))
-                        .font(.caption.weight(.medium))
-                }
-                Button("About & Privacy") { showingProjectInfo = true }
-                    .buttonStyle(.plain)
-                    .font(.caption)
+    private var desktopHeader: some View {
+        HStack(spacing: 12) {
+            PocketMark()
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Pocket Daily").font(.title2.weight(.semibold))
+                Text("LOCAL READER COMPANION")
+                    .font(.caption2.weight(.semibold))
+                    .tracking(1.0)
                     .foregroundStyle(.secondary)
             }
-            .padding(18)
+            Spacer()
+            Button("About & Privacy", systemImage: "info.circle") { showingProjectInfo = true }
+                .buttonStyle(.bordered)
         }
-        .background(PocketPalette.panel)
+        .frame(maxWidth: 560)
     }
 
     private var previewHeader: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(selection.title).font(.title2.weight(.semibold))
-                Text("\(model.hardware.screenWidth) × \(model.hardware.screenHeight) · \(model.hardware.controlSummary)")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if let status = model.readerStatus {
-                Text(status.device)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 9).padding(.vertical, 5)
-                    .background(Color.green.opacity(0.12), in: Capsule())
-            } else {
-                Picker("Device", selection: $model.preferredHardware) {
-                    ForEach(PocketHardware.allCases) { hardware in
-                        Text(hardware.rawValue).tag(hardware)
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Reader profile").font(.title2.weight(.semibold))
+                    Text("\(model.hardware.screenWidth) × \(model.hardware.screenHeight) · \(model.hardware.controlSummary)")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 112)
+                Spacer()
+                if let status = model.readerStatus {
+                    Text(status.device)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 9).padding(.vertical, 5)
+                        .background(Color.green.opacity(0.12), in: Capsule())
+                } else {
+                    Picker("Device", selection: $model.preferredHardware) {
+                        ForEach(PocketHardware.allCases) { hardware in
+                            Text(hardware.rawValue).tag(hardware)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 112)
+                }
             }
+            Label(
+                model.readerScreenImageData == nil
+                    ? "Connect from Pocket Daily Nearby Sync to load the exact reader frame."
+                    : "Exact reader frame captured when Nearby Sync opened.",
+                systemImage: model.readerScreenImageData == nil ? "rectangle.dashed" : "checkmark.rectangle"
+            )
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: 520)
     }
@@ -250,6 +185,8 @@ struct ContentView: View {
                 importAction = .wirelessUpload
                 importing = true
             }
+            if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
+            StatusCallout(message: model.message)
 #if os(macOS)
             Button("Copy directly to SD card…") {
                 importAction = .sdSource
@@ -258,21 +195,15 @@ struct ContentView: View {
                 .buttonStyle(.borderless).disabled(model.isWorking || model.isDemoMode)
 #endif
             DeviceSettingsInspector(model: model)
-            if let diagnostic = model.crashDiagnostic {
-                DiagnosticsInspector(diagnostic: diagnostic)
+            if !model.isDemoMode {
+                TroubleshootingInspector(model: model, nearby: nearby)
             }
-            if !model.isDemoMode { ConnectionTraceInspector(nearby: nearby) }
-            ProjectNotice()
-            if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
-            Text(model.message)
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func connect() {
         model.exitDemoMode()
-        model.findOnLocalNetwork()
+        model.startConnectionSearch()
         nearby.scan()
     }
 
@@ -343,6 +274,7 @@ private struct FirmwareTransferSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
+                SafetyLine(symbol: "checkmark.seal", text: "Pocket validates the ESP32-C3 image structure, checksum, SHA-256 digest, and Nearby Sync identity before staging.")
                 SafetyLine(symbol: "checkmark.shield", text: "Use only Pocket Daily or compatible CrossPoint-based firmware for this reader profile.")
                 SafetyLine(symbol: "building.2.crop.circle", text: "Factory firmware and manufacturer services are not supported by this app.")
                 SafetyLine(symbol: "wrench.and.screwdriver", text: "Custom firmware can affect support or warranty if it causes device damage.")
@@ -461,6 +393,83 @@ private struct InfoSection<Content: View>: View {
     }
 }
 
+/// The single place the app reports what just happened. It used to be a
+/// caption-sized secondary line at the bottom of the inspector, which is why a
+/// successful firmware transfer was easy to miss. Tone is derived from the
+/// message so success, a staged-but-not-installed firmware, and failures are
+/// visually distinct without threading extra state through the model.
+private struct StatusCallout: View {
+    let message: String
+
+    private enum Tone { case success, pending, failure, neutral }
+
+    private var tone: Tone {
+        let lower = message.lowercased()
+        if lower.hasPrefix("firmware installed") || lower.contains("was verified and published") { return .success }
+        if lower.hasPrefix("staged, not installed yet") || lower.hasPrefix("not installed yet") { return .pending }
+        if lower.contains("failed") || lower.contains("could not") || lower.contains("cannot")
+            || lower.contains("error") || lower.contains("invalid") || lower.contains("not found")
+            || lower.contains("interrupted") || lower.contains("ended") {
+            return .failure
+        }
+        return .neutral
+    }
+
+    private var symbol: String {
+        switch tone {
+        case .success: "checkmark.circle.fill"
+        case .pending: "arrow.down.circle.fill"
+        case .failure: "exclamationmark.triangle.fill"
+        case .neutral: "info.circle"
+        }
+    }
+
+    private var color: Color {
+        switch tone {
+        case .success: .green
+        case .pending: .orange
+        case .failure: .red
+        case .neutral: .secondary
+        }
+    }
+
+    private var title: String? {
+        switch tone {
+        case .success: "Done"
+        case .pending: "Staged — install on the reader"
+        case .failure: "Attention"
+        case .neutral: nil
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 3) {
+                if let title {
+                    Text(title).font(.subheadline.weight(.semibold))
+                }
+                Text(message)
+                    .font(tone == .neutral ? .caption : .callout)
+                    .foregroundStyle(tone == .neutral ? .secondary : .primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(tone == .neutral ? 0 : 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(tone == .neutral ? Color.clear : color.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(tone == .neutral ? Color.clear : color.opacity(0.45), lineWidth: 1)
+        )
+    }
+}
+
 private struct ProjectNotice: View {
     var body: some View {
         InspectorCard(title: "ABOUT", symbol: "info.circle") {
@@ -516,9 +525,9 @@ private struct ConnectionInspector: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Button("Open Location Settings") { model.openLocationSettings() }
                             .buttonStyle(.bordered)
-                        Button("Retry automatic join") { model.findOnLocalNetwork() }
-                            .buttonStyle(.borderedProminent)
                     }
+                    Button("Retry automatic join") { model.useNearbyLease(lease) }
+                        .buttonStyle(.borderedProminent)
                     Text(lease.ssid)
                     Text(lease.passphrase).textSelection(.enabled)
                     Button("Verify connection") {
@@ -535,6 +544,7 @@ private struct ConnectionInspector: View {
     private var detail: String {
         if model.isDemoMode { return "Local demo · transfers disabled" }
         if let status = model.readerStatus { return "\(status.version) · \(status.mode) · \(status.ip)" }
+        if model.manualHotspotFallback { return "Private Wi-Fi needs a manual join" }
         switch nearby.state {
         case .idle: return "Wake the reader to connect"
         case .bluetoothUnavailable: return "Bluetooth unavailable — hotspot still works"
@@ -605,6 +615,41 @@ private struct DeviceSettingsInspector: View {
             } else {
                 Text("Connect to load settings from the reader.")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct TroubleshootingInspector: View {
+    @ObservedObject var model: PocketModel
+    @ObservedObject var nearby: NearbySyncController
+    @State private var expanded = false
+
+    var body: some View {
+        InspectorCard(title: "TROUBLESHOOTING", symbol: "wrench.and.screwdriver") {
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Diagnostics & connection log").font(.callout.weight(.medium))
+                        Text(model.crashDiagnostic == nil ? "Open only when a connection needs attention." : "A saved device crash report is available.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                if let diagnostic = model.crashDiagnostic {
+                    DiagnosticsInspector(diagnostic: diagnostic)
+                }
+                ConnectionTraceInspector(nearby: nearby)
             }
         }
     }

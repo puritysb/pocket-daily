@@ -1,7 +1,9 @@
 import Foundation
 
+/// A weak Wi-Fi link or a reader briefly busy serving a preview/transfer must
+/// not end the session: allow five consecutive misses with a generous timeout.
 struct ConnectionHeartbeat {
-    static let failureLimit = 3
+    static let failureLimit = 5
     private(set) var consecutiveFailures = 0
 
     mutating func recordSuccess() {
@@ -14,9 +16,43 @@ struct ConnectionHeartbeat {
     }
 }
 
+/// A no-PSRAM X3 keeps only ~6 KB of heap on its private hotspot. Fetching a
+/// 53 KB screen preview plus a crash report there tripped the reader's task
+/// watchdog (crash breadcrumb `nearby:screen-preview`). Below this floor the
+/// app skips both so the link stays available for the transfer itself.
+enum ReaderDiagnosticsPolicy {
+    static let minimumFreeHeap = 10 * 1024
+
+    static func canFetchDiagnostics(freeHeap: Int, readerSaysAffordable: Bool?) -> Bool {
+        if let readerSaysAffordable { return readerSaysAffordable }
+        return freeHeap >= minimumFreeHeap
+    }
+}
+
+/// Answers "did my firmware actually get installed?" without guessing. The
+/// app remembers the exact version string embedded in the image it staged and,
+/// on the next connection, compares it with what the reader reports running.
+enum FirmwareInstallCheck {
+    enum Outcome: Equatable {
+        case installed(String)
+        case stillPending(running: String, staged: String)
+        case nothingStaged
+    }
+
+    static func evaluate(readerVersion: String, staged: String?) -> Outcome {
+        guard let staged, !staged.isEmpty else { return .nothingStaged }
+        let normalizedReader = readerVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedStaged = staged.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizedReader == normalizedStaged
+            ? .installed(normalizedStaged)
+            : .stillPending(running: normalizedReader, staged: normalizedStaged)
+    }
+}
+
 @MainActor
 final class PocketModel: ObservableObject {
     private static let lastReaderHostKey = "Pocket.lastReaderHost"
+    private static let stagedFirmwareVersionKey = "Pocket.stagedFirmwareVersion"
 
     enum StorageError: LocalizedError {
         case invalidSDRoot
@@ -38,6 +74,7 @@ final class PocketModel: ObservableObject {
     @Published var uploadProgress: Double = 0
     @Published var preferences: ReaderPreferences?
     @Published var crashDiagnostic: CrashDiagnostic?
+    @Published var readerScreenImageData: Data?
     @Published var preferencesDirty = false
     @Published var preferredHardware: PocketHardware = .x3
     @Published var manualHotspotFallback = false
@@ -74,6 +111,13 @@ final class PocketModel: ObservableObject {
     func connectToExistingHotspot() {
         exitDemoMode()
         Task { await verify(host: "192.168.4.1", port: 80) }
+    }
+
+    func startConnectionSearch() {
+        nearbyLease = nil
+        manualHotspotFallback = false
+        locationPermissionRequired = false
+        findOnLocalNetwork()
     }
 
     func findOnLocalNetwork(retryIfMissing: Bool = true) {
@@ -174,11 +218,16 @@ final class PocketModel: ObservableObject {
             device: preferredHardware.rawValue,
             crashReportAvailable: false,
             crashReportBytes: 0,
+            screenPreviewAvailable: false,
+            screenPreviewBytes: 0,
             uploadChunkBytes: nil,
-            uploadStreamPort: nil
+            uploadStreamPort: nil,
+            uploadStreamResume: nil,
+            diagnosticsAffordable: nil
         )
         preferences = ReaderPreferences()
         crashDiagnostic = nil
+        readerScreenImageData = nil
         preferencesDirty = false
         manualHotspotFallback = false
         locationPermissionRequired = false
@@ -190,6 +239,7 @@ final class PocketModel: ObservableObject {
         isDemoMode = false
         readerStatus = nil
         preferences = nil
+        readerScreenImageData = nil
         preferencesDirty = false
         message = "Wake your reader, open Pocket Daily, and press Sync."
     }
@@ -283,7 +333,8 @@ final class PocketModel: ObservableObject {
         }
         readerStatus = nil
         preferences = nil
-        if nearbyLease == lease { nearbyLease = nil }
+        nearbyLease = lease
+        manualHotspotFallback = true
         message = "Private link not ready. Join \(lease.ssid), then tap Verify connection."
     }
 
@@ -298,6 +349,7 @@ final class PocketModel: ObservableObject {
         } catch {
             readerStatus = nil
             preferences = nil
+            readerScreenImageData = nil
             message = "Reader not found. Open Create Hotspot on the reader and try again."
         }
     }
@@ -311,8 +363,18 @@ final class PocketModel: ObservableObject {
         manualHotspotFallback = false
         locationPermissionRequired = false
         preferences = try? await client.preferences(host: host, port: httpPort)
+        readerScreenImageData = nil
+        let diagnosticsAffordable = ReaderDiagnosticsPolicy.canFetchDiagnostics(
+            freeHeap: status.freeHeap,
+            readerSaysAffordable: status.diagnosticsAffordable
+        )
+        if diagnosticsAffordable, status.screenPreviewAvailable == true,
+           let bytes = status.screenPreviewBytes,
+           let preview = try? await client.screenPreview(host: host, port: httpPort, expectedBytes: bytes) {
+            readerScreenImageData = preview
+        }
         crashDiagnostic = nil
-        if status.crashReportAvailable == true, let bytes = status.crashReportBytes, bytes > 0,
+        if diagnosticsAffordable, status.crashReportAvailable == true, let bytes = status.crashReportBytes, bytes > 0,
            let diagnostic = try? await client.crashDiagnostic(host: host, port: httpPort, expectedBytes: bytes) {
             crashDiagnostic = diagnostic
             _ = try? await Task.detached(priority: .utility) {
@@ -320,9 +382,31 @@ final class PocketModel: ObservableObject {
             }.value
         }
         preferencesDirty = false
-        message = crashDiagnostic == nil
-            ? "Connected to \(status.device)."
-            : "Connected to \(status.device). A saved crash report is available below."
+        let staged = UserDefaults.standard.string(forKey: Self.stagedFirmwareVersionKey)
+        switch FirmwareInstallCheck.evaluate(readerVersion: status.version, staged: staged) {
+        case let .installed(version):
+            UserDefaults.standard.removeObject(forKey: Self.stagedFirmwareVersionKey)
+            message = "Firmware installed: the reader is now running \(version)."
+            startHeartbeat(host: host, port: httpPort)
+            return
+        case let .stillPending(running, stagedVersion):
+            message = "Not installed yet: the reader still runs \(running). The staged \(stagedVersion) is on the SD card as /update.bin — install it from Settings → System → Update firmware."
+            startHeartbeat(host: host, port: httpPort)
+            return
+        case .nothingStaged:
+            break
+        }
+        if !diagnosticsAffordable {
+            message = "Connected to \(status.device). Reader memory is low (\(status.freeHeap / 1024) KB free), so the screen preview and crash report were skipped to keep transfers stable."
+        } else if crashDiagnostic != nil {
+            message = "Connected to \(status.device). A saved crash report is available below."
+        } else if readerScreenImageData != nil {
+            message = "Connected to \(status.device). The captured reader frame is shown exactly."
+        } else if status.mode == "STA" {
+            message = "Connected to \(status.device) over your Wi-Fi network — the most reliable path for firmware and content transfers."
+        } else {
+            message = "Connected to \(status.device). Reconnect from Pocket Daily Nearby Sync to capture its screen."
+        }
         startHeartbeat(host: host, port: httpPort)
     }
 
@@ -339,13 +423,14 @@ final class PocketModel: ObservableObject {
                 if self.isWorking { continue }
 
                 do {
-                    let status = try await self.client.status(host: host, port: port, timeout: 3)
+                    let status = try await self.client.status(host: host, port: port, timeout: 6)
                     heartbeat.recordSuccess()
                     self.readerStatus = status
                 } catch {
                     guard heartbeat.recordFailure() else { continue }
                     self.readerStatus = nil
                     self.preferences = nil
+                    self.readerScreenImageData = nil
                     self.preferencesDirty = false
                     self.nearbyLease = nil
                     self.message = "Pocket connection ended. Open Nearby Sync and reconnect."
@@ -405,6 +490,19 @@ final class PocketModel: ObservableObject {
             defer { isWorking = false }
             do {
                 let isFirmware = url.pathExtension.lowercased() == "bin"
+                let firmware: FirmwareImageMetadata?
+                if isFirmware {
+                    guard let device = readerStatus?.device,
+                          PocketHardware(deviceName: device) != nil else {
+                        throw FirmwareValidationError.unsupportedReader(readerStatus?.device ?? "unknown")
+                    }
+                    message = "Validating firmware before staging…"
+                    firmware = try await Task.detached(priority: .userInitiated) {
+                        try FirmwareImageValidator.validate(fileURL: url)
+                    }.value
+                } else {
+                    firmware = nil
+                }
                 let path = try await client.uploadAtomically(
                     fileURL: url,
                     publishedFilename: isFirmware ? "update.bin" : nil,
@@ -412,18 +510,43 @@ final class PocketModel: ObservableObject {
                     host: activeHost,
                     port: activeHTTPPort,
                     uploadChunkBytes: readerStatus?.uploadChunkBytes,
-                    uploadStreamPort: readerStatus?.uploadStreamPort
+                    uploadStreamPort: readerStatus?.uploadStreamPort,
+                    uploadStreamResume: readerStatus?.uploadStreamResume ?? false,
+                    note: { [weak self] text in Task { @MainActor in self?.message = text } },
+                    reconnect: { [weak self] in await self?.reconnectForTransfer() ?? false }
                 ) { [weak self] sent, total in
                     Task { @MainActor in self?.uploadProgress = total > 0 ? Double(sent) / Double(total) : 0 }
                 }
                 uploadProgress = 1
-                message = isFirmware
-                    ? "Firmware staged and verified at \(path). Install it from Settings → System → Update firmware."
-                    : "\(url.lastPathComponent) was verified and published at \(path)."
+                if isFirmware, let version = firmware?.version {
+                    UserDefaults.standard.set(version, forKey: Self.stagedFirmwareVersionKey)
+                    message = "STAGED, NOT INSTALLED YET — \(version) was verified and written to /update.bin. Install it from Settings → System → Update firmware, then reconnect: the app will confirm whether the reader is running it."
+                } else {
+                    message = "\(url.lastPathComponent) was verified and published at \(path)."
+                }
             } catch {
                 message = error.localizedDescription
             }
         }
+    }
+
+    /// Called by the upload client when the reader stopped answering mid-transfer.
+    /// macOS in particular can auto-switch away from an internet-less hotspot;
+    /// rejoin the leased network so the interrupted upload can resume.
+    private func reconnectForTransfer() async -> Bool {
+        guard let lease = nearbyLease else { return false }
+        message = "Private link dropped. Rejoining \(lease.ssid)…"
+        do {
+            try await HotspotJoiner.join(lease)
+        } catch {
+            return false
+        }
+        let deadline = ContinuousClock.now + .seconds(18)
+        while ContinuousClock.now < deadline {
+            if (try? await client.status(host: lease.host, port: lease.httpPort, timeout: 3)) != nil { return true }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return false
     }
 
     func copyToSD(_ source: URL, root: URL) {
@@ -467,6 +590,9 @@ final class PocketModel: ObservableObject {
         case "cpfont":
             try validateFont(source)
             relativeDirectory = ".fonts/\(fontFamily(from: source.deletingPathExtension().lastPathComponent))"
+        case "bin":
+            _ = try FirmwareImageValidator.validate(fileURL: source)
+            relativeDirectory = ""
         default:
             relativeDirectory = ""
         }

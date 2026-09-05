@@ -37,7 +37,7 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Pocket Daily connects directly to your reader to sync books, study data, and firmware.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
+	<key>NSLocationUsageDescription</key>
 	<string>Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.</string>
 </dict>
 </plist>
