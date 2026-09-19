@@ -1,8 +1,11 @@
 # Pocket Daily Project Constitution
 
 This document defines stable product and engineering constraints for any agent
-working on Pocket Daily. Operational commands and repository hygiene belong in
-`AGENTS.md`. Current, changeable state belongs in `docs/PROJECT_MEMORY.md`.
+working on Pocket Daily — Claude Code, OpenCode, and Codex all share it.
+Operational commands and repository hygiene belong in `AGENTS.md`, the single
+operational entry point every agent reads first. Current, changeable state
+belongs in `docs/PROJECT_MEMORY.md`, which is shared across all agents and
+sessions.
 
 ## Product identity
 

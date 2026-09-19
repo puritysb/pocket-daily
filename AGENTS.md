@@ -1,9 +1,23 @@
 # Pocket Daily Agent Guide
 
-This file is the shared entry point for Codex, Claude, and other coding agents
-working in this repository. Keep it operational and concise. Product invariants
-live in `CLAUDE.md`; durable hand-off context lives in
-`docs/PROJECT_MEMORY.md`.
+This file is the single operational entry point for every coding agent working
+in this repository — OpenCode, Codex, and Claude Code alike. Keep it
+operational and concise. Product invariants live in `CLAUDE.md`; durable
+hand-off context lives in `docs/PROJECT_MEMORY.md`.
+
+## Agent entry points and shared memory
+
+- `AGENTS.md` (this file) is the operational contract for all agents. OpenCode
+  and Codex read it natively; Claude Code reads it via this cross-reference
+  from `CLAUDE.md`. Do not fork agent-specific workflows into separate files.
+- `CLAUDE.md` is Claude Code's native entry point and the shared product
+  constitution for everyone. It defers commands and hygiene to this file.
+- `docs/PROJECT_MEMORY.md` is the shared cross-session, cross-agent memory.
+  Any agent appends durable facts there, and a memory entry must land in the
+  same change as the work it describes, so memory never gets ahead of the
+  tree.
+- Tool-local state (`.claude/settings.local.json`, `.claude/worktrees/`,
+  `.codex/`) stays untracked and never carries project decisions.
 
 ## Read in this order
 
@@ -36,9 +50,10 @@ reads, and treat source code and generated build output as different concerns.
 ## Repository boundary
 
 This repository owns the iOS, iPadOS, and macOS companion app. The reader
-firmware is a separate project at the sibling path
-`/Users/puritysb/github/pocket-daily-firmware` and GitHub repository
-`puritysb/pocket-daily-firmware`.
+firmware is a separate project in the sibling directory `pocket-daily-firmware`
+next to this clone (on this host `/Users/puritysb/git/pocket-daily-firmware`)
+and GitHub repository `puritysb/pocket-daily-firmware`. Resolve the sibling
+relative to this checkout; absolute `~/github/` paths in older notes are stale.
 
 Do not copy firmware source, binaries, secrets, or device-only build tooling
 into this repository. When a task changes a Bluetooth record, HTTP endpoint,
@@ -138,4 +153,5 @@ SD-card swap. The X3 STA profile has no mDNS; probe the LAN for `/api/status`.
 Update `docs/PROJECT_MEMORY.md` only for durable decisions, verified baselines,
 cross-repository contracts, and hand-off facts likely to matter in future
 sessions. Keep it short, dated, and evidence-based. Do not paste chat
-transcripts, transient debugging logs, or firmware-only memories into it.
+transcripts, transient debugging logs, or firmware-only memories into it, and
+never record a fact before the change it describes is part of the tree.

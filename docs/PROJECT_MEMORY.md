@@ -6,10 +6,15 @@ with a dated note below.
 
 ## Repository split
 
-- App Store app: `/Users/puritysb/github/pocket-daily`
-  (`https://github.com/puritysb/pocket-daily`)
-- Reader firmware: `/Users/puritysb/github/pocket-daily-firmware`
-  (`https://github.com/puritysb/pocket-daily-firmware`)
+- App Store app: this repository (`https://github.com/puritysb/pocket-daily`),
+  checked out on this host at `/Users/puritysb/git/pocket-daily`.
+- Reader firmware: sibling directory `pocket-daily-firmware` next to this clone
+  (`https://github.com/puritysb/pocket-daily-firmware`), on this host at
+  `/Users/puritysb/git/pocket-daily-firmware`.
+
+The host checkout root moved from `~/github/` to `~/git/` (noted 2026-09-19).
+Absolute `~/github/` paths in either repository's older notes are stale;
+resolve the sibling repository relative to this checkout.
 
 The app repository owns iOS, iPadOS, and macOS code, XcodeGen configuration,
 App Store metadata, screenshots, privacy/support pages, and the client side of
@@ -301,6 +306,22 @@ machine.
 - Date mutable observations and name their source of truth.
 - Replace stale notes instead of accumulating contradictions.
 - Keep troubleshooting logs and one-off session details out of this file.
+- A memory entry must be committed together with the change it describes.
+  Uncommitted work is not a verified baseline; when the tree is ahead of this
+  file, read the working tree, and when this file is ahead of the tree, treat
+  the entry as intent, not fact.
+
+## Multi-agent collaboration — 2026-09-19
+
+- OpenCode, Claude Code, and Codex all work in this repository. `AGENTS.md` is
+  the single operational entry point for every agent, `CLAUDE.md` is the shared
+  product constitution, and this file is the shared cross-agent memory. No
+  agent keeps a private instruction file or separate memory.
+- On 2026-09-19 the working tree held verified but uncommitted work dated
+  2026-09-06 through 2026-09-09 (direct sessions, LAN discovery pacing, the
+  screenshot pipeline, and App Store submission updates) while `origin/main`
+  stopped at the firmware install-check change. Dated sections in that range
+  describe that pending change set, not a pushed baseline.
 
 ## Explicit direct sessions — 2026-09-09
 
