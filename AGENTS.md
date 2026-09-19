@@ -28,6 +28,8 @@ hand-off context lives in `docs/PROJECT_MEMORY.md`.
 4. Read `docs/PROJECT_MEMORY.md` when the task depends on project history,
    repository boundaries, release state, or known hardware constraints.
 5. For submission work, read `APP_STORE_REVIEW.md` and `appstore/README.md`.
+6. For live-studio or UI-pack work, read `docs/LIVE_STUDIO_DESIGN.md` and the
+   firmware contract `docs/live-studio-v1.md` in the sibling repository.
 
 Do not load the whole repository by default. Prefer `rg` and targeted file
 reads, and treat source code and generated build output as different concerns.

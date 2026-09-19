@@ -311,6 +311,25 @@ machine.
   file, read the working tree, and when this file is ahead of the tree, treat
   the entry as intent, not fact.
 
+## Live studio direction — 2026-09-19
+
+- Agreed product direction: the app becomes a live studio for the reader —
+  real-time state sync (WS push, STA first), an exact live frame preview,
+  and `.uipack` UI/theme packs composed in the app, deployed over the
+  existing verified transfer path, and applied on the reader without
+  reflashing. The reading path stays native; only chrome becomes
+  definition-driven.
+- The design is documented and committed, not implemented:
+  `docs/LIVE_STUDIO_DESIGN.md` (app architecture, `DeviceSession`/
+  `DeviceMirror` restructure, studio UX, host-renderer bridge) and the
+  firmware contract `docs/live-studio-v1.md` in the sibling repository.
+  First phase is M1 (Core restructure with polling mirror, no behavior
+  change); firmware phases are LS-1..LS-4.
+- The host-renderer artifact (`libpdui_host.a` copied into
+  `Support/PocketUIHost/` with provenance SHA) is an approved, documented
+  exception to the no-firmware-binaries rule — host-built and hash-pinned,
+  never a device image.
+
 ## Multi-agent collaboration — 2026-09-19
 
 - OpenCode, Claude Code, and Codex all work in this repository. `AGENTS.md` is
