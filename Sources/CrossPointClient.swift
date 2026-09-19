@@ -20,6 +20,21 @@ struct CrossPointStatus: Codable, Equatable {
     let diagnosticsAffordable: Bool?
     var deviceID: String? = nil
     var sessionEnd: Bool? = nil
+    /// Live-studio capability advertisement. Absent on readers that predate
+    /// the contract (`docs/live-studio-v1.md` in the firmware repository).
+    var liveStudio: LiveStudioAdvertisement? = nil
+}
+
+/// What the reader advertises about its live-studio listener. `mode` is
+/// `"push"` when the WebSocket listener is running (then `wsPort` is set)
+/// and `"poll"` when only HTTP polling is available.
+struct LiveStudioAdvertisement: Codable, Equatable {
+    let wsPort: Int?
+    let mode: String
+    let frameStream: Bool?
+    let uiPacks: Bool?
+    let activePack: String?
+    let activePackVersion: String?
 }
 
 struct CrashDiagnostic: Equatable, Sendable {

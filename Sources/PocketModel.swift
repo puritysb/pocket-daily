@@ -112,8 +112,14 @@ enum TransferPreparation {
 }
 
 @MainActor
-final class PocketModel: ObservableObject {
+final class PocketModel: ObservableObject, DeviceSession {
     static let initialMessage = "Prepare files, then find the reader on your Wi-Fi or connect directly when away."
+
+    /// Studio-facing snapshot fed from this session's transitions. Views read
+    /// the legacy published fields until they migrate onto the mirror.
+    let mirror = DeviceMirror()
+    var syncMode: DeviceSyncMode { SyncModePolicy.syncMode(status: readerStatus, isDemoMode: isDemoMode) }
+
     /// Addresses adjacent to this device, tried together before the wider sweep.
     private static let priorityHostCount = 24
     /// Requests kept in flight while sweeping the rest of the subnet. Each probe is a
@@ -234,6 +240,7 @@ final class PocketModel: ObservableObject {
         nearbyLease = nil
         manualHotspotFallback = false
         locationPermissionRequired = false
+        mirror.apply(.connection(.searching))
         findOnLocalNetwork()
     }
 
@@ -356,6 +363,8 @@ final class PocketModel: ObservableObject {
         preferencesDirty = false
         manualHotspotFallback = false
         locationPermissionRequired = false
+        mirror.apply(.status(readerStatus!))
+        mirror.apply(.preferences(preferences))
         post("Demo preview is local only. File transfer and device changes are disabled.")
     }
 
@@ -366,6 +375,7 @@ final class PocketModel: ObservableObject {
         preferences = nil
         readerScreenImageData = nil
         preferencesDirty = false
+        mirror.apply(.connection(.disconnected))
         post(Self.initialMessage)
     }
 
@@ -475,6 +485,7 @@ final class PocketModel: ObservableObject {
 
     private func waitForReader(_ lease: HotspotLease) async {
         post("Waiting for Pocket's private transfer link…")
+        mirror.apply(.connection(.waitingForReader))
         let deadline = ContinuousClock.now + .seconds(18)
         let attempt = connectionAttempt
         while ContinuousClock.now < deadline {
@@ -490,6 +501,7 @@ final class PocketModel: ObservableObject {
         preferences = nil
         nearbyLease = lease
         manualHotspotFallback = true
+        mirror.apply(.connection(.disconnected))
         post("Private link not ready. Join \(lease.ssid), then tap Verify connection.", tone: .failure)
     }
 
@@ -505,6 +517,7 @@ final class PocketModel: ObservableObject {
             readerStatus = nil
             preferences = nil
             readerScreenImageData = nil
+            mirror.apply(.connection(.disconnected))
             post("Reader not found. Open Create Hotspot on the reader and try again.", tone: .failure)
         }
     }
@@ -520,6 +533,7 @@ final class PocketModel: ObservableObject {
             return
         }
         readerStatus = status
+        mirror.apply(.status(status))
         UserDefaults.standard.set(host, forKey: Self.lastReaderHostKey)
         selectHardware(named: status.device)
         activeHost = host
@@ -530,6 +544,7 @@ final class PocketModel: ObservableObject {
         let loadedPreferences = try? await client.preferences(host: host, port: httpPort)
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         preferences = loadedPreferences
+        mirror.apply(.preferences(preferences))
         readerScreenImageData = nil
         let diagnosticsAffordable = nearbyLease == nil && ReaderDiagnosticsPolicy.canFetchDiagnostics(
             freeHeap: status.freeHeap,
@@ -540,6 +555,7 @@ final class PocketModel: ObservableObject {
            let preview = try? await client.screenPreview(host: host, port: httpPort, expectedBytes: bytes) {
             guard !Task.isCancelled, attempt == connectionAttempt else { return }
             readerScreenImageData = preview
+            mirror.apply(.frame(seq: mirror.state.frameSequence + 1, capturedAt: Date(), data: preview))
         }
         crashDiagnostic = nil
         if diagnosticsAffordable, status.crashReportAvailable == true, let bytes = status.crashReportBytes, bytes > 0,
@@ -600,16 +616,19 @@ final class PocketModel: ObservableObject {
                     if let id = self.readerStatus?.deviceID, status.deviceID != id {
                         self.readerStatus = nil
                         self.preferences = nil
+                        self.mirror.apply(.connection(.disconnected))
                         self.post("A different reader answered at this address. Reconnect before sending files.", tone: .failure)
                         return
                     }
                     self.readerStatus = status
+                    self.mirror.apply(.status(status))
                 } catch {
                     guard heartbeat.recordFailure() else { continue }
                     self.readerStatus = nil
                     self.preferences = nil
                     self.readerScreenImageData = nil
                     self.preferencesDirty = false
+                    self.mirror.apply(.connection(.disconnected))
                     self.post("Pocket connection ended. Open Nearby Sync and reconnect.", tone: .failure)
                     return
                 }
@@ -659,6 +678,7 @@ final class PocketModel: ObservableObject {
                 let data = try await client.screenPreview(host: host, port: port, expectedBytes: bytes)
                 guard attempt == connectionAttempt else { return }
                 readerScreenImageData = data
+                mirror.apply(.frame(seq: mirror.state.frameSequence + 1, capturedAt: Date(), data: data))
                 post("Loaded the reader frame captured before Sync opened.")
             } catch {
                 guard attempt == connectionAttempt else { return }
@@ -759,9 +779,14 @@ final class PocketModel: ObservableObject {
                         note: { [weak self] text in Task { @MainActor in self?.post(text) } },
                         reconnect: { [weak self] in await self?.reconnectForTransfer() ?? false }
                     ) { [weak self] sent, total in
-                        Task { @MainActor in self?.uploadProgress = total > 0 ? Double(sent) / Double(total) : 0 }
+                        Task { @MainActor in
+                            let progress = total > 0 ? Double(sent) / Double(total) : 0
+                            self?.uploadProgress = progress
+                            self?.mirror.apply(.transferProgress(progress))
+                        }
                     }
                     uploadProgress = 1
+                    mirror.apply(.transferProgress(1))
                     if isFirmware {
                         if let key, let version = item.firmwareVersion { UserDefaults.standard.set(version, forKey: key) }
                         post(Self.stagedFirmwareMessage(version: item.firmwareVersion ?? "unknown version"), tone: .pending)
@@ -807,6 +832,7 @@ final class PocketModel: ObservableObject {
         heartbeatTask?.cancel()
         localDiscovery.stop()
         directConnectionRequested = true
+        mirror.apply(.connection(.waitingForReader))
         post("On the reader, open Pocket Daily → Nearby Sync. Keep this app open during direct transfer.")
     }
 
@@ -833,6 +859,7 @@ final class PocketModel: ObservableObject {
             manualHotspotFallback = nearbyLease != nil
             readerStatus = nil
             preferences = nil
+            mirror.apply(.connection(.disconnected))
             post("Direct connection paused. Return to the app and reconnect to continue.", tone: .pending)
         }
     }
@@ -859,6 +886,7 @@ final class PocketModel: ObservableObject {
         readerStatus = nil
         preferences = nil
         readerScreenImageData = nil
+        mirror.apply(.connection(.disconnected))
         if !preserveMessage { post("Session ended. Check Wi-Fi settings if your usual connection has not returned.") }
         if legacyDirectSession { post(message + " Close Sync on the reader when finished.", tone: messageTone) }
         if !readerEnded { post(message + " Close Sync on the reader; its session-end response was not received.", tone: .pending) }

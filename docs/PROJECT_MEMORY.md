@@ -311,6 +311,20 @@ machine.
   file, read the working tree, and when this file is ahead of the tree, treat
   the entry as intent, not fact.
 
+## M1 device core seam — 2026-09-19
+
+- `Sources/Core/DeviceCore.swift` landed: `DeviceEvent`/`DeviceState` with a
+  pure reducer, `DeviceMirror` (the observable snapshot), `DeviceSession`
+  (the transport seam, MainActor), and `SyncModePolicy` mapping the reader's
+  `liveStudio` advertisement to offline/poll/push. `CrossPointStatus` decodes
+  the optional `liveStudio {wsPort, mode, frameStream, uiPacks, activePack*}`
+  object; absent means legacy poll-only.
+- `PocketModel` conforms to `DeviceSession` and feeds the mirror from its
+  existing transitions (status, preferences, frames, transfer progress,
+  connection phases). Views are unchanged — they migrate in M2/M3.
+- Verified: 55/55 iOS unit tests (10 new in `Tests/DeviceCoreTests.swift`),
+  macOS build clean. Firmware counterpart LS-1 landed in the sibling repo.
+
 ## Live studio direction — 2026-09-19
 
 - Agreed product direction: the app becomes a live studio for the reader —

@@ -89,7 +89,7 @@ xcodebuild build \
 xcodebuild test \
   -project Pocket.xcodeproj \
   -scheme Pocket \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.6' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -derivedDataPath .build/tests \
   CODE_SIGNING_ALLOWED=NO
 
