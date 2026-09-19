@@ -18,11 +18,12 @@ Pocket Daily 1.0.
 - Encryption: no non-exempt encryption
 - Release: manual after approval
 
-Localized customer copy is under `metadata/en-US` and `metadata/ko-KR`.
-Screenshots under `screenshots/en-US` are actual app output in the built-in local
-demo, flattened to opaque PNG files at Apple's accepted dimensions. The same
-set may be uploaded to both storefront localizations; the reader surface already
-demonstrates Korean and Japanese glyph rendering.
+Localized customer copy is under `metadata/en-US` and `metadata/ko-KR`; both
+describe the same shipped interface. Screenshots under `screenshots/en-US` are
+generated from the built-in local demo by `scripts/capture_screenshots.sh`
+(see `screenshots/README.md`), flattened to opaque PNG files at Apple's accepted
+dimensions: four for iPhone and three each for iPad and Mac. The same set may be
+uploaded to both storefront localizations.
 
 ## Locally verified release evidence
 
@@ -33,12 +34,19 @@ demonstrates Korean and Japanese glyph rendering.
   universal arm64/x86_64 macOS PKG, both signed with Apple Distribution.
 - Both exported apps contain `PrivacyInfo.xcprivacy`; their distribution
   entitlements and signatures were verified from the packaged products.
-- The iOS simulator test suite passes 26 tests, both release builds pass, and
-  `scripts/validate_app_store.sh` passes the staged submission package.
+- On 2026-09-06 the iOS simulator test suite passed 40 tests, the macOS build
+  passed, the screenshot set was regenerated from the current UI, and
+  `scripts/validate_app_store.sh` passed the staged submission package. The
+  signed exports below predate those source changes; rerun
+  `scripts/package_app_store.sh` before upload.
 - The safe local packaging script completed end to end and emitted verified IPA,
   PKG, test-result, signature/profile, entitlement, and SHA-256 evidence.
 - The configured marketing, support, and privacy URLs return HTTP 200 from the
   public GitHub Pages site.
+
+The packaging script runs the deterministic unit tests only; the UI-test bundles
+that capture screenshots and check first-run behaviour run from the full scheme
+so a simulator problem cannot hang a release build.
 
 Build, test, archive, locally export, and verify both products with:
 

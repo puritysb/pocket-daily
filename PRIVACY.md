@@ -31,7 +31,10 @@ local Bluetooth/Wi-Fi connection selected by the user.
 
 Connection traces and imported crash reports are stored in the app's local
 Application Support container. Temporary upload files are removed after the
-operation completes. The user may remove retained app data by deleting the app
+operation completes. Prepared files are retained locally across app restarts until
+successfully sent or removed with Remove prepared files. Reader IDs and pending
+firmware versions are stored locally to bind retries and installation checks to
+the intended reader. The user may remove retained app data by deleting the app
 and its data, and controls every diagnostic export through the system share
 sheet.
 

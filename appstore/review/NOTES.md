@@ -14,11 +14,20 @@ The submitted screenshot build can also be launched with `--demo` by the develop
 
 ## Live hardware flow
 
-1. On the compatible reader, open Pocket Daily and choose Nearby Sync.
-2. In the Apple-platform app, choose Find & Connect.
-3. Bluetooth is used for nearby discovery and pairing; a temporary local Wi-Fi link carries books, study packs, settings, and firmware files.
-4. After connection, the app displays the exact e-paper frame captured immediately before Nearby Sync opened; this is a captured frame, not a continuously streamed screen.
-5. Firmware is only staged after a warning sheet and local ESP32-C3 image, checksum, digest, and product-identity validation. Installation requires a separate confirmation and validation pass on the reader.
+1. Prepare a file with Choose file before switching networks. Firmware requires
+   acknowledgement and is validated before entering the offline queue.
+2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
+   choose Find & Connect. This requests local-network access without BLE or
+   automatic Wi-Fi switching.
+3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
+   choose Connect directly in the app, and confirm the Wi-Fi transition. BLE
+   pairing supplies the temporary credentials. No router or internet is required.
+4. Choose Send prepared files and keep the iPhone app open. Direct sessions defer
+   preview/crash requests to preserve reader memory. Pending files survive an
+   interruption; resume depends on firmware capability and retained session state.
+5. Successful direct batches release the temporary connection. New firmware also
+   exits the private session. Firmware still requires reader-side confirmation;
+   reconnect to verify the version for an identified reader.
 
 The app does not read location coordinates. On supported Apple OS versions, location permission may be requested only because the system gates Wi-Fi hotspot configuration behind that permission. The bundled privacy manifest declares app-only UserDefaults and user-selected file-metadata access; the app does not track or collect data.
 

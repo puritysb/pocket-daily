@@ -17,7 +17,10 @@ final class NearbySyncController: NSObject, ObservableObject {
     @Published private(set) var hotspotLease: HotspotLease?
     @Published private(set) var traceEntries: [String] = []
 
-    private var central: CBCentralManager!
+    /// Created on the first Find & Connect, not at launch: instantiating a
+    /// central manager is what triggers the system Bluetooth permission prompt.
+    private var central: CBCentralManager?
+    private var scanRequested = false
     private var peripheral: CBPeripheral?
     private var statusCharacteristic: CBCharacteristic?
     private var commandCharacteristic: CBCharacteristic?
@@ -31,7 +34,6 @@ final class NearbySyncController: NSObject, ObservableObject {
         super.init()
         traceEntries = Self.loadTrace()
         record("Pocket BLE controller initialized")
-        central = CBCentralManager(delegate: self, queue: .main)
     }
 
     var traceReport: String { traceEntries.joined(separator: "\n") }
@@ -54,10 +56,28 @@ final class NearbySyncController: NSObject, ObservableObject {
     }
 
     func scan() {
-        guard central.state == .poweredOn else {
-            state = .bluetoothUnavailable
+        guard let central else {
+            // First use: ask for Bluetooth now and start scanning once the
+            // system reports the radio state.
+            scanRequested = true
+            state = .scanning
+            record("Requesting Bluetooth access")
+            self.central = CBCentralManager(delegate: self, queue: .main)
             return
         }
+        switch central.state {
+        case .poweredOn:
+            beginScan(central)
+        case .unauthorized:
+            state = .failed(Self.unauthorizedMessage)
+        default:
+            state = .bluetoothUnavailable
+        }
+    }
+
+    static let unauthorizedMessage = "Bluetooth access is off for Pocket Daily. Allow it in Settings, or connect over Wi-Fi with File Transfer → Join a Network."
+
+    private func beginScan(_ central: CBCentralManager) {
         disconnect()
         record("BLE scan started")
         state = .scanning
@@ -73,16 +93,16 @@ final class NearbySyncController: NSObject, ObservableObject {
             // omits a 128-bit service UUID from its filtered scan cache.
             try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled, let self, self.state == .scanning else { return }
-            self.central.stopScan()
+            central.stopScan()
             self.record("Filtered BLE scan found no service; trying Pocket name fallback")
-            self.central.scanForPeripherals(
+            central.scanForPeripherals(
                 withServices: nil,
                 options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
             )
 
             try? await Task.sleep(for: .seconds(22))
             guard !Task.isCancelled, self.state == .scanning else { return }
-            self.central.stopScan()
+            central.stopScan()
             self.record("BLE scan timed out after service and Pocket name searches")
             self.state = .failed("No Pocket Sync signal. Open Pocket Daily on the reader, press Sync, then try again.")
         }
@@ -93,10 +113,11 @@ final class NearbySyncController: NSObject, ObservableObject {
     }
 
     func disconnect() {
-        central.stopScan()
+        scanRequested = false
+        central?.stopScan()
         scanTimeout?.cancel()
         scanTimeout = nil
-        if let peripheral { central.cancelPeripheralConnection(peripheral) }
+        if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         peripheral = nil
         statusCharacteristic = nil
         commandCharacteristic = nil
@@ -105,7 +126,7 @@ final class NearbySyncController: NSObject, ObservableObject {
         eventNotificationsReady = false
         pendingHotspotRequestID = nil
         hotspotLease = nil
-        if central.state == .poweredOn { state = .idle }
+        if central?.state == .poweredOn { state = .idle }
     }
 
     func requestHotspot() throws {
@@ -154,10 +175,23 @@ final class NearbySyncController: NSObject, ObservableObject {
 extension NearbySyncController: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
-            if central.state != .poweredOn {
+            switch central.state {
+            case .poweredOn:
+                if scanRequested {
+                    scanRequested = false
+                    beginScan(central)
+                } else if state == .bluetoothUnavailable {
+                    state = .idle
+                }
+            case .unauthorized:
+                scanRequested = false
+                record("Bluetooth access denied")
+                state = .failed(Self.unauthorizedMessage)
+            case .unknown, .resetting:
+                break
+            default:
+                scanRequested = false
                 state = .bluetoothUnavailable
-            } else if state == .bluetoothUnavailable {
-                state = .idle
             }
         }
     }
@@ -187,6 +221,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         Task { @MainActor in
+            guard self.peripheral == peripheral else { return }
             record("BLE link connected; discovering GATT service")
             peripheral.discoverServices([NearbySyncProtocol.service])
         }
@@ -198,6 +233,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            guard self.peripheral == peripheral else { return }
             let reason = error ?? NearbySyncError.notConnected
             record("BLE connect failed: \(reason.localizedDescription)")
             fail(reason)
@@ -210,6 +246,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            guard self.peripheral == peripheral else { return }
             self.peripheral = nil
             record("BLE link disconnected\(error.map { ": \($0.localizedDescription)" } ?? "")")
             if hotspotLease == nil, let error { fail(error) }
@@ -221,6 +258,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
 extension NearbySyncController: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         Task { @MainActor in
+            guard self.peripheral == peripheral else { return }
             if let error { fail(error); return }
             guard let service = peripheral.services?.first(where: { $0.uuid == NearbySyncProtocol.service }) else {
                 fail(NearbySyncError.missingCharacteristic)
@@ -240,6 +278,7 @@ extension NearbySyncController: CBPeripheralDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            guard self.peripheral == peripheral else { return }
             if let error { fail(error); return }
             statusCharacteristic = service.characteristics?.first { $0.uuid == NearbySyncProtocol.status }
             commandCharacteristic = service.characteristics?.first { $0.uuid == NearbySyncProtocol.command }
@@ -260,6 +299,7 @@ extension NearbySyncController: CBPeripheralDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            guard self.peripheral == peripheral else { return }
             if let error { fail(error); return }
             guard let data = characteristic.value, let record = String(data: data, encoding: .utf8) else {
                 fail(NearbySyncError.malformedRecord)
@@ -296,6 +336,7 @@ extension NearbySyncController: CBPeripheralDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            guard self.peripheral == peripheral else { return }
             if let error { fail(error); return }
             guard characteristic.uuid == NearbySyncProtocol.event else { return }
             eventNotificationsReady = characteristic.isNotifying

@@ -24,12 +24,20 @@ can never be mistaken for a connected device.
 
 Live hardware actions require a compatible reader:
 
-1. Open Pocket Daily on the reader and choose Nearby Sync.
-2. In the Apple app, choose Find & Connect.
-3. CoreBluetooth performs discovery and system pairing.
-4. The paired reader supplies a short-lived private Wi-Fi lease.
-5. The app uses the Hotspot Configuration capability and Apple's confirmation
-   UI to join that network, verifies `/api/status`, and enables local transfer.
+1. Prepare a file with Choose file before switching networks. Firmware requires
+   acknowledgement and is validated before entering the offline queue.
+2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
+   choose Find & Connect. This requests local-network access without BLE or
+   automatic Wi-Fi switching.
+3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
+   choose Connect directly in the app, and confirm the Wi-Fi transition. BLE
+   pairing supplies the temporary credentials. No router or internet is required.
+4. Choose Send prepared files and keep the iPhone app open. Direct sessions defer
+   preview/crash requests to preserve reader memory. Pending files survive an
+   interruption; resume depends on firmware capability and retained session state.
+5. Successful direct batches release the temporary connection. New firmware also
+   exits the private session. Firmware still requires reader-side confirmation;
+   reconnect to verify the version for an identified reader.
 
 The developer should attach a current end-to-end physical-reader video following
 [`appstore/review/REVIEW_VIDEO_CHECKLIST.md`](appstore/review/REVIEW_VIDEO_CHECKLIST.md)

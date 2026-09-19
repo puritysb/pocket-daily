@@ -17,9 +17,12 @@ manufacturer cloud service.
 
 ## Core experience
 
-- Bluetooth provides discovery, system pairing, and the temporary private Wi-Fi
-  lease needed for local transfer.
-- The app verifies reader identity before sending data over local HTTP.
+- Current-network discovery never changes the Apple device Wi-Fi. Bluetooth
+  pairing and a temporary private Wi-Fi lease provide an explicitly selected
+  direct connection that works without a router or internet.
+- Compare the HTTP device ID with the paired identity when both are available.
+  Legacy status responses lack a unique ID; do not claim cryptographic LAN
+  authentication or automatic installation confirmation for unidentified readers.
 - Transfers publish files atomically and expose useful progress and errors.
 - macOS can also copy supported files atomically to a user-selected mounted SD
   card directory.

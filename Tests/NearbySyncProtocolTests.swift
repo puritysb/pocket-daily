@@ -1,10 +1,98 @@
 import CoreBluetooth
 import CryptoKit
 import Network
+#if os(iOS)
+import NetworkExtension
+#endif
 import XCTest
 @testable import Pocket
 
 final class NearbySyncProtocolTests: XCTestCase {
+    @MainActor
+    func testDirectSessionCanPrepareAgainAfterRemovingQueue() async throws {
+        let model = PocketModel()
+        guard model.preparedTransfers.isEmpty else {
+            throw XCTSkip("Preserve existing prepared files in the test host")
+        }
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent("queue-regression-\(UUID().uuidString).epub")
+        try Data("local test content".utf8).write(to: source)
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            model.removePreparedFiles()
+        }
+        model.beginDirectConnection() // Model state only; no Bluetooth or Wi-Fi calls.
+        for _ in 0..<2 {
+            XCTAssertTrue(model.canPrepareFiles)
+            model.upload(source)
+            let deadline = ContinuousClock.now + .seconds(5)
+            while model.isWorking, ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            XCTAssertFalse(model.isWorking)
+            XCTAssertEqual(model.preparedTransfers.count, 1)
+            let item = try XCTUnwrap(model.preparedTransfers.first)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(item).path))
+            model.removePreparedFiles()
+            XCTAssertTrue(model.preparedTransfers.isEmpty)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: TransferPreparation.file(item).path))
+            XCTAssertTrue(model.hasDirectSession)
+            XCTAssertTrue(model.canPrepareFiles)
+        }
+    }
+
+    func testPreparedFileSurvivesSourceRemovalAndHasDurableMetadata() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("book.epub")
+        let payload = Data("offline content".utf8)
+        try payload.write(to: source)
+        let preparedRoot = root.appendingPathComponent("prepared")
+        let item = try TransferPreparation.prepare(source, directory: preparedRoot)
+        try FileManager.default.removeItem(at: source)
+        let folder = preparedRoot.appendingPathComponent(item.id.uuidString)
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("book.epub")), payload)
+        XCTAssertEqual(try JSONDecoder().decode(PreparedTransfer.self,
+                       from: Data(contentsOf: folder.appendingPathComponent("transfer.json"))), item)
+    }
+
+    func testInvalidPreparedFirmwareLeavesNoQueuedCopy() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("update.bin")
+        try Data("not firmware".utf8).write(to: source)
+        let preparedRoot = root.appendingPathComponent("prepared")
+        XCTAssertThrowsError(try TransferPreparation.prepare(source, directory: preparedRoot))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: preparedRoot.path), [])
+    }
+
+    func testStatusSupportsLegacyAndIdentifiedReaders() throws {
+        let legacy = Data(#"{"version":"v1","ip":"192.168.4.1","mode":"AP","rssi":0,"freeHeap":20000,"uptime":10,"device":"X3"}"#.utf8)
+        let decoded = try JSONDecoder().decode(CrossPointStatus.self, from: legacy)
+        XCTAssertNil(decoded.deviceID)
+        XCTAssertNil(decoded.sessionEnd)
+        var current = decoded
+        current.deviceID = "12345678"
+        current.sessionEnd = true
+        XCTAssertEqual(try JSONDecoder().decode(CrossPointStatus.self, from: JSONEncoder().encode(current)), current)
+    }
+
+    func testStreamCancellationBeforeStartDoesNotWaitForWatchdog() async throws {
+        let (url, payload) = try makePayloadFile(bytes: 1024)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let reader = try FakeUploadReader(expectedPayload: payload.count, onHeader: { _ in nil }, onPayload: { _ in nil })
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let uploader = try PocketStreamUploader(fileURL: url, host: "127.0.0.1", port: Int(port),
+            remotePath: "/.pocket-cancel.part", total: Int64(payload.count)) { _, _ in }
+        let task = Task { try await uploader.upload() }
+        task.cancel()
+        do { _ = try await task.value; XCTFail("Cancelled upload succeeded") }
+        catch { XCTAssertTrue(error is CancellationError, "\(error)") }
+    }
+
     func testConnectionHeartbeatRequiresConsecutiveFailures() {
         var heartbeat = ConnectionHeartbeat()
         XCTAssertFalse(heartbeat.recordFailure())
@@ -221,7 +309,7 @@ final class NearbySyncProtocolTests: XCTestCase {
         let source = fixture.base.appendingPathComponent("jp-n3-ko.pdl")
         try Data("learning-pack".utf8).write(to: source)
 
-        let relative = try PocketModel.copyToSDOffMain(source: source, root: fixture.sd)
+        let relative = try PocketModel.copyToSDOffMain(source: source, root: fixture.sd).path
         XCTAssertEqual(relative, "/pocket-daily/learning/jp-n3-ko.pdl")
         XCTAssertEqual(
             try Data(contentsOf: fixture.sd.appendingPathComponent("pocket-daily/learning/jp-n3-ko.pdl")),
@@ -236,7 +324,7 @@ final class NearbySyncProtocolTests: XCTestCase {
         let source = fixture.base.appendingPathComponent("PocketSansWorld_12.cpfont")
         try Data([0x43, 0x50, 0x46, 0x4F, 0x4E, 0x54, 0x00, 0x00, 0x01]).write(to: source)
 
-        let relative = try PocketModel.copyToSDOffMain(source: source, root: fixture.sd)
+        let relative = try PocketModel.copyToSDOffMain(source: source, root: fixture.sd).path
         XCTAssertEqual(relative, "/.fonts/PocketSansWorld/PocketSansWorld_12.cpfont")
     }
 
@@ -304,12 +392,68 @@ final class NearbySyncProtocolTests: XCTestCase {
         let source = fixture.base.appendingPathComponent("update.bin")
         try makeFirmwareImage().write(to: source)
 
-        XCTAssertEqual(try PocketModel.copyToSDOffMain(source: source, root: fixture.sd), "/update.bin")
+        let result = try PocketModel.copyToSDOffMain(source: source, root: fixture.sd)
+        XCTAssertEqual(result, SDCopyResult(path: "/update.bin", firmwareVersion: "1.4.1-test"))
         XCTAssertEqual(
             try Data(contentsOf: fixture.sd.appendingPathComponent("update.bin")),
             try Data(contentsOf: source)
         )
     }
+
+    func testSDCopyRenamesFirmwareToUpdateBinAndReplacesPreviousStaging() throws {
+        let fixture = try temporaryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let first = fixture.base.appendingPathComponent("pocket-daily-1.4.0.bin")
+        try makeFirmwareImage(identity: "CrossPoint version: 1.4.0-test\0PocketNearbySync\0").write(to: first)
+        let second = fixture.base.appendingPathComponent("pocket-daily-1.4.1.bin")
+        try makeFirmwareImage().write(to: second)
+
+        XCTAssertEqual(try PocketModel.copyToSDOffMain(source: first, root: fixture.sd).firmwareVersion, "1.4.0-test")
+        XCTAssertEqual(try PocketModel.copyToSDOffMain(source: second, root: fixture.sd).firmwareVersion, "1.4.1-test")
+        XCTAssertEqual(try Data(contentsOf: fixture.sd.appendingPathComponent("update.bin")), try Data(contentsOf: second))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.sd.appendingPathComponent("pocket-daily-1.4.1.bin").path))
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: fixture.sd.path).filter { $0.contains("pocket-staging") }
+        XCTAssertTrue(leftovers.isEmpty)
+    }
+
+    func testSDCopyNeverOverwritesContentFiles() throws {
+        let fixture = try temporaryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let source = fixture.base.appendingPathComponent("book.epub")
+        try Data("first".utf8).write(to: source)
+
+        XCTAssertEqual(try PocketModel.copyToSDOffMain(source: source, root: fixture.sd).path, "/book.epub")
+        try Data("second".utf8).write(to: source)
+        XCTAssertThrowsError(try PocketModel.copyToSDOffMain(source: source, root: fixture.sd))
+        XCTAssertEqual(try Data(contentsOf: fixture.sd.appendingPathComponent("book.epub")), Data("first".utf8))
+    }
+
+    @MainActor
+    func testStatusPostCarriesExplicitTone() {
+        let model = PocketModel()
+        XCTAssertEqual(model.messageTone, .neutral)
+        model.post("Staged", tone: .pending)
+        XCTAssertEqual(model.message, "Staged")
+        XCTAssertEqual(model.messageTone, .pending)
+        model.post(FirmwareValidationError.tooSmall)
+        XCTAssertEqual(model.messageTone, .failure)
+        XCTAssertEqual(model.message, FirmwareValidationError.tooSmall.errorDescription)
+        model.post("Connected")
+        XCTAssertEqual(model.messageTone, .neutral)
+    }
+
+#if os(iOS)
+    func testHotspotJoinerTreatsExistingAssociationAsJoined() {
+        let associated = NSError(domain: NEHotspotConfigurationErrorDomain, code: NEHotspotConfigurationError.alreadyAssociated.rawValue)
+        let denied = NSError(domain: NEHotspotConfigurationErrorDomain, code: NEHotspotConfigurationError.userDenied.rawValue)
+        let other = NSError(domain: NEHotspotConfigurationErrorDomain, code: NEHotspotConfigurationError.invalidSSID.rawValue)
+        XCTAssertTrue(HotspotJoiner.alreadyJoined(associated))
+        XCTAssertFalse(HotspotJoiner.alreadyJoined(denied))
+        XCTAssertTrue(HotspotJoiner.userCancelled(denied))
+        XCTAssertFalse(HotspotJoiner.alreadyJoined(other))
+        XCTAssertFalse(HotspotJoiner.alreadyJoined(URLError(.timedOut)))
+    }
+#endif
 
     func testSDCopyRejectsInvalidFirmwareBeforePublication() throws {
         let fixture = try temporaryFixture()

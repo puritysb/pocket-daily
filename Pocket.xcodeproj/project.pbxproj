@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		136F7173D3544851F4C78858 /* CrossPointClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */; };
 		155AFF494DFA0F44C318B8D1 /* PocketDevicePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */; };
+		1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */; };
 		1E97B607E7232858CBBA4EEF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
 		374169613A2E5437B2A68A8E /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
@@ -22,6 +23,8 @@
 		84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
 		86E634244B23C47205D8B382 /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
 		894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */; };
+		99F8E48A3902BF0E3DE6D172 /* PocketScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */; };
+		A3C1DD8F0DC1C0E5968DE765 /* PocketFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */; };
 		A6208CA1D1EDD27DDD132C2F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF86CD3C8490B57EB11E8071 /* ContentView.swift */; };
 		AA79057983FE52D7AAC2E7FB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		AE0834455F19D805D51A9AD3 /* PocketModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */; };
@@ -37,7 +40,21 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		549E53F00F6084725E50C45F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 855A469ACAEBB91B0C801EFD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F8A65D44EA5474162880886B;
+			remoteInfo = PocketMac;
+		};
 		D26C81F7B7AB42194E65FE05 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 855A469ACAEBB91B0C801EFD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7D169845C7D92117E36B994A;
+			remoteInfo = Pocket;
+		};
+		D3691472E2CEA4892BA0D8BE /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 855A469ACAEBB91B0C801EFD /* Project object */;
 			proxyType = 1;
@@ -50,13 +67,18 @@
 		037226D140697D15166E6091 /* FirmwareImageValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareImageValidator.swift; sourceTree = "<group>"; };
 		05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketModel.swift; sourceTree = "<group>"; };
 		16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncProtocolTests.swift; sourceTree = "<group>"; };
+		1C95F7B00987D244A5B7728F /* PocketMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMacScreenshotTests.swift; sourceTree = "<group>"; };
+		6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketScreenshotTests.swift; sourceTree = "<group>"; };
 		6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketDevicePreview.swift; sourceTree = "<group>"; };
+		753C0E39C665BA17D4B62EBF /* PocketUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PocketUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		78DAF0568606DE01F034EB9F /* PocketApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketApp.swift; sourceTree = "<group>"; };
 		92C61AC1FD88CD54C5818106 /* PocketHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketHardware.swift; sourceTree = "<group>"; };
 		9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossPointClient.swift; sourceTree = "<group>"; };
 		98C5706F004643C8427F5DEF /* LocalReaderDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalReaderDiscovery.swift; sourceTree = "<group>"; };
 		A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotspotJoiner.swift; sourceTree = "<group>"; };
+		AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketFlowTests.swift; sourceTree = "<group>"; };
 		B694BA08A499E1FD67AE7104 /* PocketMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B9C7C8282C265F6B6B6EADC4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CF86CD3C8490B57EB11E8071 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -87,11 +109,22 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		41842BDCAEF418993094C322 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */,
+				6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
 		607A670420CC3498C2646DF8 = {
 			isa = PBXGroup;
 			children = (
+				C53B112E27B9E83780B3AC7F /* MacTests */,
 				2A6B363554E920B49A748B3D /* Sources */,
 				68670364310B67ACB0F011A4 /* Tests */,
+				41842BDCAEF418993094C322 /* UITests */,
 				A430CAFE8668FE5A45126734 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -109,14 +142,60 @@
 			children = (
 				EF248AD34F385ED9F2F09847 /* Pocket.app */,
 				B694BA08A499E1FD67AE7104 /* PocketMac.app */,
+				1C95F7B00987D244A5B7728F /* PocketMacTests.xctest */,
 				FD7417C245B01C67AD37DDFB /* PocketTests.xctest */,
+				753C0E39C665BA17D4B62EBF /* PocketUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C53B112E27B9E83780B3AC7F /* MacTests */ = {
+			isa = PBXGroup;
+			children = (
+				5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */,
+			);
+			path = MacTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		23D16638A9045581F3F038B5 /* PocketUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D126483B24595A752F0CCC9F /* Build configuration list for PBXNativeTarget "PocketUITests" */;
+			buildPhases = (
+				FAFAD50E13324217D2CB1486 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DCC0D1283286587A0D4040F0 /* PBXTargetDependency */,
+			);
+			name = PocketUITests;
+			packageProductDependencies = (
+			);
+			productName = PocketUITests;
+			productReference = 753C0E39C665BA17D4B62EBF /* PocketUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		38588C43D6EE945C60EBC553 /* PocketMacTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0CEDAA71797312195FCD318 /* Build configuration list for PBXNativeTarget "PocketMacTests" */;
+			buildPhases = (
+				AA01833132457332E6C5E9AF /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4565BC08B64760D8B7EC5CC4 /* PBXTargetDependency */,
+			);
+			name = PocketMacTests;
+			packageProductDependencies = (
+			);
+			productName = PocketMacTests;
+			productReference = 1C95F7B00987D244A5B7728F /* PocketMacTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		7D169845C7D92117E36B994A /* Pocket */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1635BECD4C7098F77B6F346F /* Build configuration list for PBXNativeTarget "Pocket" */;
@@ -180,6 +259,15 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					23D16638A9045581F3F038B5 = {
+						DevelopmentTeam = QF36NDHYHD;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 7D169845C7D92117E36B994A;
+					};
+					38588C43D6EE945C60EBC553 = {
+						DevelopmentTeam = QF36NDHYHD;
+						ProvisioningStyle = Automatic;
+					};
 					7D169845C7D92117E36B994A = {
 						DevelopmentTeam = QF36NDHYHD;
 						ProvisioningStyle = Automatic;
@@ -211,6 +299,8 @@
 				7D169845C7D92117E36B994A /* Pocket */,
 				F8A65D44EA5474162880886B /* PocketMac */,
 				A835E4A168196F4AB43F0648 /* PocketTests */,
+				23D16638A9045581F3F038B5 /* PocketUITests */,
+				38588C43D6EE945C60EBC553 /* PocketMacTests */,
 			);
 		};
 /* End PBXProject section */
@@ -281,13 +371,40 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA01833132457332E6C5E9AF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FAFAD50E13324217D2CB1486 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A3C1DD8F0DC1C0E5968DE765 /* PocketFlowTests.swift in Sources */,
+				99F8E48A3902BF0E3DE6D172 /* PocketScreenshotTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		4565BC08B64760D8B7EC5CC4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F8A65D44EA5474162880886B /* PocketMac */;
+			targetProxy = 549E53F00F6084725E50C45F /* PBXContainerItemProxy */;
+		};
 		AF57A010ACC33E1260BA525D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 7D169845C7D92117E36B994A /* Pocket */;
 			targetProxy = D26C81F7B7AB42194E65FE05 /* PBXContainerItemProxy */;
+		};
+		DCC0D1283286587A0D4040F0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7D169845C7D92117E36B994A /* Pocket */;
+			targetProxy = D3691472E2CEA4892BA0D8BE /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -307,6 +424,40 @@
 				PRODUCT_NAME = Pocket;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3FD8F8E8EA843561E62010A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily.mactests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pocket.app/Contents/MacOS/Pocket";
+			};
+			name = Release;
+		};
+		50E94BAF49D73856D9529485 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Pocket;
 			};
 			name = Debug;
 		};
@@ -475,6 +626,23 @@
 			};
 			name = Release;
 		};
+		BD05E442360467478A4ED7FB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Pocket;
+			};
+			name = Release;
+		};
 		CD05B467D03306F28E3035AC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -506,6 +674,23 @@
 				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily;
 				PRODUCT_NAME = Pocket;
 				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		F5FCC161F4D29B2FCD9EE115 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = bound.serendipity.pocket.daily.mactests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Pocket.app/Contents/MacOS/Pocket";
 			};
 			name = Debug;
 		};
@@ -560,6 +745,24 @@
 			buildConfigurations = (
 				708896D4884D895FE848A6C8 /* Debug */,
 				5A64EBFDE65C34D9672834A0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D126483B24595A752F0CCC9F /* Build configuration list for PBXNativeTarget "PocketUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				50E94BAF49D73856D9529485 /* Debug */,
+				BD05E442360467478A4ED7FB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F0CEDAA71797312195FCD318 /* Build configuration list for PBXNativeTarget "PocketMacTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F5FCC161F4D29B2FCD9EE115 /* Debug */,
+				3FD8F8E8EA843561E62010A6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

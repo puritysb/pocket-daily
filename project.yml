@@ -96,3 +96,48 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily.tests
+  PocketUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Pocket
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily.uitests
+        GENERATE_INFOPLIST_FILE: YES
+  PocketMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MacTests
+    dependencies:
+      - target: PocketMac
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily.mactests
+        GENERATE_INFOPLIST_FILE: YES
+        # The macOS app target is named PocketMac but ships as Pocket.app, so the
+        # test host cannot be derived from the target name.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Pocket.app/Contents/MacOS/Pocket
+        BUNDLE_LOADER: $(TEST_HOST)
+
+# Declared explicitly so both platforms have a test action: XcodeGen's generated
+# PocketMac scheme did not pick up the macOS unit-test bundle on its own.
+schemes:
+  Pocket:
+    build:
+      targets:
+        Pocket: all
+    test:
+      targets:
+        - PocketTests
+        - PocketUITests
+  PocketMac:
+    build:
+      targets:
+        PocketMac: all
+    test:
+      targets:
+        - PocketMacTests

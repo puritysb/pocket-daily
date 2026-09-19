@@ -88,12 +88,17 @@ if [[ "$skip_tests" == false ]]; then
   [[ -n "$simulator_id" ]] || fail "No available iPhone simulator was found."
 
   echo "Running iOS tests on simulator ${simulator_id}…"
+  # Unit tests only. The UI-test bundles drive a simulator to capture screenshots and
+  # to exercise first-run behaviour; they are slower, they depend on simulator state,
+  # and a wedged simulator would block a release that is otherwise sound. Run them with
+  # scripts/capture_screenshots.sh or the full scheme, not from the packaging gate.
   env PATH="$system_path" /usr/bin/xcodebuild test \
     -quiet \
     -project "$project_path" \
     -scheme Pocket \
     -destination "platform=iOS Simulator,id=$simulator_id" \
     -derivedDataPath "$output_root/derived/tests" \
+    -only-testing:PocketTests \
     CODE_SIGNING_ALLOWED=NO \
     | tee "$output_root/logs/ios-tests.log"
 fi

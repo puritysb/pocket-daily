@@ -22,6 +22,10 @@ reads, and treat source code and generated build output as different concerns.
 
 - `Sources/`: SwiftUI app and shared iOS/macOS implementation.
 - `Tests/`: deterministic protocol and parsing tests.
+- `UITests/`: simulator UI tests that drive demo mode for the iPhone and iPad
+  App Store screenshots (`scripts/capture_screenshots.sh`).
+- `MacTests/`: renders the Mac App Store screenshots by hosting the shipping
+  views in an off-screen window, so no Accessibility permission is needed.
 - `Support/`: entitlements and platform support files.
 - `project.yml`: XcodeGen source of truth.
 - `Pocket.xcodeproj/`: generated and checked-in Xcode project.
@@ -89,6 +93,8 @@ expectations:
 - Swift or protocol changes: relevant tests plus both affected platform builds.
 - `project.yml`, entitlements, or file-membership changes: regenerate, inspect
   the project diff, and build every affected target.
+- User-facing UI changes: regenerate the screenshot set with
+  `./scripts/capture_screenshots.sh`, which needs no special permissions.
 - App Store metadata, screenshots, icons, privacy, or support changes: run
   `./scripts/validate_app_store.sh` and inspect the changed artifacts.
 - Documentation-only changes: check links and run `git diff --check`.

@@ -2,10 +2,10 @@
 
 Pocket Daily is the account-free companion for X3/X4 hardware running Pocket
 Daily or compatible CrossPoint-based firmware. It does not connect to the
-manufacturer's factory firmware or cloud service. Bluetooth
-performs secure discovery and hands the app a temporary private Wi-Fi lease;
-verified HTTP staging carries books, learning packs, and firmware to the SD
-card without requiring the home Wi-Fi network.
+manufacturer's factory firmware or cloud service. Find & Connect searches the current network without changing Wi-Fi. Connect
+directly uses Bluetooth pairing and a temporary reader Wi-Fi network when away,
+without requiring a router or internet. Prepare files locally before connecting,
+then send the prepared batch with verified HTTP staging.
 
 This first vertical slice includes:
 
@@ -96,5 +96,33 @@ support/warranty implications and requires an explicit acknowledgement.
 
 The review setup, hardware dependency, compatibility wording, and firmware
 safety boundary are documented in [`APP_STORE_REVIEW.md`](APP_STORE_REVIEW.md).
-The complete staged submission package is under [`appstore/`](appstore/); run
-`scripts/validate_app_store.sh` before every App Store Connect upload.
+The complete staged submission package is under [`appstore/`](appstore/). After
+any user-facing UI change run `scripts/capture_screenshots.sh` to regenerate the
+screenshots from the real demo interface, and run `scripts/validate_app_store.sh`
+before every App Store Connect upload.
+
+## Prepare, connect, and send
+
+1. Choose a book, study pack, or firmware while internet is available. The app
+   copies it into its local prepared list; firmware requires acknowledgement and
+   image validation. Add files one at a time; only one firmware image may be pending.
+2. At home, open File Transfer → Join a Network on the reader and Find & Connect
+   in the app. New firmware also offers Join a Network in the Pocket Sync menu
+   and reuses saved reader Wi-Fi credentials.
+3. Away, open Nearby Sync on the reader (select Nearby Sync again in the new
+   transport chooser), then choose Connect directly in the app and approve the
+   temporary Wi-Fi switch. No internet is required for prepared files.
+4. Send prepared files. Keep the iPhone app in the foreground. A paused or failed
+   file remains local across app relaunch; reconnect and send again. Identified
+   readers reuse the staging ID. Resume requires the reader to retain its session;
+   a reader restart safely restarts the file at zero.
+5. A completed direct batch releases the app's temporary Wi-Fi configuration.
+   New private-AP firmware also accepts session/end and returns to Pocket Daily.
+   Older firmware requires exiting Sync on the reader or waiting for idle expiry.
+   The OS controls reconnection to your usual network.
+6. Firmware is staged as /update.bin, never installed automatically. Confirm on
+   the reader, then reconnect to check the version. Checks are scoped to the
+   reader ID; unidentified legacy LAN/SD staging cannot be confirmed automatically.
+
+Direct sessions defer optional preview/crash downloads to preserve X3 heap.
+Device IDs distinguish readers but do not cryptographically authenticate LAN HTTP.

@@ -14,6 +14,7 @@ struct ContentView: View {
         let action: FileImportAction
     }
 
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController()
     @State private var importing = false
@@ -27,32 +28,50 @@ struct ContentView: View {
             if proxy.size.width >= 920 { desktopStudio } else { compactStudio }
         }
         .background(PocketPalette.workspace)
-        .fileImporter(
+        .modifier(TransferFilePicker(
             isPresented: $importing,
             allowedContentTypes: importAction == .sdRoot ? [.folder] : [.epub, .data],
-            allowsMultipleSelection: false
-        ) { result in
-            guard case let .success(urls) = result, let url = urls.first else { return }
-            switch importAction {
-            case .wirelessUpload:
-                prepareTransfer(url, action: .wirelessUpload)
-            case .sdSource:
-                prepareTransfer(url, action: .sdSource)
-            case .sdRoot:
-                if let sdSource {
-                    model.copyToSD(sdSource, root: url)
-                    self.sdSource = nil
+            completion: { result in
+                let urls: [URL]
+                switch result {
+                case .success(let selected): urls = selected
+                case .failure(let error):
+                    model.post(error)
+                    return
+                }
+                guard let url = urls.first else { return }
+                switch importAction {
+                case .wirelessUpload:
+                    prepareTransfer(url, action: .wirelessUpload)
+                case .sdSource:
+                    prepareTransfer(url, action: .sdSource)
+                case .sdRoot:
+                    if let sdSource {
+                        model.copyToSD(sdSource, root: url)
+                        self.sdSource = nil
+                    }
                 }
             }
-        }
+        ))
         .onChange(of: nearby.hotspotLease) { _, lease in
-            if let lease { model.useNearbyLease(lease) }
+            if let lease, model.directConnectionRequested { model.useNearbyLease(lease) }
         }
         .onChange(of: nearby.state) { _, state in
             if case let .connected(status) = state {
                 model.selectHardware(named: status.model)
-                do { try nearby.requestHotspot() } catch { model.message = error.localizedDescription }
+                if model.directConnectionRequested {
+                    model.expectDirectReader(status.deviceID)
+                    do { try nearby.requestHotspot() } catch { model.post(error) }
+                }
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+#if os(iOS)
+            if phase == .background {
+                nearby.disconnect()
+                model.pauseForBackground()
+            }
+#endif
         }
         .sheet(item: $pendingFirmwareTransfer) { transfer in
             FirmwareTransferSheet(
@@ -66,9 +85,6 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
-        }
-        .task {
-            if !model.isDemoMode { model.findOnLocalNetwork() }
         }
     }
 
@@ -179,14 +195,34 @@ struct ContentView: View {
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 14) {
             ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
-            TransferDropZone(isEnabled: model.readerStatus != nil && !model.isDemoMode && !model.isWorking) { urls in
+            TransferDropZone(isEnabled: model.canPrepareFiles) { urls in
                 if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
             } choose: {
                 importAction = .wirelessUpload
                 importing = true
             }
+            if model.hasDirectSession {
+                Text("You can prepare files already downloaded to this device. For cloud files, choose End session, download them, then reconnect.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !model.preparedTransfers.isEmpty, !model.isDemoMode {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Ready offline · \(model.preparedTransfers.count) file(s)").font(.headline)
+                    ForEach(model.preparedTransfers) { item in
+                        Text(item.filename).font(.caption).lineLimit(1)
+                    }
+                    Button("Send prepared files") { model.sendPreparedFiles() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.readerStatus == nil || model.isWorking)
+                    Button("Remove prepared files") { model.removePreparedFiles() }
+                        .disabled(model.isWorking)
+                }
+            }
+            if model.isTransferring {
+                Button("Pause transfer") { model.pauseTransfer() }
+            }
             if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
-            StatusCallout(message: model.message)
+            StatusCallout(message: model.message, tone: model.messageTone)
 #if os(macOS)
             Button("Copy directly to SD card…") {
                 importAction = .sdSource
@@ -204,12 +240,12 @@ struct ContentView: View {
     private func connect() {
         model.exitDemoMode()
         model.startConnectionSearch()
-        nearby.scan()
+        nearby.disconnect()
     }
 
     private func prepareTransfer(_ url: URL, action: FileImportAction) {
         guard !model.isDemoMode else {
-            model.message = "Exit demo and connect a reader before sending files."
+            model.post("Exit demo and connect a reader before sending files.")
             return
         }
         if url.pathExtension.lowercased() == "bin" {
@@ -260,6 +296,7 @@ private struct FirmwareTransferSheet: View {
     let continueTransfer: () -> Void
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 14) {
                 Image(systemName: "externaldrive.badge.exclamationmark")
@@ -297,10 +334,11 @@ private struct FirmwareTransferSheet: View {
         }
         .padding(24)
         .frame(maxWidth: 520)
+        }
 #if os(macOS)
-        .frame(minWidth: 420, idealWidth: 480)
+        .frame(minWidth: 420, idealWidth: 480, minHeight: 460)
 #endif
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -316,7 +354,9 @@ private struct SafetyLine: View {
     }
 }
 
-private struct ProjectInformationSheet: View {
+/// Not private: the macOS store-screenshot test renders this sheet offscreen, which
+/// avoids depending on the Accessibility permission a UI-test runner would need.
+struct ProjectInformationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -346,12 +386,8 @@ private struct ProjectInformationSheet: View {
                     }
 
                     ViewThatFits(in: .horizontal) {
-                        projectLinks
-                        VStack(alignment: .leading, spacing: 10) {
-                Link("Privacy policy", destination: URL(string: "https://puritysb.github.io/pocket-daily/privacy/")!)
-                            Link("Open-source notices", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!)
-                            Link("Support", destination: URL(string: "https://github.com/puritysb/pocket-daily/issues")!)
-                        }
+                        HStack(spacing: 18) { projectLinks }
+                        VStack(alignment: .leading, spacing: 10) { projectLinks }
                     }
                     .font(.callout.weight(.medium))
                 }
@@ -367,12 +403,11 @@ private struct ProjectInformationSheet: View {
 #endif
     }
 
+    @ViewBuilder
     private var projectLinks: some View {
-        HStack(spacing: 18) {
-                            Link("Privacy policy", destination: URL(string: "https://puritysb.github.io/pocket-daily/privacy/")!)
-            Link("Open-source notices", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!)
-                            Link("Support", destination: URL(string: "https://puritysb.github.io/pocket-daily/support/")!)
-        }
+        Link("Privacy policy", destination: PocketLinks.privacy)
+        Link("Open-source notices", destination: PocketLinks.notices)
+        Link("Support", destination: PocketLinks.support)
     }
 }
 
@@ -393,27 +428,12 @@ private struct InfoSection<Content: View>: View {
     }
 }
 
-/// The single place the app reports what just happened. It used to be a
-/// caption-sized secondary line at the bottom of the inspector, which is why a
-/// successful firmware transfer was easy to miss. Tone is derived from the
-/// message so success, a staged-but-not-installed firmware, and failures are
-/// visually distinct without threading extra state through the model.
+/// The single place the app reports what just happened. The tone travels
+/// with the message from the model, so success, a staged-but-not-installed
+/// firmware, and failures are visually distinct without guessing from wording.
 private struct StatusCallout: View {
     let message: String
-
-    private enum Tone { case success, pending, failure, neutral }
-
-    private var tone: Tone {
-        let lower = message.lowercased()
-        if lower.hasPrefix("firmware installed") || lower.contains("was verified and published") { return .success }
-        if lower.hasPrefix("staged, not installed yet") || lower.hasPrefix("not installed yet") { return .pending }
-        if lower.contains("failed") || lower.contains("could not") || lower.contains("cannot")
-            || lower.contains("error") || lower.contains("invalid") || lower.contains("not found")
-            || lower.contains("interrupted") || lower.contains("ended") {
-            return .failure
-        }
-        return .neutral
-    }
+    let tone: StatusTone
 
     private var symbol: String {
         switch tone {
@@ -467,29 +487,21 @@ private struct StatusCallout: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(tone == .neutral ? Color.clear : color.opacity(0.45), lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
     }
 }
 
-private struct ProjectNotice: View {
-    var body: some View {
-        InspectorCard(title: "ABOUT", symbol: "info.circle") {
-            Text("Independent and local-first. Requires Pocket Daily or compatible CrossPoint-based firmware; factory firmware is not supported.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                Link("Privacy", destination: URL(string: "https://puritysb.github.io/pocket-daily/privacy/")!)
-                Link("Notices", destination: URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!)
-                Link("Support", destination: URL(string: "https://puritysb.github.io/pocket-daily/support/")!)
-            }
-            .font(.caption.weight(.medium))
-        }
-    }
+enum PocketLinks {
+    static let privacy = URL(string: "https://puritysb.github.io/pocket-daily/privacy/")!
+    static let support = URL(string: "https://puritysb.github.io/pocket-daily/support/")!
+    static let notices = URL(string: "https://github.com/puritysb/pocket-daily/blob/main/THIRD_PARTY_NOTICES.md")!
 }
 
 private struct ConnectionInspector: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
     let onConnect: () -> Void
+    @State private var confirmingDirectConnection = false
 
     var body: some View {
         InspectorCard(title: "DEVICE", symbol: "dot.radiowaves.left.and.right") {
@@ -506,16 +518,36 @@ private struct ConnectionInspector: View {
                 if model.isDemoMode { model.exitDemoMode() } else { onConnect() }
             }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+                .disabled(model.isWorking || model.hasDirectSession)
             if model.readerStatus == nil, !model.isDemoMode {
-                Button("Explore without a reader") { model.enterDemoMode() }
+                Button("Explore without a reader") { nearby.disconnect(); model.enterDemoMode() }
                     .buttonStyle(.bordered)
                     .frame(maxWidth: .infinity)
             }
-            if case .connected = nearby.state {
-                Button("Retry private transfer link") {
-                    do { try nearby.requestHotspot() } catch { model.message = error.localizedDescription }
+            if !model.isDemoMode {
+                Text("Same Wi-Fi: reader → File Transfer → Join a Network. Away: prepare files first, then connect directly.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button(model.hasDirectSession ? "Reconnect directly" : "Connect directly") {
+                    confirmingDirectConnection = true
                 }
-                .buttonStyle(.bordered)
+                .disabled(model.isWorking || model.readerStatus != nil)
+                .alert("Connect to the reader’s temporary Wi-Fi?", isPresented: $confirmingDirectConnection) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Connect directly") {
+                        model.beginDirectConnection()
+                        if !model.resumeDirectConnection() { nearby.scan() }
+                    }
+                } message: {
+                    Text("Your Wi-Fi will switch to the reader. Prepare cloud files first; internet may be unavailable. Keep Pocket Daily open during transfer.")
+                }
+                if model.readerStatus?.screenPreviewAvailable == true {
+                    Button("Load reader preview") { model.loadReaderPreview() }
+                        .disabled(model.isWorking)
+                }
+                if model.readerStatus != nil || model.hasDirectSession {
+                    Button("End session") { nearby.disconnect(); model.endConnection() }
+                        .disabled(model.isWorking)
+                }
             }
             if let lease = nearby.hotspotLease, model.manualHotspotFallback {
                 VStack(alignment: .leading, spacing: 4) {
@@ -548,7 +580,7 @@ private struct ConnectionInspector: View {
         switch nearby.state {
         case .idle: return "Wake the reader to connect"
         case .bluetoothUnavailable: return "Bluetooth unavailable — hotspot still works"
-        case .scanning: return "Checking Bluetooth and local Wi-Fi…"
+        case .scanning: return "Finding a reader for direct connection…"
         case let .connecting(name): return "Pairing securely with \(name)…"
         case let .connected(status): return "Bluetooth paired · \(status.deviceID)"
         case .switchingToHotspot: return "Starting private Wi-Fi…"
@@ -567,7 +599,7 @@ private struct TransferDropZone: View {
         InspectorCard(title: "SEND TO POCKET", symbol: "arrow.up.doc") {
             VStack(spacing: 10) {
                 Image(systemName: targeted ? "arrow.down.doc.fill" : "doc.badge.plus").font(.title2)
-                Text(targeted ? "Drop to send" : "Drop a book, study pack, or firmware")
+                Text(targeted ? "Drop to prepare" : "Prepare a book, study pack, or firmware")
                     .font(.callout.weight(.medium)).multilineTextAlignment(.center)
                 Text("EPUB · PDL · BIN").font(.caption2.monospaced()).foregroundStyle(.secondary)
                 Button("Choose file…", action: choose).buttonStyle(.bordered).disabled(!isEnabled)
@@ -747,3 +779,80 @@ enum PocketPalette {
     static let line = Color.black.opacity(0.11)
     static let selection = accent.opacity(0.15)
 }
+
+/// Owns a single picker presentation independently of connection/preview updates.
+private struct TransferFilePicker: ViewModifier {
+    @Binding var isPresented: Bool
+    let allowedContentTypes: [UTType]
+    let completion: (Result<[URL], Error>) -> Void
+#if os(iOS)
+    @State private var selectedURLs: [URL]?
+
+    func body(content: Content) -> some View {
+        content.fullScreenCover(isPresented: $isPresented, onDismiss: {
+            // Firmware confirmation must wait until the picker has finished dismissing.
+            if let urls = selectedURLs {
+                selectedURLs = nil
+                completion(.success(urls))
+            }
+        }) {
+            TransferDocumentPicker(contentTypes: allowedContentTypes) { urls in
+                selectedURLs = urls
+                isPresented = false
+            }
+            .ignoresSafeArea()
+        }
+    }
+#else
+    func body(content: Content) -> some View {
+        content.fileImporter(
+            isPresented: $isPresented,
+            allowedContentTypes: allowedContentTypes,
+            allowsMultipleSelection: false,
+            onCompletion: completion
+        )
+    }
+#endif
+}
+
+#if os(iOS)
+private struct TransferDocumentPicker: UIViewControllerRepresentable {
+    let contentTypes: [UTType]
+    let finish: ([URL]?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(finish: finish) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: contentTypes)
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {
+        // Keep the existing controller and its search state for the entire presentation.
+        context.coordinator.finish = finish
+    }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        var finish: ([URL]?) -> Void
+        private var completed = false
+
+        init(finish: @escaping ([URL]?) -> Void) { self.finish = finish }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            complete(urls)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            complete(nil)
+        }
+
+        private func complete(_ urls: [URL]?) {
+            guard !completed else { return }
+            completed = true
+            finish(urls)
+        }
+    }
+}
+#endif

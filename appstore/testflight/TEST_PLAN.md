@@ -66,10 +66,11 @@ names one platform. Record Pass, Fail, or Blocked with a short evidence referenc
       `/update.bin`, then cancel at the reader confirmation. Do not flash during
       this release test or review recording.
 11. **macOS file and SD access**
-    - Select a book with the system file picker and verify the sandbox bookmark
-      permits the operation after relaunch.
+    - Select a book with the system file picker and verify the sandboxed app can
+      read it for transfer.
     - With a test SD card mounted, copy the review EPUB and a valid firmware image;
-      confirm the expected layout and that existing files are not overwritten.
+      confirm the EPUB lands at the root and is never overwritten, and that the
+      firmware is published as `/update.bin` with the orange "Staged" result.
 12. **Privacy and network observation**
     - Confirm the app works without an account and sends no analytics or cloud
       traffic. Expected traffic is limited to the physical reader's local link.

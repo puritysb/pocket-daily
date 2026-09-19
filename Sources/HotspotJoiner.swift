@@ -4,10 +4,47 @@ import Foundation
 import NetworkExtension
 
 enum HotspotJoiner {
+    static func leave(ssid: String) async {
+        NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: ssid)
+    }
+
     static func join(_ lease: HotspotLease) async throws {
         let configuration = NEHotspotConfiguration(ssid: lease.ssid, passphrase: lease.passphrase, isWEP: false)
         configuration.joinOnce = true
-        try await NEHotspotConfigurationManager.shared.apply(configuration)
+        do {
+            try await NEHotspotConfigurationManager.shared.apply(configuration)
+        } catch where alreadyJoined(error) {
+            // Reconnecting while the phone is still on the reader's hotspot is
+            // success, not a failure that needs the manual fallback.
+            return
+        } catch where userCancelled(error) {
+            throw HotspotJoinError.userCancelled(lease.ssid)
+        }
+    }
+
+    /// `NEHotspotConfigurationManager.apply` reports an existing association
+    /// as an error even though the link is usable.
+    static func alreadyJoined(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == NEHotspotConfigurationErrorDomain
+            && nsError.code == NEHotspotConfigurationError.alreadyAssociated.rawValue
+    }
+
+    static func userCancelled(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == NEHotspotConfigurationErrorDomain
+            && nsError.code == NEHotspotConfigurationError.userDenied.rawValue
+    }
+}
+
+enum HotspotJoinError: LocalizedError, Equatable {
+    case userCancelled(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .userCancelled(ssid):
+            "The Wi-Fi join was cancelled. Tap Retry automatic join to see the system prompt again, or join \(ssid) manually."
+        }
     }
 }
 #elseif os(macOS)
@@ -45,6 +82,7 @@ enum HotspotJoiner {
             var lastAssociationError: Error?
             var retryDelay = Duration.milliseconds(650)
             while ContinuousClock.now < deadline {
+                try Task.checkCancellation()
                 // macOS System Settings refreshes CoreWLAN's cache even when a
                 // directed scan returns no rows. Prefer that fresh cache, then
                 // make one directed scan per retry. Back-to-back broadcast and
@@ -91,6 +129,13 @@ enum HotspotJoiner {
             }
             if let lastScanError { throw lastScanError }
             throw HotspotJoinError.networkNotFound(ssid)
+        }.value
+    }
+
+    static func leave(ssid: String) async {
+        await Task.detached(priority: .userInitiated) {
+            guard let interface = CWWiFiClient.shared().interface(), interface.ssid() == ssid else { return }
+            interface.disassociate()
         }.value
     }
 

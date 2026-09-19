@@ -4,7 +4,11 @@
   "sku": "pocket-daily-universal-2026",
   "version": "1.0.0",
   "build": "1",
-  "platforms": ["iOS", "iPadOS", "macOS"],
+  "platforms": [
+    "iOS",
+    "iPadOS",
+    "macOS"
+  ],
   "primary_category": "Education",
   "secondary_category": "Books",
   "price": "Free",
@@ -23,14 +27,15 @@
   "release_option": "Manual",
   "hardware_required": "A separately obtained X3/X4-class device running Pocket Daily or compatible CrossPoint-based firmware is required for live transfer and settings. Built-in demo mode does not require hardware.",
   "local_release_evidence": {
-    "verified_on": "2026-09-01",
+    "verified_on": "2026-09-08",
     "development_team": "QF36NDHYHD",
-    "ios_distribution": "App Store IPA export succeeded with Hotspot Configuration and get-task-allow disabled",
-    "macos_distribution": "Mac App Store PKG export succeeded with App Sandbox and required Bluetooth, network, file, and location entitlements",
-    "tests": "26 iOS simulator tests passed; iOS and macOS release builds passed",
+    "tests": "45 iOS tests passed (40 unit, 5 UI) and the macOS render test passed, both on Xcode 26.6",
+    "screenshots": "Regenerated from the shipping demo UI by scripts/capture_screenshots.sh: iPhone 6.9\" x4, iPad 13\" x3, Mac 2880x1800 x3, no duplicates",
     "package_validation": "scripts/validate_app_store.sh passed",
-    "release_automation": "scripts/package_app_store.sh passed end to end and emitted release-evidence.json without uploading",
-    "public_urls": "Marketing, support, and privacy URLs returned HTTP 200"
+    "signed_export": "NOT AVAILABLE for this revision. scripts/package_app_store.sh archived iOS successfully and then failed at export with 'No Accounts' and 'No signing certificate \"iOS Distribution\" found'. The keychain currently holds only an Apple Development identity for a different team, so the Apple Distribution certificate for QF36NDHYHD must be restored before a distribution can be produced.",
+    "prior_signed_export": "An earlier build of this session's source did export and verify cleanly (iOS IPA arm64 with Hotspot Configuration and get-task-allow false; universal sandboxed macOS PKG; both with PrivacyInfo.xcprivacy). Those artifacts predate the LAN-discovery change and were removed, so they are not the submission candidate.",
+    "public_urls": "Marketing, support, and privacy URLs returned HTTP 200 on 2026-09-06",
+    "next_step": "Sign in to Xcode with the account holder's Apple ID for team QF36NDHYHD so the distribution certificate is reinstalled, then re-run scripts/package_app_store.sh on the committed revision."
   },
   "account_fields_still_required": [
     "App Store Connect app record and Apple-generated app ID",

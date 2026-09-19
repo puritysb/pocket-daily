@@ -184,6 +184,116 @@ Clone `pocket-daily` and `pocket-daily-firmware` as siblings, then:
 4. Open items: App Store review video and TestFlight remain account-holder
    work; the Sync hotspot is the fallback path only.
 
+## Release-readiness fixes — 2026-09-06
+
+- Permissions are requested only on Find & Connect: `NearbySyncController`
+  creates its `CBCentralManager` lazily on the first scan, and `ContentView`
+  no longer probes the LAN in its launch task. Launch and demo mode trigger no
+  Bluetooth or local-network prompt.
+- The status line carries an explicit `StatusTone` from `PocketModel.post`
+  instead of the UI guessing success/failure from wording.
+- iOS treats `NEHotspotConfigurationError.alreadyAssociated` as a successful
+  join and reports `userDenied` as a cancel with a retry hint.
+- macOS SD-card firmware copies are published as `/update.bin` (replacing a
+  previously staged image), record the staged version for the install check,
+  and show the same orange "Staged" result as the wireless path.
+- The firmware confirmation sheet scrolls and offers medium and large detents.
+- The App Store screenshot set and ko-KR copy were regenerated to match the
+  current interface; `scripts/capture_screenshots.sh` produces the set through
+  `PocketUITests`/`PocketMacUITests` (the macOS runner needs ad-hoc signing and
+  Accessibility permission). Keywords no longer claim study features.
+- Verified on this revision: 40 iOS simulator tests, macOS build, validator.
+  Signed Store exports and hardware runs were not repeated.
+
+## Store screenshot pipeline — 2026-09-08
+
+- `scripts/capture_screenshots.sh` regenerates every App Store screenshot from
+  the shipping demo UI and needs no special permissions. iPhone and iPad come
+  from `PocketUITests` in the simulator; the Mac set comes from `PocketMacTests`,
+  a unit test that hosts the real SwiftUI views in an off-screen borderless
+  window and asks that window to draw itself.
+- The Mac set is deliberately not a UI test: the macOS UI-test runner fails with
+  "Timed out while enabling automation mode" unless the Accessibility permission
+  is granted interactively, which a script or CI cannot do. `ImageRenderer` was
+  tried first and rejected — it renders the studio's backgrounds but not the
+  contents of its scroll views.
+- Two traps the window path hit, both now encoded in the test: a titled window is
+  clamped to the screen's visible frame (capture came out 2880x1688 instead of
+  2880x1800), and a directly hosted sheet has no window background of its own, so
+  the studio showed through the About card.
+- `project.yml` now declares both schemes explicitly; XcodeGen's generated
+  PocketMac scheme did not pick up the macOS unit-test bundle, and the macOS
+  target ships as `Pocket.app` so `TEST_HOST` cannot be derived from its name.
+- The validator enforces per-device counts and rejects byte-identical files in a
+  device class. That check exists because the first regenerated iPad set had two
+  identical frames: the wide layout already shows the inspector, so the
+  "scroll to the inspector" step was a silent no-op.
+
+## Submission-build verification — 2026-09-08
+
+- `scripts/package_app_store.sh` completed on this revision: signed iOS IPA
+  (arm64, Hotspot Configuration true, `get-task-allow` false) and universal
+  macOS PKG (sandboxed, installer signed), both carrying `PrivacyInfo.xcprivacy`
+  and the correct purpose strings, with SHA-256 evidence in
+  `release-evidence.json`. Nothing was uploaded.
+- The Store-signed products cannot be launched locally, and that is expected:
+  Gatekeeper rejects the Mac App Store build and `launchd` fails it with
+  `NSPOSIXErrorDomain 163`. Reaching them requires TestFlight or the store.
+- What was actually run is the same source in Release configuration: the macOS
+  app launched and stayed up, and the suites passed — 40 iOS unit tests, 4 iOS
+  UI tests, and the macOS render test.
+- `UITests/PocketFlowTests.swift` now pins the first-run behaviour App Review
+  sees: no permission prompt on a cold launch (the regression that the deferred
+  `CBCentralManager` and removed launch-time LAN probe fixed), demo mode
+  populated with every device-mutating control disabled, and the
+  independence/privacy notices reachable.
+- Running tests against Release needs `ENABLE_TESTABILITY=YES`, because
+  `PocketTests` uses `@testable import Pocket`.
+
+## LAN discovery pacing — 2026-09-08
+
+- Symptom, seen while running the shipping build with the reader asleep: tapping
+  Find & Connect produced minutes of `NSURLErrorDomain -1001` timeouts in the
+  console before the app said anything useful.
+- Cause was pacing, not the sweep itself. The nearby set was probed with a batch
+  size of 1, so 12 addresses cost 12 x 1.2 s sequentially, and the rest of the
+  subnet went 8 at a time at 0.8 s each — about 100 s for a /22 — and the whole
+  thing then ran a second time on the retry.
+- `PocketModel.probe` is now a sliding window: `sweepConcurrency` (48) requests
+  stay in flight, each completion starts the next, and a `discoveryBudget` (20 s)
+  bounds one pass. 20 s is sized so a full /22 still fits (~1000 addresses at 48
+  in flight and a 0.6 s timeout is ~13 s), so the bound does not cost coverage.
+- Measured with `PocketFlowTests.testDiscoveryWithoutAReaderFailsQuicklyAndSaysWhatToDo`,
+  which fails the build if a miss takes longer than 60 s to report. Observed ~26 s
+  for both passes against a real /22 with no reader on it.
+- The candidate list itself is unchanged and still intentional: the X3's File
+  Transfer profile has no mDNS, so the app cannot rely on Bonjour.
+
+## Release packaging gate — 2026-09-08
+
+`scripts/package_app_store.sh` runs `-only-testing:PocketTests`. Adding the
+UI-test bundles to the scheme put simulator automation on the release path, and
+a wedged simulator hung the packaging run for over half an hour in the iOS test
+phase with nothing archived. The UI tests still run from the full scheme and
+from `scripts/capture_screenshots.sh`; they just no longer gate a distribution
+build.
+
+## Signing state on this host — 2026-09-08
+
+The Apple Distribution certificate for team QF36NDHYHD disappeared from the
+login keychain part-way through the session. An export at 07:22 KST produced
+correctly signed iOS and macOS products; an export at 08:00 KST failed with
+`No Accounts` and `No signing certificate "iOS Distribution" found`, and
+`security find-identity -v` then listed only an Apple Development identity for
+an unrelated team. Archiving still succeeds — only the export step needs the
+certificate.
+
+Restoring it is account-holder work: sign in to Xcode with the Apple ID for
+QF36NDHYHD (or import the .p12), confirm with `security find-identity -v -p
+codesigning`, then re-run `scripts/package_app_store.sh`. The 2026-09-01 note
+about "refreshing the Xcode Apple account" describes the same fragility on this
+machine.
+
 ## Maintenance rules
 
 - Add only durable decisions, verified baselines, protocol contracts, or
@@ -191,3 +301,48 @@ Clone `pocket-daily` and `pocket-daily-firmware` as siblings, then:
 - Date mutable observations and name their source of truth.
 - Replace stale notes instead of accumulating contradictions.
 - Keep troubleshooting logs and one-off session details out of this file.
+
+## Explicit direct sessions — 2026-09-09
+
+- Find & Connect is LAN-only. Connect directly explicitly authorizes BLE/AP
+  handoff; the app no longer changes Wi-Fi as a side effect of LAN discovery.
+- Prepared copies and UUID metadata live in Application Support/Pocket/Transfers
+  until sent or removed. Same-reader retries keep the UUID, including app relaunch;
+  reader reboot can still restart at zero because firmware resume state is in RAM.
+- Status adds optional deviceID (same eight hex digits as BLE) and sessionEnd.
+  Device ID is a routing/consistency check, not cryptographic HTTP authentication.
+  Legacy readers remain usable but cross-session resume and automatic install
+  verification are limited without identity. Direct BLE identity can key an upgrade.
+- New private AP firmware accepts POST /api/pocket/v1/session/end, rejects active
+  uploads, responds before exiting, and excludes status heartbeats from idle time.
+  Capability gating preserves older firmware. OS network restoration is best effort.
+- Direct sessions skip optional diagnostics; iOS backgrounding cancels the stream
+  and retains the queue. Firmware confirmation remains on the reader.
+- Physical iPhone/X3 AP, LAN, sleep/resume, and installation sign-off is pending.
+
+- Local verification: 44 iOS unit tests, iPhone/iPad flow tests and screenshots,
+  macOS build/render capture, App Store source validator, and firmware default
+  build plus 132 host tests. Hardware acceptance cases are tracked in
+  `docs/CONNECTIVITY_VALIDATION.md`; local success is not physical sign-off.
+
+- Strict cppcheck passed with the project's 2.11 release compiled natively for
+  Apple Silicon. The registry mirror was unavailable and the existing tool was
+  Intel-only; the override lives in the firmware's ignored build/native-check.ini.
+
+## X3 installation verified — 2026-09-09
+
+- After user-side installation, live STA /api/status reported
+  `1.4.1-dev-main-fa92806c-wf9376b5a`, matching the staged image exactly, with
+  a fresh software restart. New deviceID and sessionEnd=false fields were
+  present; port 82 and resume remained available. Direct AP and updated iPhone
+  app verification are still pending.
+
+## iPhone development install — 2026-09-09
+
+- Paired the physical iPhone 14 Pro Max (iOS 26.6.1); Developer Mode was enabled.
+  The current source built with development signing, installed through devicectl,
+  and launched as bound.serendipity.pocket.daily. No Store upload was performed.
+- The available Apple Development certificate's actual OU is QF36NDHYHD and
+  matches this project. Do not infer a team mismatch from the parenthesized
+  identifier in the certificate display name. Existing provisioning was sufficient.
+- Installation/launch is verified; iPhone LAN/direct-AP transfer remains pending.

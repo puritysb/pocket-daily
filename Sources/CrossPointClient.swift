@@ -18,6 +18,8 @@ struct CrossPointStatus: Codable, Equatable {
     let uploadStreamPort: Int?
     let uploadStreamResume: Bool?
     let diagnosticsAffordable: Bool?
+    var deviceID: String? = nil
+    var sessionEnd: Bool? = nil
 }
 
 struct CrashDiagnostic: Equatable, Sendable {
@@ -120,16 +122,33 @@ private final class HTTPUploadDelegate: NSObject, URLSessionDataDelegate, URLSes
         self.progress = progress
     }
 
+    private let cancellationLock = NSLock()
+    private var uploadTask: URLSessionUploadTask?
+    private var cancelled = false
+
     func upload(request: URLRequest, bodyFile: URL) async throws -> (Data, URLResponse) {
-        try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.waitsForConnectivity = true
-            configuration.timeoutIntervalForRequest = 60
-            configuration.timeoutIntervalForResource = 900
-            let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-            self.session = session
-            session.uploadTask(with: request, fromFile: bodyFile).resume()
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                let configuration = URLSessionConfiguration.ephemeral
+                configuration.waitsForConnectivity = true
+                configuration.timeoutIntervalForRequest = 60
+                configuration.timeoutIntervalForResource = 900
+                let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+                self.session = session
+                let task = session.uploadTask(with: request, fromFile: bodyFile)
+                cancellationLock.withLock {
+                    uploadTask = task
+                    if cancelled { task.cancel() }
+                }
+                task.resume()
+            }
+        } onCancel: {
+            self.cancellationLock.withLock {
+                self.cancelled = true
+                self.uploadTask?.cancel()
+            }
         }
     }
 
@@ -150,6 +169,7 @@ private final class HTTPUploadDelegate: NSObject, URLSessionDataDelegate, URLSes
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let continuation else { return }
         self.continuation = nil
+        cancellationLock.withLock { uploadTask = nil }
         self.session = nil
         session.finishTasksAndInvalidate()
         if let error {
@@ -285,28 +305,40 @@ final class PocketStreamUploader: @unchecked Sendable {
         connection.cancel()
     }
 
+    private var cancelled = false // accessed only on queue
+
     func upload() async throws -> UInt32 {
-        try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            connection.stateUpdateHandler = { [weak self] state in
-                guard let self else { return }
-                switch state {
-                case .ready:
-                    self.touch()
-                    self.sendHeader()
-                case let .failed(error):
-                    self.finish(.failure(error))
-                case .cancelled:
-                    if self.continuation != nil { self.finish(.failure(StreamError.disconnected)) }
-                default:
-                    break
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                queue.async { [self] in
+                    guard !cancelled else { continuation.resume(throwing: CancellationError()); return }
+                    self.continuation = continuation
+                    connection.stateUpdateHandler = { [weak self] state in
+                        guard let self else { return }
+                        switch state {
+                        case .ready:
+                            self.touch()
+                            self.sendHeader()
+                        case let .failed(error):
+                            self.finish(.failure(error))
+                        case .cancelled:
+                            if self.continuation != nil { self.finish(.failure(StreamError.disconnected)) }
+                        default:
+                            break
+                        }
+                    }
+                    connection.start(queue: queue)
+                    startStallTimer()
+                    queue.asyncAfter(deadline: .now() + Self.overallTimeout) { [weak self] in
+                        guard let self, self.continuation != nil else { return }
+                        self.finish(.failure(StreamError.timedOut))
+                    }
                 }
             }
-            connection.start(queue: queue)
-            startStallTimer()
-            queue.asyncAfter(deadline: .now() + Self.overallTimeout) { [weak self] in
-                guard let self, self.continuation != nil else { return }
-                self.finish(.failure(StreamError.timedOut))
+        } onCancel: {
+            self.queue.async {
+                self.cancelled = true
+                self.finish(.failure(CancellationError()))
             }
         }
     }
@@ -524,6 +556,17 @@ actor CrossPointClient {
         return try JSONDecoder().decode(CrossPointStatus.self, from: data)
     }
 
+    func endDirectSession(host: String, port: Int) async throws {
+        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/session/end") else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 3
+        let (data, response) = try await session.data(for: request)
+        try Self.requireSuccess(response, body: data)
+    }
+
     func crashDiagnostic(host: String, port: Int, expectedBytes: Int) async throws -> CrashDiagnostic {
         guard expectedBytes > 0, expectedBytes <= 65_536 else {
             throw ClientError.unexpectedMessage("invalid crash report size")
@@ -631,6 +674,7 @@ actor CrossPointClient {
         uploadChunkBytes: Int? = nil,
         uploadStreamPort: Int? = nil,
         uploadStreamResume: Bool = false,
+        transferID: UUID = UUID(),
         note: (@Sendable (String) -> Void)? = nil,
         reconnect: (@Sendable () async -> Bool)? = nil,
         progress: @escaping @Sendable (Int64, Int64) -> Void
@@ -641,7 +685,7 @@ actor CrossPointClient {
         }
 
         let normalizedDestination = Self.normalizedDirectory(destination)
-        let stagingName = ".pocket-\(UUID().uuidString.lowercased()).part"
+        let stagingName = ".pocket-\(transferID.uuidString.lowercased()).part"
         guard let uploadURL = Self.url(host: host, port: port, path: "/upload", query: ["path": normalizedDestination]),
               let commitURL = Self.url(host: host, port: port, path: "/api/pocket/v1/commit") else {
             throw ClientError.invalidAddress
@@ -659,7 +703,7 @@ actor CrossPointClient {
             // Readers without resume support simply restart the same path.
             let stagingPath = Self.join(normalizedDestination, stagingName)
             var attempt = 0
-            var resume = false
+            var resume = uploadStreamResume
             while true {
                 attempt += 1
                 do {
@@ -747,6 +791,7 @@ actor CrossPointClient {
             crc32 = multipart.crc32
         }
 
+        try Task.checkCancellation()
         let stagingPath = Self.join(normalizedDestination, stagingName)
         let targetPath = Self.join(normalizedDestination, filename)
         var commitRequest = URLRequest(url: commitURL)

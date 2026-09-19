@@ -45,10 +45,25 @@ for locale in en-US ko-KR; do
   check_limit "appstore/metadata/$locale/keywords.txt" 100
 done
 
-for section in today japanese books firmware; do
+# The compact layout earns a separate inspector shot; the wide layouts already show the
+# inspector beside the reader preview, so they use the shorter list.
+for section in 01-profile-x3 02-inspector 03-about 04-profile-x4; do
   check_image "appstore/screenshots/en-US/iphone-6.9/$section.png" 1320 2868
+done
+for section in 01-profile-x3 02-about 03-profile-x4; do
   check_image "appstore/screenshots/en-US/ipad-13/$section.png" 2064 2752
-  check_image "appstore/screenshots/en-US/mac-16x10/$section.png" 1440 900
+  check_image "appstore/screenshots/en-US/mac-16x10/$section.png" 2880 1800
+done
+
+# No duplicates within a device class: Apple treats a repeated frame as padding, and a
+# byte-identical pair is how a layout-dependent capture step silently no-ops.
+for dir in appstore/screenshots/en-US/*/; do
+  duplicates="$(md5 -q "$dir"*.png | sort | uniq -d)"
+  [[ -z "$duplicates" ]] || fail "$dir contains identical screenshots; recapture with scripts/capture_screenshots.sh."
+  expected=4
+  [[ "$(basename "$dir")" == "iphone-6.9" ]] || expected=3
+  actual="$(ls "$dir"*.png | wc -l | tr -d ' ')"
+  (( actual == expected )) || fail "$dir has $actual screenshots; expected $expected."
 done
 
 review_sample="appstore/review/Pocket-Daily-Review-Sample.epub"
@@ -61,7 +76,7 @@ unzip -tqq "$review_sample" || fail "The review EPUB is not a valid ZIP containe
   fail "The review EPUB has an invalid mimetype."
 
 check_image "Sources/Assets.xcassets/AppIcon.appiconset/icon-1024.png" 1024 1024
-for release_script in scripts/package_app_store.sh scripts/verify_app_store_distributions.sh; do
+for release_script in scripts/package_app_store.sh scripts/verify_app_store_distributions.sh scripts/capture_screenshots.sh; do
   [[ -x "$release_script" ]] || fail "$release_script must be executable."
   bash -n "$release_script" || fail "$release_script has invalid shell syntax."
 done
