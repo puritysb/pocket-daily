@@ -311,6 +311,20 @@ machine.
   file, read the working tree, and when this file is ahead of the tree, treat
   the entry as intent, not fact.
 
+## M2/M3 shipped — 2026-09-19
+
+- M2 (`9e0e4ef`): LiveSyncClient (URLSessionWebSocketTask) subscribes after
+  hello and streams reader frames into the existing canvas;
+  FrameFetchPolicy coalesces and paces fetches (>= 1 s spacing) per the
+  zombie lesson; preferences reload on prefsChanged.
+- M3 (`34b5dc4`): UiPackEncoder mirrors the .uipack container (120-byte
+  header after the offsets fix in the firmware repo, `d03558de`); the
+  63-field registry is pinned by test; ThemePackInspector offers Apply live
+  / Revert over the verified transfer path. Demo mode stays non-mutating.
+- 65/65 unit tests. Device end-to-end demo (apply -> frame diff -> revert)
+  pending a stable reader link; the firmware offsets build must be flashed
+  first - see the firmware memory for the blocked-session details.
+
 ## M1 device core seam — 2026-09-19
 
 - `Sources/Core/DeviceCore.swift` landed: `DeviceEvent`/`DeviceState` with a
