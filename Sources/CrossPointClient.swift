@@ -613,8 +613,39 @@ actor CrossPointClient {
         return CrashDiagnostic(report: report)
     }
 
-    func screenPreview(host: String, port: Int, expectedBytes: Int) async throws -> Data {
+    /// Live-studio frame fetch (`docs/live-studio-v1.md`). Paged like the
+    /// one-shot preview but sized by the `frame` event and only called on
+    /// frame notifications — the reader's WebServer closes every request, so
+    /// per-chunk connections are unavoidable and pacing lives with the
+    /// caller (`FrameFetchPolicy`).
+    func screenLive(host: String, port: Int, expectedBytes: Int) async throws -> Data {
         guard expectedBytes >= 64, expectedBytes <= 128 * 1_024 else {
+            throw ClientError.unexpectedMessage("invalid live frame size")
+        }
+        var frame = Data()
+        frame.reserveCapacity(expectedBytes)
+        while frame.count < expectedBytes {
+            guard let url = Self.url(
+                host: host,
+                port: port,
+                path: "/api/pocket/v1/screen-live",
+                query: ["offset": String(frame.count)]
+            ) else { throw ClientError.invalidAddress }
+            var request = URLRequest(url: url)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 10
+            let (chunk, response) = try await session.data(for: request)
+            try Self.requireSuccess(response, body: chunk)
+            guard !chunk.isEmpty else { break }
+            frame.append(chunk)
+        }
+        guard frame.count == expectedBytes, frame.starts(with: [0x42, 0x4D]) else {
+            throw ClientError.unexpectedMessage("invalid live frame BMP")
+        }
+        return frame
+    }
+
+    func screenPreview(host: String, port: Int, expectedBytes: Int) async throws -> Data {        guard expectedBytes >= 64, expectedBytes <= 128 * 1_024 else {
             throw ClientError.unexpectedMessage("invalid screen preview size")
         }
 

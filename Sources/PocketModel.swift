@@ -120,6 +120,70 @@ final class PocketModel: ObservableObject, DeviceSession {
     let mirror = DeviceMirror()
     var syncMode: DeviceSyncMode { SyncModePolicy.syncMode(status: readerStatus, isDemoMode: isDemoMode) }
 
+    private var liveSync: LiveSyncClient?
+    private var frameFetchPolicy = FrameFetchPolicy()
+
+    private func startLiveSync(host: String, wsPort: Int) {
+        guard liveSync == nil else { return }
+        let client = LiveSyncClient(host: host, wsPort: wsPort)
+        client.onEvent = { [weak self] event in
+            self?.handleLiveEvent(event)
+        }
+        liveSync = client
+        client.start()
+    }
+
+    private func stopLiveSync() {
+        liveSync?.stop()
+        liveSync = nil
+        frameFetchPolicy.reset()
+    }
+
+    private func handleLiveEvent(_ event: LiveStudioEvent) {
+        switch event {
+        case let .status(status):
+            readerStatus = status
+            mirror.apply(.status(status))
+        case let .frame(seq, bytes):
+            fetchLiveFrame(seq: seq, bytes: bytes)
+        case .prefsChanged:
+            reloadPreferencesFromReader()
+        case .hello, .bye:
+            break
+        }
+    }
+
+    private func fetchLiveFrame(seq: Int, bytes: Int) {
+        guard frameFetchPolicy.shouldFetch(seq: seq) else { return }
+        let host = activeHost
+        let port = activeHTTPPort
+        let attempt = connectionAttempt
+        Task {
+            do {
+                let data = try await client.screenLive(host: host, port: port, expectedBytes: bytes)
+                guard attempt == connectionAttempt else { return }
+                readerScreenImageData = data
+                mirror.apply(.frame(seq: seq, capturedAt: Date(), data: data))
+            } catch {
+                guard attempt == connectionAttempt else { return }
+            }
+            if let next = frameFetchPolicy.fetchCompleted() {
+                fetchLiveFrame(seq: next, bytes: bytes)
+            }
+        }
+    }
+
+    private func reloadPreferencesFromReader() {
+        let attempt = connectionAttempt
+        Task {
+            guard let loaded = try? await client.preferences(host: activeHost, port: activeHTTPPort),
+                  attempt == connectionAttempt else { return }
+            preferences = loaded
+            preferencesDirty = false
+            mirror.apply(.preferences(loaded))
+        }
+    }
+
     /// Addresses adjacent to this device, tried together before the wider sweep.
     private static let priorityHostCount = 24
     /// Requests kept in flight while sweeping the rest of the subnet. Each probe is a
@@ -375,6 +439,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         preferences = nil
         readerScreenImageData = nil
         preferencesDirty = false
+        stopLiveSync()
         mirror.apply(.connection(.disconnected))
         post(Self.initialMessage)
     }
@@ -501,6 +566,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         preferences = nil
         nearbyLease = lease
         manualHotspotFallback = true
+        stopLiveSync()
         mirror.apply(.connection(.disconnected))
         post("Private link not ready. Join \(lease.ssid), then tap Verify connection.", tone: .failure)
     }
@@ -517,7 +583,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             readerStatus = nil
             preferences = nil
             readerScreenImageData = nil
-            mirror.apply(.connection(.disconnected))
+            stopLiveSync()
+        mirror.apply(.connection(.disconnected))
             post("Reader not found. Open Create Hotspot on the reader and try again.", tone: .failure)
         }
     }
@@ -568,6 +635,9 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         preferencesDirty = false
+        if case let .push(wsPort) = SyncModePolicy.syncMode(status: status, isDemoMode: false) {
+            startLiveSync(host: host, wsPort: wsPort)
+        }
         let staged = firmwareKey.flatMap { UserDefaults.standard.string(forKey: $0) }
         switch FirmwareInstallCheck.evaluate(readerVersion: status.version, staged: staged) {
         case let .installed(version):
@@ -613,12 +683,13 @@ final class PocketModel: ObservableObject, DeviceSession {
                 do {
                     let status = try await self.client.status(host: host, port: port, timeout: 6)
                     heartbeat.recordSuccess()
-                    if let id = self.readerStatus?.deviceID, status.deviceID != id {
-                        self.readerStatus = nil
-                        self.preferences = nil
-                        self.mirror.apply(.connection(.disconnected))
-                        self.post("A different reader answered at this address. Reconnect before sending files.", tone: .failure)
-                        return
+            if let id = self.readerStatus?.deviceID, status.deviceID != id {
+                self.readerStatus = nil
+                self.preferences = nil
+                self.stopLiveSync()
+                self.mirror.apply(.connection(.disconnected))
+                self.post("A different reader answered at this address. Reconnect before sending files.", tone: .failure)
+                return
                     }
                     self.readerStatus = status
                     self.mirror.apply(.status(status))
@@ -628,6 +699,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     self.preferences = nil
                     self.readerScreenImageData = nil
                     self.preferencesDirty = false
+                    self.stopLiveSync()
                     self.mirror.apply(.connection(.disconnected))
                     self.post("Pocket connection ended. Open Nearby Sync and reconnect.", tone: .failure)
                     return
@@ -859,7 +931,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             manualHotspotFallback = nearbyLease != nil
             readerStatus = nil
             preferences = nil
-            mirror.apply(.connection(.disconnected))
+            stopLiveSync()
+        mirror.apply(.connection(.disconnected))
             post("Direct connection paused. Return to the app and reconnect to continue.", tone: .pending)
         }
     }
@@ -886,6 +959,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         readerStatus = nil
         preferences = nil
         readerScreenImageData = nil
+        stopLiveSync()
         mirror.apply(.connection(.disconnected))
         if !preserveMessage { post("Session ended. Check Wi-Fi settings if your usual connection has not returned.") }
         if legacyDirectSession { post(message + " Close Sync on the reader when finished.", tone: messageTone) }
