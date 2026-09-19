@@ -1016,8 +1016,93 @@ final class PocketModel: ObservableObject, DeviceSession {
     private func destination(for url: URL) -> String {
         switch url.pathExtension.lowercased() {
         case "pdl": "/pocket-daily/learning"
+        case "uipack": "/pocket-daily/ui-packs"
         default: "/"
         }
+    }
+
+    /// Live Studio M3: encode a theme pack, ship it, and apply it live. The
+    /// reader re-renders and the live frame shows the result; a failure keeps
+    /// the previous pack active on the device.
+    func applyThemePack(_ theme: [String: Int]) {
+        guard !isDemoMode, !isWorking, readerStatus?.liveStudio?.uiPacks == true, let status = readerStatus else {
+            post(readerStatus == nil ? "Connect to a reader to apply theme packs." :
+                  isDemoMode ? "Demo preview does not change a reader." :
+                  "This reader's firmware does not support UI packs yet.")
+            return
+        }
+        let host = activeHost
+        let port = activeHTTPPort
+        let attempt = connectionAttempt
+        isWorking = true
+        Task {
+            defer { isWorking = false }
+            do {
+                let pack = try UiPackEncoder.encode(name: "studio", version: Self.packTimestamp(), theme: theme)
+                let folder = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("pocket-packs", isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let url = folder.appendingPathComponent("studio.uipack")
+                try pack.write(to: url, options: .atomic)
+                try Task.checkCancellation()
+                guard attempt == connectionAttempt else { return }
+                _ = try await client.uploadAtomically(
+                    fileURL: url, publishedFilename: nil, destination: "/pocket-daily/ui-packs",
+                    host: host, port: port,
+                    uploadChunkBytes: status.uploadChunkBytes, uploadStreamPort: status.uploadStreamPort,
+                    uploadStreamResume: status.uploadStreamResume ?? false,
+                    transferID: status.deviceID.flatMap { UUID(uuidString: $0) } ?? UUID(),
+                    note: { [weak self] text in Task { @MainActor in self?.post(text) } },
+                    reconnect: { [weak self] in await self?.reconnectForTransfer() ?? false }
+                ) { _, _ in }
+                guard attempt == connectionAttempt else { return }
+                try await client.applyUiPack(name: "studio", host: host, port: port)
+                guard attempt == connectionAttempt else { return }
+                if let refreshed = try? await client.status(host: host, port: port) {
+                    readerStatus = refreshed
+                    mirror.apply(.status(refreshed))
+                    mirror.apply(.packStateChanged(activePack: refreshed.liveStudio?.activePack,
+                                                   version: refreshed.liveStudio?.activePackVersion))
+                }
+                post("Theme pack applied. The reader re-rendered with your metrics.", tone: .success)
+            } catch {
+                guard attempt == connectionAttempt else { return }
+                post(error)
+            }
+        }
+    }
+
+    func revertThemePack() {
+        guard !isDemoMode, !isWorking, readerStatus?.liveStudio?.uiPacks == true else {
+            post("Connect to a pack-capable reader to revert.")
+            return
+        }
+        let host = activeHost
+        let port = activeHTTPPort
+        let attempt = connectionAttempt
+        isWorking = true
+        Task {
+            defer { isWorking = false }
+            do {
+                try await client.applyUiPack(name: "", host: host, port: port)
+                guard attempt == connectionAttempt else { return }
+                if let refreshed = try? await client.status(host: host, port: port) {
+                    readerStatus = refreshed
+                    mirror.apply(.status(refreshed))
+                    mirror.apply(.packStateChanged(activePack: nil, version: nil))
+                }
+                post("Reader reverted to its theme's own metrics.", tone: .success)
+            } catch {
+                guard attempt == connectionAttempt else { return }
+                post(error)
+            }
+        }
+    }
+
+    private static func packTimestamp() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMdd-HHmmss"
+        return formatter.string(from: Date())
     }
 
     /// Copies one user-selected file into the mounted SD card layout. Firmware

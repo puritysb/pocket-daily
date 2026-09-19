@@ -231,6 +231,7 @@ struct ContentView: View {
                 .buttonStyle(.borderless).disabled(model.isWorking || model.isDemoMode)
 #endif
             DeviceSettingsInspector(model: model)
+            ThemePackInspector(model: model)
             if !model.isDemoMode {
                 TroubleshootingInspector(model: model, nearby: nearby)
             }
@@ -749,7 +750,7 @@ private struct ConnectionTraceInspector: View {
     }
 }
 
-private struct InspectorCard<Content: View>: View {
+struct InspectorCard<Content: View>: View {
     let title: String
     let symbol: String
     @ViewBuilder let content: Content

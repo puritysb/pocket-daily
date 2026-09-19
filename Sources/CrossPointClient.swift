@@ -676,8 +676,22 @@ actor CrossPointClient {
         return previewData
     }
 
-    func preferences(host: String, port: Int) async throws -> ReaderPreferences {
-        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
+    /// Live Studio LS-3: apply (or, with an empty name, revert) a `.uipack`
+    /// previously uploaded to `/pocket-daily/ui-packs`.
+    func applyUiPack(name: String, host: String, port: Int) async throws {
+        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/ui-pack/apply") else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["name": name])
+        let (body, response) = try await session.data(for: request)
+        try Self.requireSuccess(response, body: body)
+    }
+
+    func preferences(host: String, port: Int) async throws -> ReaderPreferences {        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
             throw ClientError.invalidAddress
         }
         var request = URLRequest(url: url)
