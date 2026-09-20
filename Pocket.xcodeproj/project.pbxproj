@@ -14,6 +14,7 @@
 		1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */; };
 		1E97B607E7232858CBBA4EEF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
+		2BCD25F75B0F3037FA119A46 /* FirmwareGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */; };
 		374169613A2E5437B2A68A8E /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
 		414190AE73C31EAC36A10175 /* HotspotJoiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */; };
 		48D13A6F843A7E0089CD1BF6 /* UiPackEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB94FECF792B1A9BFF585E18 /* UiPackEncoder.swift */; };
@@ -35,11 +36,13 @@
 		AA79057983FE52D7AAC2E7FB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		AE0834455F19D805D51A9AD3 /* PocketModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */; };
 		AFCC025CE7AAFFD337020926 /* PocketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78DAF0568606DE01F034EB9F /* PocketApp.swift */; };
+		B185D72799F4CDB6A052877E /* FirmwareGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */; };
 		B24CAEF1B71AD9BD50DA9B1A /* HotspotJoiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */; };
 		B2B491FBBAE92655BD2B6DA0 /* PocketModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */; };
 		B6D4497CDDCA5038487735DE /* ThemePackInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C6FF83A2E149B0E54B1B4AD /* ThemePackInspector.swift */; };
 		B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5893AB01049A60E87A4353F /* LiveSyncTests.swift */; };
 		BB1B2115ACA29E87C9F1A51A /* LocalReaderDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C5706F004643C8427F5DEF /* LocalReaderDiscovery.swift */; };
+		C4C665425569754870E021C7 /* FirmwareGuidanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */; };
 		D19CD0E8E22B98AA0AF8BDE0 /* ThemePackInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C6FF83A2E149B0E54B1B4AD /* ThemePackInspector.swift */; };
 		D49F1B7D6D53D2705383D9F6 /* PocketHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C61AC1FD88CD54C5818106 /* PocketHardware.swift */; };
 		E094B0DDAD9A65C51E6D2562 /* LiveSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A3EFDC948E33F6D7D82B42 /* LiveSyncClient.swift */; };
@@ -81,6 +84,7 @@
 		1C95F7B00987D244A5B7728F /* PocketMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		4F62688E6F4BE92EE2AAC710 /* UiPackEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UiPackEncoderTests.swift; sourceTree = "<group>"; };
+		508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidanceTests.swift; sourceTree = "<group>"; };
 		5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMacScreenshotTests.swift; sourceTree = "<group>"; };
 		6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketScreenshotTests.swift; sourceTree = "<group>"; };
 		6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketDevicePreview.swift; sourceTree = "<group>"; };
@@ -102,6 +106,7 @@
 		DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncController.swift; sourceTree = "<group>"; };
 		ED14B15E886AE48D45407B10 /* NearbySyncProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncProtocol.swift; sourceTree = "<group>"; };
 		EF248AD34F385ED9F2F09847 /* Pocket.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pocket.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidance.swift; sourceTree = "<group>"; };
 		FB94FECF792B1A9BFF585E18 /* UiPackEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UiPackEncoder.swift; sourceTree = "<group>"; };
 		FD7417C245B01C67AD37DDFB /* PocketTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PocketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -153,6 +158,7 @@
 			isa = PBXGroup;
 			children = (
 				8D65074F70247BF2542F483F /* DeviceCoreTests.swift */,
+				508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */,
 				C5893AB01049A60E87A4353F /* LiveSyncTests.swift */,
 				16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */,
 				4F62688E6F4BE92EE2AAC710 /* UiPackEncoderTests.swift */,
@@ -193,6 +199,7 @@
 			isa = PBXGroup;
 			children = (
 				94228C0DAE5C814F046A408A /* DeviceCore.swift */,
+				F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */,
 				B6A3EFDC948E33F6D7D82B42 /* LiveSyncClient.swift */,
 			);
 			path = Core;
@@ -373,6 +380,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E90B3D0617FFE6C249E40D24 /* DeviceCoreTests.swift in Sources */,
+				C4C665425569754870E021C7 /* FirmwareGuidanceTests.swift in Sources */,
 				B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */,
 				894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */,
 				022C14B62619032EAEE5B0C1 /* UiPackEncoderTests.swift in Sources */,
@@ -386,6 +394,7 @@
 				E72A0BD7BB8E36855DA96247 /* ContentView.swift in Sources */,
 				FEAC785F7C5914FA98BBB52B /* CrossPointClient.swift in Sources */,
 				0368E20577EA2F31604B9D73 /* DeviceCore.swift in Sources */,
+				B185D72799F4CDB6A052877E /* FirmwareGuidance.swift in Sources */,
 				24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */,
 				414190AE73C31EAC36A10175 /* HotspotJoiner.swift in Sources */,
 				E094B0DDAD9A65C51E6D2562 /* LiveSyncClient.swift in Sources */,
@@ -408,6 +417,7 @@
 				A6208CA1D1EDD27DDD132C2F /* ContentView.swift in Sources */,
 				136F7173D3544851F4C78858 /* CrossPointClient.swift in Sources */,
 				6A1BD5C811438399B452357D /* DeviceCore.swift in Sources */,
+				2BCD25F75B0F3037FA119A46 /* FirmwareGuidance.swift in Sources */,
 				84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */,
 				B24CAEF1B71AD9BD50DA9B1A /* HotspotJoiner.swift in Sources */,
 				57D04674F495AE1D6321B9E8 /* LiveSyncClient.swift in Sources */,

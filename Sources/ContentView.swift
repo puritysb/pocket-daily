@@ -165,6 +165,7 @@ struct ContentView: View {
                 }
                 Spacer()
                 if let status = model.readerStatus {
+                    syncModeBadge
                     Text(status.device)
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 9).padding(.vertical, 5)
@@ -188,8 +189,40 @@ struct ContentView: View {
             )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if case let .updateAvailable(current, minimum) = firmwareAdvice {
+                Label(
+                    "Reader firmware \(current) is behind \(minimum). On the reader: Settings → System → Update.",
+                    systemImage: "arrow.down.circle"
+                )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         }
         .frame(maxWidth: 520)
+    }
+
+    private var firmwareAdvice: FirmwareGuidance.Advice {
+        guard let status = model.readerStatus else { return .unknownFormat }
+        return FirmwareGuidance.advise(readerVersion: status.version)
+    }
+
+    /// Live-studio sync mode, surfaced: push means real-time events and the
+    /// frame stream; poll means the reader's radio budget kept the listener
+    /// off and the app rides the heartbeat.
+    private var syncModeBadge: some View {
+        let (text, color): (String, Color) = {
+            switch model.syncMode {
+            case .push: return ("LIVE", .green)
+            case .poll: return ("POLL", .orange)
+            case .offline: return ("OFFLINE", .gray)
+            }
+        }()
+        return Text(text)
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background(color.opacity(0.14), in: Capsule())
+            .foregroundStyle(color)
+            .help("LIVE: real-time events over WebSocket. POLL: heartbeat polling (reader memory is tight).")
     }
 
     private var inspector: some View {
