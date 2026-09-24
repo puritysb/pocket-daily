@@ -9,6 +9,847 @@ import XCTest
 
 final class NearbySyncProtocolTests: XCTestCase {
     @MainActor
+    func testFailedBLEDiscoveryReleasesPendingDirectRequestWithoutWiFiChanges() {
+        let io = HeldAssociationIO()
+        let model = PocketModel(associationIO: io)
+        model.beginDirectConnection()
+        XCTAssertTrue(model.hasDirectSession)
+        model.expectDirectReader("1234ABCD")
+        model.directDiscoveryFailed("Pairing timed out")
+        XCTAssertFalse(model.hasDirectSession)
+        XCTAssertFalse(model.directConnectionRequested)
+        XCTAssertEqual(model.message, "Pairing timed out")
+        XCTAssertEqual(io.joinCount, 0)
+        XCTAssertTrue(io.leftSSIDs.isEmpty)
+        // An old BLE failure cannot replace the current UI after revocation.
+        model.post("LAN ready")
+        model.directDiscoveryFailed("late failure")
+        XCTAssertEqual(model.message, "LAN ready")
+        model.beginDirectConnection()
+        XCTAssertTrue(model.directConnectionRequested, "A new explicit attempt must be admitted")
+        model.pauseForBackground()
+    }
+
+    @MainActor
+    func testRepeatedSynchronousBluetoothFailureDoesNotLeavePendingSession() {
+        let io = HeldAssociationIO()
+        let model = PocketModel(associationIO: io)
+        for state in [NearbySyncController.State.bluetoothUnavailable,
+                      .failed(NearbySyncController.unauthorizedMessage)] {
+            for _ in 0..<2 {
+                model.beginDirectConnection()
+                XCTAssertTrue(model.hasDirectSession)
+                if let message = state.failureMessage { model.directDiscoveryFailed(message) }
+                XCTAssertFalse(model.hasDirectSession)
+            }
+        }
+        XCTAssertNil(NearbySyncController.State.switchingToHotspot.failureMessage)
+        XCTAssertNil(NearbySyncController.State.scanning.failureMessage)
+        XCTAssertEqual(io.joinCount, 0)
+        XCTAssertTrue(io.leftSSIDs.isEmpty)
+    }
+
+    @MainActor
+    func testLateBLEFailureDoesNotRevokeHandedOffLease() async throws {
+        let io = HeldAssociationIO()
+        let model = PocketModel(associationIO: io)
+        defer { model.pauseForBackground(); io.failAll() }
+        let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-Test A1B2C3D4E5F6 192.0.2.1 80 0 300")
+        model.beginDirectConnection()
+        model.useNearbyLease(lease)
+        for _ in 0..<100 where io.joinCount == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        model.post("Handoff in progress")
+        model.directDiscoveryFailed("late BLE disconnect")
+        XCTAssertTrue(model.hasDirectSession)
+        XCTAssertEqual(model.message, "Handoff in progress")
+        XCTAssertEqual(io.joinCount, 1)
+        io.failAll()
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        model.post("Manual fallback retained")
+        model.directDiscoveryFailed("late failure after join")
+        XCTAssertTrue(model.hasDirectSession)
+        XCTAssertTrue(model.manualHotspotFallback)
+        XCTAssertEqual(model.message, "Manual fallback retained")
+    }
+
+    @MainActor
+    func testManualLeaseVerificationCancelsWithBackgroundOrCaller() async throws {
+        for background in [true, false] {
+            HeldReaderURLProtocol.reset()
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [HeldReaderURLProtocol.self]
+            let session = URLSession(configuration: config)
+            defer { session.invalidateAndCancel() }
+            let io = HeldAssociationIO()
+            let model = PocketModel(client: CrossPointClient(session: session), associationIO: io)
+            defer { model.pauseForBackground(); io.failAll() }
+            let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-Test A1B2C3D4E5F6 192.0.2.1 80 81 300")
+            model.beginDirectConnection()
+            let pending = Task { await model.verifyNearbyLease(lease) }
+            defer { pending.cancel() }
+            let request = try await heldRequest(0)
+            XCTAssertTrue(model.isWorking)
+            if background { model.pauseForBackground() }
+            else { pending.cancel() }
+            model.post("cancelled manual verification")
+            await pending.value
+            for _ in 0..<100 where !request.wasStopped { try await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertTrue(request.wasStopped)
+            XCTAssertFalse(model.isWorking)
+            XCTAssertNil(model.readerStatus)
+            XCTAssertEqual(model.message, "cancelled manual verification")
+            XCTAssertEqual(io.joinCount, 0, "Verification must not associate Wi-Fi")
+            XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+        }
+    }
+
+    @MainActor
+    func testReplacingManualVerificationKeepsNewJoinOwnership() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let io = HeldAssociationIO()
+        let model = PocketModel(client: CrossPointClient(session: session), associationIO: io)
+        defer { model.pauseForBackground(); io.failAll() }
+        let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-Test A1B2C3D4E5F6 192.0.2.1 80 81 300")
+        model.beginDirectConnection()
+        let pending = Task { await model.verifyNearbyLease(lease) }
+        defer { pending.cancel() }
+        let request = try await heldRequest(0)
+        model.useNearbyLease(lease)
+        for _ in 0..<100 where io.joinCount == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        await pending.value
+        for _ in 0..<100 where !request.wasStopped { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(request.wasStopped)
+        XCTAssertEqual(io.joinCount, 1)
+        XCTAssertTrue(model.isWorking)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+    }
+
+    @MainActor
+    func testReplacementJoinWaitsForOldAssociationAndCleanup() async throws {
+        for replacementSSID in ["Pocket-Test", "Pocket-Other"] {
+            let io = HeldAssociationIO()
+            io.holdLeave = true
+            let model = PocketModel(associationIO: io)
+            defer { model.pauseForBackground(); io.failAll() }
+            let first = try HotspotLease(record: "AP 12ABCDEF Pocket-Test A1B2C3D4E5F6 192.0.2.1 80 81 300")
+            let replacement = try HotspotLease(record: "AP 12ABCDEF \(replacementSSID) A1B2C3D4E5F6 192.0.2.1 80 81 300")
+            model.beginDirectConnection()
+            model.useNearbyLease(first)
+            for _ in 0..<100 where io.joinCount < 1 { try await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertEqual(io.joinCount, 1)
+            model.useNearbyLease(replacement)
+            try await Task.sleep(for: .milliseconds(30))
+            XCTAssertEqual(io.joinCount, 1, "A replacement must wait for non-cooperative OS I/O")
+            io.succeed(0)
+            for _ in 0..<100 where io.leftSSIDs.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertEqual(io.joinCount, 1, "OS cleanup must finish before the replacement joins")
+            io.releaseLeave()
+            for _ in 0..<100 where io.joinCount < 2 { try await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertEqual(io.joinCount, 2)
+            XCTAssertTrue(model.isWorking, "Old completion released the new join's busy state")
+            XCTAssertEqual(io.leftSSIDs, [first.ssid], "Cleanup completes before even a same-SSID replacement")
+            XCTAssertNil(model.readerStatus)
+            io.failAll() // Do not proceed to HTTP verification or any actual network.
+            for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertFalse(model.isWorking)
+            XCTAssertTrue(model.manualHotspotFallback)
+        }
+    }
+
+    @MainActor
+    func testQueuedConnectionReplacementsRunOnlyLatestAfterJoinDrains() async throws {
+        let io = HeldAssociationIO()
+        let model = PocketModel(associationIO: io)
+        defer { model.pauseForBackground(); io.failAll() }
+        let first = try HotspotLease(record: "AP 12ABCDEF Pocket-First A1B2C3D4E5F6 192.0.2.1 80 81 300")
+        let middle = try HotspotLease(record: "AP 12ABCDEF Pocket-Middle A1B2C3D4E5F6 192.0.2.2 80 81 300")
+        let latest = try HotspotLease(record: "AP 12ABCDEF Pocket-Latest A1B2C3D4E5F6 192.0.2.3 80 81 300")
+        model.beginDirectConnection()
+        model.useNearbyLease(first)
+        for _ in 0..<100 where io.joinCount == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(io.joinCount, 1)
+        model.useNearbyLease(middle)
+        model.useNearbyLease(latest)
+        XCTAssertTrue(model.isWorking)
+        XCTAssertFalse(model.canPrepareFiles)
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(io.joinCount, 1)
+        io.succeed(0)
+        for _ in 0..<100 where io.joinCount < 2 { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(io.joinedSSIDs, [first.ssid, latest.ssid])
+        XCTAssertEqual(io.leftSSIDs, [first.ssid])
+        XCTAssertTrue(model.isWorking)
+        model.pauseForBackground()
+        io.failAll()
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertNil(model.readerStatus)
+    }
+
+    @MainActor
+    func testBackgroundDrainsJoinOwnershipAndCleansLateAssociation() async throws {
+        let io = HeldAssociationIO()
+        let model = PocketModel(associationIO: io)
+        defer { model.pauseForBackground(); io.failAll() }
+        let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-Test A1B2C3D4E5F6 192.0.2.1 80 81 300")
+        model.beginDirectConnection()
+        model.useNearbyLease(lease)
+        for _ in 0..<100 where io.joinCount == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(io.joinCount, 1)
+        model.pauseForBackground()
+        XCTAssertTrue(model.isWorking)
+        model.useNearbyLease(lease) // A queued BLE lease must not join in the background.
+        XCTAssertTrue(model.isWorking)
+        model.resumeForForeground() // Foreground alone does not acquire a new association.
+        model.post("paused join")
+        io.succeed(0)
+        for _ in 0..<100 where io.leftSSIDs.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(io.leftSSIDs, [lease.ssid])
+        XCTAssertEqual(model.message, "paused join")
+        XCTAssertFalse(model.isWorking)
+        XCTAssertNil(model.readerStatus)
+        model.resumeForForeground()
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(io.joinCount, 1, "Foreground must not rejoin automatically")
+    }
+
+    @MainActor
+    func testAcceptingReaderClearsOldViewDataBeforePreferencesArrive() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        model.preferences = ReaderPreferences(fontSize: 3)
+        model.preferencesDirty = true
+        model.readerScreenImageData = Data([9])
+        model.mirror.apply(.preferences(ReaderPreferences(fontSize: 3)))
+        model.mirror.apply(.frame(seq: 7, capturedAt: Date(), data: Data([9])))
+        let connecting = Task { await model.verify(host: "reader.local", port: 80) }
+        defer { connecting.cancel() }
+        let status = try await heldRequest(0)
+        status.succeed(Data(#"{"version":"new","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
+        let prefs = try await heldRequest(1)
+        XCTAssertEqual(model.readerStatus?.version, "new")
+        XCTAssertNil(model.preferences)
+        XCTAssertFalse(model.preferencesDirty)
+        XCTAssertNil(model.readerScreenImageData)
+        XCTAssertNil(model.mirror.state.preferences)
+        XCTAssertNil(model.mirror.state.latestFrame)
+        XCTAssertTrue(model.isWorking)
+        prefs.succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":2}"#.utf8))
+        await connecting.value
+        XCTAssertEqual(model.preferences?.fontSize, 2)
+        XCTAssertEqual(model.mirror.state.preferences?.fontSize, 2)
+        XCTAssertFalse(model.isWorking)
+    }
+
+    @MainActor
+    func testForegroundRestartsOneHeartbeatForExistingLANReader() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        let statusData = Data(#"{"version":"1.6.6","device":"X3","deviceID":"test-reader","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8)
+        let connecting = Task { await model.verify(host: "reader.local", port: 80) }
+        defer { connecting.cancel() }
+        let status = try await heldRequest(0)
+        status.succeed(statusData)
+        let prefs = try await heldRequest(1)
+        prefs.succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#.utf8))
+        await connecting.value
+        model.pauseForBackground()
+        model.resumeForForeground()
+        model.resumeForForeground() // Duplicate scene notifications are inert.
+        let heartbeat = try await heldRequest(2, attempts: 1800)
+        XCTAssertEqual(heartbeat.request.url?.host, "reader.local")
+        XCTAssertEqual(heartbeat.request.url?.path, "/api/status")
+        XCTAssertEqual(heartbeat.request.httpMethod, "GET")
+        heartbeat.succeed(statusData)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 3)
+        XCTAssertEqual(model.readerStatus?.deviceID, "test-reader")
+        XCTAssertFalse(model.isWorking)
+    }
+
+    @MainActor
+    func testForegroundWithoutPriorSessionDoesNotDiscoverOrConnect() async throws {
+        let io = ControlledDiscoveryIO()
+        let model = PocketModel(discoveryIO: io)
+        model.resumeForForeground()
+        model.pauseForBackground()
+        model.resumeForForeground()
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertEqual(io.bonjourCalls, 0)
+        XCTAssertEqual(io.statusCalls, 0)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertFalse(model.isWorking)
+    }
+
+    @MainActor
+    func testReplacingVerificationCancelsOldRequestWithoutReleasingNewOwner() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        let old = Task { await model.verify(host: "old.local", port: 80) }
+        defer { old.cancel() }
+        let oldRequest = try await heldRequest(0)
+        let current = Task { await model.verify(host: "new.local", port: 80) }
+        defer { current.cancel() }
+        let currentRequest = try await heldRequest(1)
+        await old.value
+        XCTAssertTrue(oldRequest.wasStopped)
+        XCTAssertTrue(model.isWorking)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(currentRequest.request.url?.host, "new.local")
+        currentRequest.succeed(Data(#"{"version":"new","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
+        let prefs = try await heldRequest(2)
+        prefs.succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#.utf8))
+        await current.value
+        XCTAssertFalse(model.isWorking)
+        XCTAssertEqual(model.readerStatus?.version, "new")
+    }
+
+    @MainActor
+    func testBackgroundCancelsVerificationWithoutLateAcceptance() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        let pending = Task { await model.verify(host: "reader.local", port: 80) }
+        defer { pending.cancel() }
+        let request = try await heldRequest(0)
+        model.pauseForBackground()
+        let message = model.message
+        await pending.value
+        // URLSession can resume its cancelled async task before delivering
+        // URLProtocol.stopLoading on the protocol queue. Observe that callback
+        // separately, with a bounded deadline; cancellation must still reach I/O.
+        for _ in 0..<100 where !request.wasStopped {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(request.wasStopped)
+        XCTAssertFalse(model.isWorking)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(model.message, message)
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+    }
+
+    func testHTTPRequestsSerializePerHostAndCancelQueuedRequest() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let client = CrossPointClient(session: session)
+        let first = Task { try await client.save(preferences: ReaderPreferences(), host: "reader.local", port: 80) }
+        defer { first.cancel() }
+        let request = try await heldRequest(0)
+        let cancelled = Task { try await client.endDirectSession(host: "reader.local", port: 80) }
+        defer { cancelled.cancel() }
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+        cancelled.cancel()
+        do { try await cancelled.value; XCTFail("Queued cancellation must throw") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        let next = Task { try await client.save(preferences: ReaderPreferences(), host: "reader.local", port: 80) }
+        defer { next.cancel() }
+        request.succeed()
+        try await first.value
+        let nextRequest = try await heldRequest(1)
+        XCTAssertEqual(nextRequest.olderActiveRequests, 0)
+        XCTAssertEqual(nextRequest.request.url?.path, "/api/pocket/v1/preferences")
+        nextRequest.succeed()
+        try await next.value
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 2, "Cancelled request must never reach transport")
+    }
+
+    func testHTTPRequestsToDifferentHostsRemainConcurrent() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let client = CrossPointClient(session: session)
+        let first = Task { try await client.save(preferences: ReaderPreferences(), host: "first.local", port: 80) }
+        defer { first.cancel() }
+        let firstRequest = try await heldRequest(0)
+        let second = Task { try await client.save(preferences: ReaderPreferences(), host: "second.local", port: 80) }
+        defer { second.cancel() }
+        let secondRequest = try await heldRequest(1)
+        XCTAssertEqual(secondRequest.olderActiveRequests, 1)
+        firstRequest.succeed()
+        secondRequest.succeed()
+        try await first.value
+        try await second.value
+    }
+
+    func testActiveHTTPCancellationReleasesNextRequest() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let client = CrossPointClient(session: session)
+        let first = Task { try await client.save(preferences: ReaderPreferences(), host: "reader.local", port: 80) }
+        defer { first.cancel() }
+        let firstRequest = try await heldRequest(0)
+        let next = Task { try await client.endDirectSession(host: "reader.local", port: 80) }
+        defer { next.cancel() }
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+        first.cancel()
+        do { try await first.value; XCTFail("Active cancellation must throw") }
+        catch { XCTAssertTrue(error is CancellationError || (error as? URLError)?.code == .cancelled) }
+        let nextRequest = try await heldRequest(1)
+        XCTAssertTrue(firstRequest.wasStopped)
+        XCTAssertEqual(nextRequest.olderActiveRequests, 0)
+        nextRequest.succeed()
+        try await next.value
+    }
+
+    @MainActor
+    func testSettingsDrainsInFlightHeartbeatBeforeWrite() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        let connecting = Task { await model.verify(host: "127.0.0.1", port: 80) }
+        defer { connecting.cancel() }
+        let status = try await heldRequest(0)
+        status.succeed(Data(#"{"version":"1.6.6","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
+        let prefs = try await heldRequest(1)
+        prefs.succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#.utf8))
+        await connecting.value
+        XCTAssertNotNil(model.preferences)
+        // Exercise the shipping 15-second heartbeat, not a substitute scheduler.
+        let heartbeat = try await heldRequest(2, attempts: 1800)
+        XCTAssertEqual(heartbeat.request.url?.path, "/api/status")
+        model.savePreferences()
+        let write = try await heldRequest(3)
+        XCTAssertTrue(heartbeat.wasStopped)
+        XCTAssertEqual(write.olderActiveRequests, 0, "Write must start only after background I/O is drained")
+        XCTAssertEqual(write.request.httpMethod, "POST")
+        write.succeed()
+        for _ in 0..<100 where model.isWorking {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertEqual(model.messageTone, .success)
+    }
+
+    @MainActor
+    func testContentApplyCompletesAlreadyActiveRevisionWithoutUploading() async throws {
+        try await checkAlreadyActiveContent(presentationPhase: nil)
+    }
+
+    @MainActor
+    func testContentApplyConfirmsRedrawWithoutEndingSessionOrUploading() async throws {
+        try await checkAlreadyActiveContent(presentationPhase: "rendered")
+    }
+
+    @MainActor
+    func testContentRedrawFailurePreservesActivationWithoutResending() async throws {
+        try await checkAlreadyActiveContent(presentationPhase: "failed")
+    }
+
+    @MainActor
+    private func checkAlreadyActiveContent(presentationPhase: String?) async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        let connecting = Task { await model.verify(host: "127.0.0.1", port: 80) }
+        defer { connecting.cancel() }
+        let status = try await heldRequest(0)
+        status.succeed(try JSONSerialization.data(withJSONObject: [
+            "version": "1.6.6", "device": "X3", "deviceID": "1234ABCD", "uploadStreamPort": 82,
+            "ip": "127.0.0.1", "mode": "STA", "rssi": -60, "freeHeap": 12000, "uptime": 1,
+            "contentPresentation": presentationPhase != nil
+        ]))
+        let prefs = try await heldRequest(1)
+        prefs.succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#.utf8))
+        await connecting.value
+
+        let target = try ContentRevision(cards: [.init(id: "a", title: "A", question: "Text")])
+        model.applyContent(target)
+        XCTAssertTrue(model.isWorking)
+        XCTAssertTrue(model.isTransferring)
+        let state = try await heldRequest(2)
+        XCTAssertEqual(state.request.url?.path, "/api/pocket/v1/content/state")
+        XCTAssertEqual(state.olderActiveRequests, 0)
+        state.succeed(try JSONSerialization.data(withJSONObject: [
+            "schema": 1, "deviceID": "1234ABCD", "capabilities": 3,
+            "active": ["revision": target.revision, "generation": 1]
+        ]))
+        if let presentationPhase {
+            let present = try await heldRequest(3)
+            XCTAssertEqual(present.request.httpMethod, "POST")
+            XCTAssertEqual(present.request.url?.path, "/api/pocket/v1/content/present")
+            XCTAssertEqual(present.olderActiveRequests, 0)
+            XCTAssertTrue(model.isWorking)
+            present.succeed(try JSONSerialization.data(withJSONObject: [
+                "schema": 1, "deviceID": "1234ABCD", "revision": target.revision,
+                "generation": 1, "phase": "queued"
+            ]))
+            // Production presentation polling is deliberately paced at 2s.
+            let paintState = try await heldRequest(4, attempts: 350)
+            XCTAssertEqual(paintState.request.httpMethod, "GET")
+            XCTAssertEqual(paintState.request.url?.path, "/api/pocket/v1/content/presentation")
+            XCTAssertEqual(paintState.olderActiveRequests, 0)
+            XCTAssertTrue(model.isWorking)
+            paintState.succeed(try JSONSerialization.data(withJSONObject: [
+                "schema": 1, "deviceID": "1234ABCD", "revision": target.revision,
+                "generation": 1, "phase": presentationPhase
+            ]))
+        }
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertFalse(model.isTransferring)
+        XCTAssertEqual(model.contentDeployment?.phase, .complete(.init(revision: target.revision, generation: 1)))
+        XCTAssertEqual(model.messageTone, presentationPhase == "failed" ? .pending : .success)
+        if presentationPhase == "failed" {
+            XCTAssertTrue(model.message.contains("Nothing was resent"))
+        } else if presentationPhase == "rendered" {
+            XCTAssertTrue(model.message.contains("completed redraw"))
+        } else {
+            XCTAssertTrue(model.message.contains("screen display is not yet confirmed"))
+        }
+        XCTAssertNotNil(model.readerStatus)
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, presentationPhase == nil ? 3 : 5,
+                       "No staging, upload, reactivation or session termination is permitted")
+    }
+
+    private func heldRequest(_ index: Int, attempts: Int = 100) async throws -> HeldReaderURLProtocol {
+        for _ in 0..<attempts where HeldReaderURLProtocol.requests.count <= index {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return try XCTUnwrap(HeldReaderURLProtocol.requests.dropFirst(index).first)
+    }
+
+    @MainActor
+    func testInFlightSettingsCancellationCannotReleaseNewOperation() async throws {
+        try await checkInFlightOperationCancellation(preview: false)
+    }
+
+    @MainActor
+    func testInFlightPreviewCancellationCannotReleaseNewOperation() async throws {
+        try await checkInFlightOperationCancellation(preview: true)
+    }
+
+    @MainActor
+    private func checkInFlightOperationCancellation(preview: Bool) async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.6.6","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
+        model.preferences = ReaderPreferences()
+        model.preferencesDirty = true
+        if preview { model.loadReaderPreview() } else { model.savePreferences() }
+        for _ in 0..<100 where HeldReaderURLProtocol.requests.count < 1 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let old = try XCTUnwrap(HeldReaderURLProtocol.requests.first)
+        XCTAssertEqual(old.request.httpMethod, preview ? "GET" : "POST")
+        XCTAssertTrue(model.isWorking)
+        let previousMessage = model.message
+
+        // No response has been delivered. Backgrounding cancels the actual
+        // URLSession request, but cannot admit a new write while it drains.
+        model.pauseForBackground()
+        model.savePreferences()
+        for _ in 0..<100 where model.isWorking || !old.wasStopped {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(old.wasStopped, "Background cancellation must reach URLSession")
+        XCTAssertFalse(model.isWorking)
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1, "No background write is allowed")
+        XCTAssertTrue(model.preferencesDirty)
+        XCTAssertEqual(model.message, previousMessage, "Old cancellation must not publish an error")
+        model.resumeForForeground()
+        model.savePreferences()
+        for _ in 0..<100 where HeldReaderURLProtocol.requests.count < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 2)
+        XCTAssertTrue(model.isWorking, "The new foreground operation owns its own lifetime")
+        XCTAssertTrue(model.preferencesDirty)
+        XCTAssertEqual(model.message, previousMessage, "Old cancellation must not publish an error")
+        let current = try XCTUnwrap(HeldReaderURLProtocol.requests.last)
+        XCTAssertFalse(current === old)
+        XCTAssertEqual(current.request.httpMethod, "POST")
+        current.succeed()
+        for _ in 0..<100 where model.isWorking {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertFalse(model.preferencesDirty)
+        XCTAssertEqual(model.messageTone, .success)
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 2)
+    }
+
+    @MainActor
+    func testSettingsReserveOwnershipBeforeTaskStarts() async throws {
+        RecoveryURLProtocol.configure([.success(Data())])
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RecoveryURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.6.6","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
+        model.preferences = ReaderPreferences()
+        model.preferencesDirty = true
+        model.savePreferences()
+        XCTAssertTrue(model.isWorking)
+        model.savePreferences()
+        model.loadReaderPreview()
+        // An edit made during the save must remain unsaved after its completion.
+        model.setFontSize(2)
+        for _ in 0..<100 where model.isWorking {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 1)
+        XCTAssertTrue(model.preferencesDirty)
+        XCTAssertEqual(model.messageTone, .success)
+        model.pauseForBackground()
+    }
+
+    @MainActor
+    func testBackgroundCancelsReservedSettingsBeforeNetworkStarts() async throws {
+        RecoveryURLProtocol.configure([])
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RecoveryURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.6.6","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
+        model.preferences = ReaderPreferences()
+        model.savePreferences()
+        model.pauseForBackground()
+        XCTAssertTrue(model.isWorking, "Cancelled work retains ownership until its task drains")
+        XCTAssertFalse(model.isTransferring, "Settings must not expose the file-transfer controls")
+        model.resumeForForeground()
+        model.savePreferences() // Cannot reserve a replacement before the old task drains.
+        for _ in 0..<100 where model.isWorking { await Task.yield() }
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 0)
+        XCTAssertFalse(model.isWorking)
+        model.pauseForBackground()
+    }
+
+    @MainActor
+    func testSettingsAndPreviewOwnSessionWithoutTransferControls() async throws {
+        for preview in [false, true] {
+            HeldReaderURLProtocol.reset()
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [HeldReaderURLProtocol.self]
+            let session = URLSession(configuration: config)
+            defer { session.invalidateAndCancel() }
+            let io = ControlledDiscoveryIO()
+            let model = PocketModel(discoveryIO: io, client: CrossPointClient(session: session))
+            defer { model.pauseForBackground() }
+            let status = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+                #"{"version":"test","device":"X3","ip":"reader.test","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
+            model.readerStatus = status
+            model.preferences = ReaderPreferences()
+            if preview { model.loadReaderPreview() }
+            else { model.savePreferences() }
+            let request = try await heldRequest(0)
+            XCTAssertTrue(model.isWorking)
+            XCTAssertFalse(model.isTransferring)
+            model.pauseTransfer() // The file-transfer action does not cancel settings or preview.
+            var verificationReturned = false
+            let verification = Task {
+                await model.verify(host: "must-not-contact.test", port: 80)
+                verificationReturned = true
+            }
+            defer { verification.cancel() }
+            for _ in 0..<100 where !verificationReturned { await Task.yield() }
+            XCTAssertTrue(verificationReturned, "Connection replacement must be refused before HTTP")
+            model.findOnLocalNetwork(retryIfMissing: false)
+            model.savePreferences()
+            model.loadReaderPreview()
+            XCTAssertEqual(io.bonjourCalls, 0)
+            XCTAssertEqual(io.statusCalls, 0)
+            XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+            XCTAssertFalse(request.wasStopped)
+            XCTAssertEqual(model.readerStatus, status)
+            model.pauseForBackground()
+            for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertTrue(request.wasStopped)
+            XCTAssertFalse(model.isWorking)
+            XCTAssertFalse(model.isTransferring)
+        }
+    }
+
+    @MainActor
+    func testEmptyDiscoveryFinishesWithoutNetworkAndRetriesOnce() async throws {
+        let io = ControlledDiscoveryIO()
+        let model = PocketModel(discoveryIO: io)
+        model.findOnLocalNetwork()
+        for _ in 0..<150 where !model.message.hasPrefix("No Pocket reader was visible") {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(io.bonjourCalls, 2)
+        XCTAssertEqual(io.statusCalls, 0)
+        XCTAssertFalse(model.isWorking)
+        XCTAssertEqual(model.messageTone, .failure)
+        XCTAssertTrue(model.message.contains("Join a Network"))
+        XCTAssertTrue(model.message.contains("Same Wi-Fi"))
+        XCTAssertTrue(model.message.contains("Direct connection"))
+    }
+
+    @MainActor
+    func testDiscoveryOwnsRetryDelayAndBackgroundCancelsSecondPass() async throws {
+        let io = ControlledDiscoveryIO()
+        let model = PocketModel(discoveryIO: io)
+        defer { model.pauseForBackground() }
+        model.findOnLocalNetwork()
+        for _ in 0..<100 where !model.message.hasPrefix("Reader not ready yet") {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(model.message.hasPrefix("Reader not ready yet"))
+        XCTAssertEqual(io.bonjourCalls, 1)
+        XCTAssertTrue(model.isWorking, "The retry delay is part of the active search")
+        model.startConnectionSearch() // Duplicate action must not replace the pending search.
+        XCTAssertEqual(io.bonjourCalls, 1)
+        model.pauseForBackground()
+        model.post("paused retry")
+        try await Task.sleep(for: .milliseconds(900))
+        XCTAssertEqual(io.bonjourCalls, 1)
+        XCTAssertEqual(io.statusCalls, 0)
+        XCTAssertEqual(model.message, "paused retry")
+        XCTAssertFalse(model.isWorking)
+        XCTAssertNil(model.readerStatus)
+    }
+
+    @MainActor
+    func testDuplicateDiscoveryCannotReplaceActiveAttempt() async throws {
+        let io = ControlledDiscoveryIO(delay: .milliseconds(200))
+        let model = PocketModel(discoveryIO: io)
+        model.findOnLocalNetwork(retryIfMissing: false)
+        try await Task.sleep(for: .milliseconds(20))
+        model.findOnLocalNetwork(retryIfMissing: false)
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertTrue(model.isWorking, "Duplicate discovery must not release active work")
+        XCTAssertEqual(io.bonjourCalls, 1)
+        XCTAssertFalse(model.message.hasPrefix("No Pocket reader was visible"))
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertFalse(model.isWorking)
+        XCTAssertTrue(model.message.hasPrefix("No Pocket reader was visible"))
+    }
+
+    @MainActor
+    func testDiscoveryReservesAdmissionAndDrainsNonCooperativeBonjour() async throws {
+        let io = ControlledDiscoveryIO()
+        io.holdBonjour = true
+        io.endpoint = ("late-discovery.test", 80)
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(discoveryIO: io, client: CrossPointClient(session: session))
+        defer { model.pauseForBackground(); io.releaseBonjour() }
+        model.findOnLocalNetwork(retryIfMissing: false)
+        XCTAssertTrue(model.isWorking, "Reserve before any scheduled discovery work starts")
+        XCTAssertFalse(model.isTransferring)
+        XCTAssertFalse(model.canPrepareFiles)
+        model.enterDemoMode()
+        XCTAssertFalse(model.isDemoMode)
+        for _ in 0..<100 where io.bonjourCalls == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(io.bonjourCalls, 1)
+        model.pauseForBackground()
+        model.resumeForForeground()
+        model.post("waiting for old discovery")
+        model.findOnLocalNetwork(retryIfMissing: false)
+        await model.verify(host: "must-not-contact.test", port: 80)
+        model.endConnection()
+        XCTAssertTrue(model.isWorking, "Cancellation must not release a provider that has not returned")
+        XCTAssertEqual(io.bonjourCalls, 1)
+        XCTAssertTrue(HeldReaderURLProtocol.requests.isEmpty)
+        io.releaseBonjour()
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(model.message, "waiting for old discovery")
+        XCTAssertEqual(io.statusCalls, 0, "A late Bonjour endpoint must not start another probe after cancellation")
+        io.endpoint = nil
+        model.findOnLocalNetwork(retryIfMissing: false)
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(io.bonjourCalls, 2)
+        XCTAssertFalse(model.isWorking)
+        XCTAssertTrue(model.message.hasPrefix("No Pocket reader was visible"))
+        XCTAssertTrue(HeldReaderURLProtocol.requests.isEmpty)
+    }
+
+    @MainActor
+    func testBackgroundCancelsDiscoveryWithoutLateMessage() async throws {
+        let io = ControlledDiscoveryIO(delay: .milliseconds(200))
+        let model = PocketModel(discoveryIO: io)
+        model.findOnLocalNetwork(retryIfMissing: false)
+        try await Task.sleep(for: .milliseconds(20))
+        model.pauseForBackground()
+        model.post("background marker")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertFalse(model.isWorking)
+        XCTAssertEqual(model.message, "background marker")
+        XCTAssertEqual(io.statusCalls, 0)
+    }
+
+    @MainActor
+    func testLateBonjourStatusCannotReconnectAfterBackground() async throws {
+        let io = ControlledDiscoveryIO()
+        io.endpoint = ("192.0.2.1", 80)
+        io.statusDelay = .milliseconds(200)
+        io.response = try JSONDecoder().decode(CrossPointStatus.self, from: Data("""
+        {"version":"test","ip":"192.0.2.1","mode":"STA","rssi":-40,
+         "freeHeap":20000,"uptime":100,"device":"X3","deviceID":"test-reader"}
+        """.utf8))
+        let model = PocketModel(discoveryIO: io)
+        model.findOnLocalNetwork(retryIfMissing: false)
+        for _ in 0..<50 where io.statusCalls == 0 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(io.statusCalls, 1)
+        model.pauseForBackground()
+        model.post("background marker")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(model.message, "background marker")
+        XCTAssertFalse(model.isWorking)
+    }
+
+    @MainActor
     func testDirectSessionCanPrepareAgainAfterRemovingQueue() async throws {
         let model = PocketModel()
         guard model.preparedTransfers.isEmpty else {
@@ -511,6 +1352,73 @@ final class NearbySyncProtocolTests: XCTestCase {
     }
 }
 
+@MainActor
+private final class ControlledDiscoveryIO: ReaderDiscoveryIO {
+    var rememberedHost: String? { nil }
+    var bonjourCalls = 0
+    var statusCalls = 0
+    let delay: Duration
+    var endpoint: (host: String, port: Int)?
+    var statusDelay: Duration = .zero
+    var response: CrossPointStatus?
+    var holdBonjour = false
+    private var heldBonjour: CheckedContinuation<Void, Never>?
+
+    init(delay: Duration = .zero) { self.delay = delay }
+    func candidates() -> [String] { [] }
+    func firstBonjour(timeout: Duration) async -> (host: String, port: Int)? {
+        bonjourCalls += 1
+        if holdBonjour { await withCheckedContinuation { heldBonjour = $0 } }
+        try? await Task.sleep(for: delay)
+        return endpoint
+    }
+    func stop() {}
+    func releaseBonjour() {
+        holdBonjour = false
+        heldBonjour?.resume()
+        heldBonjour = nil
+    }
+    func status(host: String, port: Int, timeout: TimeInterval) async throws -> CrossPointStatus {
+        statusCalls += 1
+        try? await Task.sleep(for: statusDelay)
+        if let response { return response }
+        throw URLError(.cannotConnectToHost)
+    }
+}
+
+@MainActor
+private final class HeldAssociationIO: ReaderAssociationIO {
+    private(set) var joinCount = 0
+    private(set) var joinedSSIDs: [String] = []
+    private(set) var leftSSIDs: [String] = []
+    var holdLeave = false
+    private var leaving: CheckedContinuation<Void, Never>?
+    private var pending: [Int: CheckedContinuation<Void, Error>] = [:]
+
+    func join(_ lease: HotspotLease) async throws {
+        let index = joinCount
+        joinCount += 1
+        joinedSSIDs.append(lease.ssid)
+        try await withCheckedThrowingContinuation { pending[index] = $0 }
+    }
+    func leave(ssid: String) async {
+        leftSSIDs.append(ssid)
+        if holdLeave { await withCheckedContinuation { leaving = $0 } }
+    }
+    func releaseLeave() {
+        holdLeave = false
+        leaving?.resume()
+        leaving = nil
+    }
+    func succeed(_ index: Int) { pending.removeValue(forKey: index)?.resume() }
+    func failAll() {
+        releaseLeave()
+        let waiters = Array(pending.values)
+        pending.removeAll()
+        for waiter in waiters { waiter.resume(throwing: URLError(.cannotConnectToHost)) }
+    }
+}
+
 private final class ScreenPreviewURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var payload = Data()
     nonisolated(unsafe) static var requestedOffsets: [Int] = []
@@ -558,16 +1466,22 @@ private final class FakeUploadReader: @unchecked Sendable {
     private var readyContinuation: CheckedContinuation<UInt16, Error>?
     private(set) var header = ""
     private let expectedPayload: Int
+    private let flowPrefix: Int?
+    private var acknowledgedPayload = 0
+    private var ackScheduled = false
+    private(set) var flowViolation = false
     private let onHeader: @Sendable (String) -> Data?
     private let onPayload: @Sendable (Data) -> Data?
 
     init(
         expectedPayload: Int,
+        flowPrefix: Int? = nil,
         onHeader: @escaping @Sendable (String) -> Data?,
         onPayload: @escaping @Sendable (Data) -> Data?
     ) throws {
         listener = try NWListener(using: .tcp, on: .any)
         self.expectedPayload = expectedPayload
+        self.flowPrefix = flowPrefix
         self.onHeader = onHeader
         self.onPayload = onPayload
     }
@@ -623,6 +1537,18 @@ private final class FakeUploadReader: @unchecked Sendable {
                 connection.send(content: reply, completion: .contentProcessed { _ in })
             }
         }
+        if headerHandled, let prefix = flowPrefix {
+            if buffer.count - acknowledgedPayload > 4096 { flowViolation = true }
+            if buffer.count < expectedPayload, buffer.count - acknowledgedPayload == 4096, !ackScheduled {
+                ackScheduled = true
+                queue.asyncAfter(deadline: .now() + .milliseconds(1)) { [self] in
+                    acknowledgedPayload = buffer.count
+                    ackScheduled = false
+                    let ack = Data("ACK \(prefix + acknowledgedPayload)\n".utf8)
+                    connection.send(content: ack, completion: .contentProcessed { _ in })
+                }
+            }
+        }
         if headerHandled, !payloadHandled, buffer.count >= expectedPayload {
             payloadHandled = true
             if let reply = onPayload(buffer) {
@@ -633,6 +1559,181 @@ private final class FakeUploadReader: @unchecked Sendable {
 }
 
 extension NearbySyncProtocolTests {
+    private func recoveryClient(_ replies: [Result<Data, URLError>]) -> CrossPointClient {
+        RecoveryURLProtocol.configure(replies)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RecoveryURLProtocol.self]
+        return CrossPointClient(session: URLSession(configuration: config))
+    }
+
+    private var recoveryStatus: Data {
+        Data(#"{"version":"test","ip":"127.0.0.1","mode":"STA","rssi":-50,"freeHeap":8000,"uptime":1,"device":"X3","deviceID":"12345678","uploadStreamWindow":4096}"#.utf8)
+    }
+
+    func testLANRecoveryWaitsForReaderBeforeResuming() async throws {
+        let client = recoveryClient([.failure(URLError(.timedOut)), .failure(URLError(.cannotConnectToHost)), .success(recoveryStatus)])
+        try await client.waitForReader(host: "reader.test", port: 80, expectedDeviceID: "12345678",
+                                       recoveryBudget: .seconds(2), probeSpacing: .zero)
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 3)
+        let decoded = try JSONDecoder().decode(CrossPointStatus.self, from: recoveryStatus)
+        XCTAssertEqual(decoded.uploadStreamWindow, 4096)
+    }
+
+    func testRecoveryRejectsAddressReassignedToAnotherReader() async throws {
+        let client = recoveryClient([.success(recoveryStatus)])
+        do {
+            try await client.waitForReader(host: "reader.test", port: 80, expectedDeviceID: "87654321",
+                                           recoveryBudget: .seconds(2), probeSpacing: .zero)
+            XCTFail("must not resume onto another reader")
+        } catch let error as CrossPointClient.ClientError {
+            guard case .unexpectedMessage = error else { return XCTFail("wrong error: \(error)") }
+        }
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 1)
+    }
+
+    func testRecoveryDoesNotRetryMalformedStatus() async throws {
+        let client = recoveryClient([.success(Data("{}".utf8))])
+        do {
+            try await client.waitForReader(host: "reader.test", port: 80, expectedDeviceID: nil,
+                                           recoveryBudget: .seconds(2), probeSpacing: .zero)
+            XCTFail("malformed response must fail")
+        } catch is DecodingError { }
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 1)
+    }
+
+    func testRecoveryBudgetCanExpireWithoutOpeningAnotherSocket() async throws {
+        let client = recoveryClient([])
+        do {
+            try await client.waitForReader(host: "reader.test", port: 80, expectedDeviceID: nil,
+                                           recoveryBudget: .zero, probeSpacing: .zero)
+            XCTFail("expired budget must fail")
+        } catch let error as PocketStreamUploader.StreamError {
+            XCTAssertEqual(error, .stalled)
+        }
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 0)
+    }
+
+    func testFlowControlledFirmwareWaitsForSDCreditAcrossSixMegabytes() async throws {
+        let (url, payload) = try makePayloadFile(bytes: 6 * 1024 * 1024 + 17)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let prefix = 131_077 // non-aligned retained prefix, plus a short final block
+        var crc = CRC32()
+        crc.update(payload)
+        let expectedCRC = crc.finalized
+        let reader = try FakeUploadReader(
+            expectedPayload: payload.count - prefix, flowPrefix: prefix,
+            onHeader: { _ in Data("RESUME \(prefix)\n".utf8) },
+            onPayload: { received in
+                received == payload[prefix...]
+                    ? Data("OK \(payload.count) \(String(format: "%08X", expectedCRC))\n".utf8)
+                    : Data("ERROR payload mismatch\n".utf8)
+            }
+        )
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let started = ContinuousClock.now
+        let lastProgress = LockedBox((bytes: Int64(0), at: started))
+        let uploader = try PocketStreamUploader(
+            fileURL: url, host: "127.0.0.1", port: Int(port), remotePath: "/.pocket-flow.part",
+            total: Int64(payload.count), flowControl: true
+        ) { bytes, _ in lastProgress.set((bytes: bytes, at: ContinuousClock.now)) }
+        let result: UInt32
+        do {
+            result = try await uploader.upload()
+        } catch {
+            // Keep failure evidence bounded and local: offsets and durations,
+            // never file bytes. Do not relax timeouts or silently retry a stall.
+            let progress = lastProgress.value
+            let now = ContinuousClock.now
+            XCTFail("Loopback flow upload failed: \(error); confirmed offset \(progress.bytes)/\(payload.count), elapsed \(now - started), since progress \(now - progress.at)")
+            return
+        }
+        XCTAssertEqual(result, expectedCRC)
+        XCTAssertFalse(reader.flowViolation, "sender exceeded the reader's 4 KiB credit")
+        XCTAssertTrue(reader.header.contains("Window: 4096"))
+        XCTAssertTrue(reader.header.contains("Resume: 1"))
+    }
+
+    func testFlowControlRejectsUnsentAcknowledgement() async throws {
+        let (url, payload) = try makePayloadFile(bytes: 9000)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let reader = try FakeUploadReader(expectedPayload: .max,
+            onHeader: { _ in Data("RESUME 0\nACK 8192\n".utf8) }, onPayload: { _ in nil })
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let uploader = try PocketStreamUploader(fileURL: url, host: "127.0.0.1", port: Int(port),
+            remotePath: "/.pocket-flow.part", total: Int64(payload.count), flowControl: true) { _, _ in }
+        do {
+            _ = try await uploader.upload()
+            XCTFail("An ACK for unsent bytes must not grant credit")
+        } catch let error as PocketStreamUploader.StreamError {
+            XCTAssertEqual(error, .invalidResponse("ACK 8192"))
+        }
+    }
+
+    func testLostFinalReplyCanResumeAtCompleteSizeWithoutResendingPayload() async throws {
+        let (url, payload) = try makePayloadFile(bytes: 8193)
+        defer { try? FileManager.default.removeItem(at: url) }
+        var crc = CRC32()
+        crc.update(payload)
+        let expectedCRC = crc.finalized
+        let reader = try FakeUploadReader(expectedPayload: 0,
+            onHeader: { _ in Data("RESUME \(payload.count)\n".utf8) },
+            onPayload: { bytes in
+                bytes.isEmpty ? Data("OK \(payload.count) \(String(format: "%08X", expectedCRC))\n".utf8) : nil
+            })
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let uploader = try PocketStreamUploader(fileURL: url, host: "127.0.0.1", port: Int(port),
+            remotePath: "/.pocket-complete.part", total: Int64(payload.count), flowControl: true) { _, _ in }
+        let result = try await uploader.upload()
+        XCTAssertEqual(result, expectedCRC)
+    }
+
+    func testFlowControlCancellationDoesNotWaitForMissingAck() async throws {
+        let (url, payload) = try makePayloadFile(bytes: 8192)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let firstBlock = expectation(description: "first block reached reader")
+        let reader = try FakeUploadReader(expectedPayload: 4096,
+            onHeader: { _ in Data("RESUME 0\n".utf8) },
+            onPayload: { _ in firstBlock.fulfill(); return nil })
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let uploader = try PocketStreamUploader(fileURL: url, host: "127.0.0.1", port: Int(port),
+            remotePath: "/.pocket-cancel.part", total: Int64(payload.count), flowControl: true) { _, _ in }
+        let task = Task { try await uploader.upload() }
+        await fulfillment(of: [firstBlock], timeout: 3)
+        let start = ContinuousClock.now
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("cancelled upload must stop")
+        } catch is CancellationError { }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1))
+    }
+
+    func testFlowControlCancellationDuringPacedWindow() async throws {
+        let (url, payload) = try makePayloadFile(bytes: 8192)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let firstFragment = expectation(description: "first paced fragment arrived")
+        let reader = try FakeUploadReader(expectedPayload: 512,
+            onHeader: { _ in Data("RESUME 0\n".utf8) },
+            onPayload: { _ in firstFragment.fulfill(); return nil })
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let uploader = try PocketStreamUploader(fileURL: url, host: "127.0.0.1", port: Int(port),
+            remotePath: "/.pocket-paced.part", total: Int64(payload.count), flowControl: true) { _, _ in }
+        let task = Task { try await uploader.upload() }
+        await fulfillment(of: [firstFragment], timeout: 3)
+        let start = ContinuousClock.now
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("scheduled fragments must not prevent cancellation")
+        } catch is CancellationError { }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1))
+    }
+
     private func makePayloadFile(bytes: Int) throws -> (URL, Data) {
         var generator = SystemRandomNumberGenerator()
         let payload = Data((0 ..< bytes).map { _ in UInt8.random(in: .min ... .max, using: &generator) })
@@ -694,6 +1795,8 @@ extension NearbySyncProtocolTests {
     }
 
     func testRetryPolicyRetriesTransportFailuresOnly() {
+        XCTAssertTrue(UploadRetryPolicy.shouldRetry(PocketStreamUploader.StreamError.readerRejected("Upload timed out"), attempt: 1))
+        XCTAssertTrue(UploadRetryPolicy.shouldRetry(PocketStreamUploader.StreamError.readerRejected("Upload disconnected"), attempt: 1))
         XCTAssertTrue(UploadRetryPolicy.shouldRetry(PocketStreamUploader.StreamError.disconnected, attempt: 1))
         XCTAssertTrue(UploadRetryPolicy.shouldRetry(PocketStreamUploader.StreamError.stalled, attempt: 2))
         XCTAssertTrue(UploadRetryPolicy.shouldRetry(URLError(.networkConnectionLost), attempt: 1))
@@ -708,9 +1811,9 @@ extension NearbySyncProtocolTests {
     }
 
     func testStreamUploaderResumesFromReaderPrefix() async throws {
-        let (url, payload) = try makePayloadFile(bytes: 100_000)
+        let (url, payload) = try makePayloadFile(bytes: 6 * 1024 * 1024)
         defer { try? FileManager.default.removeItem(at: url) }
-        let prefix = 40_000
+        let prefix = 131_072
         var whole = CRC32()
         whole.update(payload)
         let expectedCRC = whole.finalized
@@ -769,7 +1872,68 @@ private final class LockedBox<Value>: @unchecked Sendable {
     private var stored: Value
     init(_ value: Value) { stored = value }
     var value: Value { lock.withLock { stored } }
+    func set(_ value: Value) { lock.withLock { stored = value } }
     func setIfNil<Wrapped>(_ newValue: Wrapped) where Value == Wrapped? {
         lock.withLock { if stored == nil { stored = newValue } }
     }
+}
+
+/// Requests remain pending until the test releases them or URLSession cancels.
+/// No real sockets, device access, or scheduled response delay is involved.
+private final class HeldReaderURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var pending: [HeldReaderURLProtocol] = []
+    private var stopped = false
+    private var completed = false
+    private var activeAtStart = 0
+    var olderActiveRequests: Int { Self.lock.withLock { activeAtStart } }
+    static var requests: [HeldReaderURLProtocol] { lock.withLock { pending } }
+    var wasStopped: Bool { Self.lock.withLock { stopped } }
+    static func reset() { lock.withLock { pending = [] } }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.lock.withLock {
+            activeAtStart = Self.pending.filter { !$0.stopped && !$0.completed }.count
+            Self.pending.append(self)
+        }
+    }
+    override func stopLoading() { Self.lock.withLock { stopped = true } }
+    func succeed(_ data: Data = Data()) {
+        guard !wasStopped, let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: 200,
+                                             httpVersion: "HTTP/1.1", headerFields: nil) else { return }
+        Self.lock.withLock { completed = true }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+}
+
+private final class RecoveryURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var replies: [Result<Data, URLError>] = []
+    nonisolated(unsafe) private static var count = 0
+    static var requestCount: Int { lock.withLock { count } }
+    static func configure(_ values: [Result<Data, URLError>]) {
+        lock.withLock { replies = values; count = 0 }
+    }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let reply: Result<Data, URLError> = Self.lock.withLock {
+            Self.count += 1
+            return Self.replies.isEmpty ? .failure(URLError(.timedOut)) : Self.replies.removeFirst()
+        }
+        switch reply {
+        case let .failure(error): client?.urlProtocol(self, didFailWithError: error)
+        case let .success(data):
+            guard let url = request.url, let response = HTTPURLResponse(url: url, statusCode: 200,
+                httpVersion: "HTTP/1.1", headerFields: nil) else { return }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+    override func stopLoading() {}
 }

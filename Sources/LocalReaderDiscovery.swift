@@ -1,6 +1,52 @@
 import Darwin
 import Foundation
 
+/// The same discovery state machine uses real networking or controlled test IO.
+@MainActor
+protocol ReaderDiscoveryIO {
+    var rememberedHost: String? { get }
+    func candidates() -> [String]
+    func firstBonjour(timeout: Duration) async -> (host: String, port: Int)?
+    func stop()
+    func status(host: String, port: Int, timeout: TimeInterval) async throws -> CrossPointStatus
+}
+
+@MainActor
+final class LiveReaderDiscoveryIO: ReaderDiscoveryIO {
+    private let browser = LocalReaderDiscovery()
+    private let client: CrossPointClient
+    private let rememberedHostKey: String
+
+    init(client: CrossPointClient, rememberedHostKey: String) {
+        self.client = client
+        self.rememberedHostKey = rememberedHostKey
+    }
+
+    var rememberedHost: String? { UserDefaults.standard.string(forKey: rememberedHostKey) }
+    func candidates() -> [String] { ["192.168.4.1"] + LocalReaderDiscovery.localIPv4Candidates() }
+    func firstBonjour(timeout: Duration) async -> (host: String, port: Int)? {
+        await browser.first(timeout: timeout)
+    }
+    func stop() { browser.stop() }
+    func status(host: String, port: Int, timeout: TimeInterval) async throws -> CrossPointStatus {
+        try await client.status(host: host, port: port, timeout: timeout)
+    }
+}
+
+#if DEBUG
+/// UI automation must never assume that a user's physical LAN has no readers.
+@MainActor
+final class EmptyReaderDiscoveryIO: ReaderDiscoveryIO {
+    var rememberedHost: String? { nil }
+    func candidates() -> [String] { [] }
+    func firstBonjour(timeout: Duration) async -> (host: String, port: Int)? { nil }
+    func stop() {}
+    func status(host: String, port: Int, timeout: TimeInterval) async throws -> CrossPointStatus {
+        throw URLError(.cannotConnectToHost)
+    }
+}
+#endif
+
 @MainActor
 final class LocalReaderDiscovery: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
     private let browser = NetServiceBrowser()

@@ -5,14 +5,86 @@ import XCTest
 /// the `liveStudio` capability advertisement from `/api/status`
 /// (`docs/live-studio-v1.md` in the firmware repository).
 final class DeviceCoreTests: XCTestCase {
+    func testConnectionWorkerCancellationReachesDetachedOperation() async throws {
+        let started = expectation(description: "worker started")
+        let cancelled = expectation(description: "worker received cancellation")
+        let finished = expectation(description: "request finished")
+        let request = Task {
+            defer { finished.fulfill() }
+            do {
+                try await ConnectionWorker.run {
+                    try await withTaskCancellationHandler {
+                        started.fulfill()
+                        try await Task.sleep(for: .seconds(10))
+                    } onCancel: {
+                        cancelled.fulfill()
+                    }
+                }
+                XCTFail("Cancelled connection reported success")
+            } catch is CancellationError { }
+            catch { XCTFail("Unexpected error: \(error)") }
+        }
+        defer { request.cancel() }
+        await fulfillment(of: [started], timeout: 2)
+        request.cancel()
+        await fulfillment(of: [cancelled, finished], timeout: 2)
+        await request.value
+    }
+
+    private actor WorkerGate {
+        private var opened = false
+        private var waiter: CheckedContinuation<Void, Never>?
+        func wait() async {
+            if opened { return }
+            await withCheckedContinuation { waiter = $0 }
+        }
+        func open() {
+            opened = true
+            waiter?.resume()
+            waiter = nil
+        }
+    }
+
+    func testConnectionWorkerRejectsLateSuccessAndPrecancelledRequests() async throws {
+        let success = try await ConnectionWorker.run { 42 }
+        XCTAssertEqual(success, 42)
+        let gate = WorkerGate()
+        let started = expectation(description: "noninterruptible work started")
+        let request = Task {
+            try await ConnectionWorker.run {
+                started.fulfill()
+                await gate.wait() // Models a system call that ignores cancellation.
+                return 42
+            }
+        }
+        await fulfillment(of: [started], timeout: 2)
+        request.cancel()
+        await gate.open()
+        do { _ = try await request.value; XCTFail("Late success accepted") }
+        catch is CancellationError { }
+        catch { XCTFail("Unexpected error: \(error)") }
+
+        let beforeStart = WorkerGate()
+        let cancelledRequest = Task {
+            await beforeStart.wait()
+            try await ConnectionWorker.run { XCTFail("Cancelled operation started") }
+        }
+        cancelledRequest.cancel()
+        await beforeStart.open()
+        do { try await cancelledRequest.value; XCTFail("Precancelled request accepted") }
+        catch is CancellationError { }
+        catch { XCTFail("Unexpected error: \(error)") }
+    }
+
     private func status(
         device: String = "X3",
         deviceID: String? = "ABCD1234",
+        freeHeap: Int = 90_000,
         liveStudio: LiveStudioAdvertisement? = nil
     ) -> CrossPointStatus {
         CrossPointStatus(
             version: "1.4.1", ip: "192.168.68.10", mode: "STA", rssi: -55,
-            freeHeap: 90_000, uptime: 120, device: device,
+            freeHeap: freeHeap, uptime: 120, device: device,
             crashReportAvailable: false, crashReportBytes: 0,
             screenPreviewAvailable: false, screenPreviewBytes: 0,
             uploadChunkBytes: nil, uploadStreamPort: 82, uploadStreamResume: true,
@@ -27,6 +99,19 @@ final class DeviceCoreTests: XCTestCase {
         let state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
         XCTAssertEqual(state.phase, .connected)
         XCTAssertEqual(state.status?.version, "1.4.1")
+    }
+
+    func testNewLegacySessionClearsSnapshotEvenWithoutDistinctIdentity() {
+        var state = DeviceStateReducer.apply(.status(status(deviceID: nil)), to: DeviceState())
+        state = DeviceStateReducer.apply(.frame(seq: 7, capturedAt: Date(), data: Data([9])), to: state)
+        state = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: state)
+        state = DeviceStateReducer.apply(.transferProgress(0.5), to: state)
+        state = DeviceStateReducer.apply(.sessionStarted(status(deviceID: nil)), to: state)
+        XCTAssertEqual(state.phase, .connected)
+        XCTAssertNil(state.latestFrame)
+        XCTAssertNil(state.preferences)
+        XCTAssertNil(state.transferProgress)
+        XCTAssertEqual(state.frameSequence, 7)
     }
 
     func testFrameEventReplacesLatestAndAdvancesSequence() {
@@ -53,12 +138,15 @@ final class DeviceCoreTests: XCTestCase {
         )
         state = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: state)
         state = DeviceStateReducer.apply(.transferProgress(0.5), to: state)
+        state = DeviceStateReducer.apply(.packStateChanged(activePack: "old", version: "1"), to: state)
         state = DeviceStateReducer.apply(.connection(.disconnected), to: state)
         XCTAssertEqual(state.phase, .disconnected)
         XCTAssertNil(state.status)
         XCTAssertNil(state.preferences)
         XCTAssertNil(state.latestFrame)
         XCTAssertNil(state.transferProgress)
+        XCTAssertNil(state.activePack)
+        XCTAssertNil(state.activePackVersion)
         // Preferences survive when a disconnect did not happen.
         var kept = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: DeviceState())
         kept = DeviceStateReducer.apply(.connection(.connected), to: kept)
@@ -74,6 +162,51 @@ final class DeviceCoreTests: XCTestCase {
         let cleared = DeviceStateReducer.apply(.packStateChanged(activePack: nil, version: nil), to: state)
         XCTAssertNil(cleared.activePack)
         XCTAssertNil(cleared.activePackVersion)
+    }
+
+    func testStatusRefreshUpdatesPackWithoutDiscardingSameReaderFrame() {
+        var state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
+        state = DeviceStateReducer.apply(.frame(seq: 2, capturedAt: Date(), data: Data([9])), to: state)
+        let advertisement = LiveStudioAdvertisement(wsPort: nil, mode: "poll", frameStream: false,
+            uiPacks: true, activePack: "new-pack", activePackVersion: "2")
+        state = DeviceStateReducer.apply(.status(status(liveStudio: advertisement)), to: state)
+        XCTAssertEqual(state.activePack, "new-pack")
+        XCTAssertEqual(state.activePackVersion, "2")
+        XCTAssertEqual(state.latestFrame?.data, Data([9]))
+        state = DeviceStateReducer.apply(.status(status()), to: state)
+        XCTAssertNil(state.activePack)
+        XCTAssertNil(state.activePackVersion)
+    }
+
+    func testChangedIdentityClearsPreviousReaderDerivedState() {
+        var state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
+        state = DeviceStateReducer.apply(.frame(seq: 7, capturedAt: Date(), data: Data([9])), to: state)
+        state = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: state)
+        state = DeviceStateReducer.apply(.transferProgress(0.5), to: state)
+        state = DeviceStateReducer.apply(.packStateChanged(activePack: "old", version: "1"), to: state)
+        for replacement in [status(deviceID: "DIFFERENT"), status(deviceID: nil), status(device: "X4")] {
+            let next = DeviceStateReducer.apply(.status(replacement), to: state)
+            XCTAssertEqual(next.status, replacement)
+            XCTAssertEqual(next.phase, .connected)
+            XCTAssertNil(next.latestFrame)
+            XCTAssertNil(next.preferences)
+            XCTAssertNil(next.transferProgress)
+            XCTAssertNil(next.activePack)
+            XCTAssertNil(next.activePackVersion)
+            XCTAssertEqual(next.frameSequence, 7)
+        }
+    }
+
+    func testNonconnectedPhasesClearPackAndStatus() {
+        var state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
+        state = DeviceStateReducer.apply(.packStateChanged(activePack: "old", version: "1"), to: state)
+        for phase in [DeviceConnectionPhase.idle, .searching, .waitingForReader, .disconnected] {
+            let next = DeviceStateReducer.apply(.connection(phase), to: state)
+            XCTAssertEqual(next.phase, phase)
+            XCTAssertNil(next.status)
+            XCTAssertNil(next.activePack)
+            XCTAssertNil(next.activePackVersion)
+        }
     }
 
     @MainActor
@@ -126,7 +259,44 @@ final class DeviceCoreTests: XCTestCase {
         )
     }
 
+    func testAdvertisedListenerDoesNotOverrideCurrentMemoryAdmission() {
+        let live = LiveStudioAdvertisement(
+            wsPort: 81, mode: "push", frameStream: true, uiPacks: true,
+            activePack: nil, activePackVersion: nil
+        )
+        for heap in [0, 10_624, 12_056, SyncModePolicy.minimumPushFreeHeap - 1] {
+            let reader = status(freeHeap: heap, liveStudio: live)
+            XCTAssertEqual(SyncModePolicy.syncMode(status: reader), .poll)
+        }
+        let reader = status(freeHeap: SyncModePolicy.minimumPushFreeHeap, liveStudio: live)
+        XCTAssertEqual(SyncModePolicy.syncMode(status: reader), .push(wsPort: 81))
+    }
+
     // MARK: Advertisement decoding
+
+    func testDedicatedSyncAdvertisementKeepsBothBearersPollOnly() throws {
+        for mode in ["STA", "AP"] {
+            for hardware in ["X3", "X4"] {
+                let json = """
+                {"version":"test","ip":"192.0.2.1","mode":"\(mode)",
+                 "device":"\(hardware)","rssi":-50,"freeHeap":90000,"uptime":1,
+                 "deviceID":"1234ABCD","contentPresentation":true,
+                 "diagnosticsAffordable":false,"screenPreviewAvailable":false,
+                 "crashReportAvailable":false,"uploadStreamPort":82,
+                 "uploadStreamResume":true,"uploadStreamWindow":4096,
+                 "liveStudio":{"mode":"poll","frameStream":false,"uiPacks":true}}
+                """
+                let decoded = try JSONDecoder().decode(CrossPointStatus.self, from: Data(json.utf8))
+                XCTAssertEqual(SyncModePolicy.syncMode(status: decoded), .poll)
+                XCTAssertFalse(ReaderDiagnosticsPolicy.canFetchDiagnostics(
+                    freeHeap: decoded.freeHeap, readerSaysAffordable: decoded.diagnosticsAffordable))
+                XCTAssertEqual(decoded.contentPresentation, true)
+                XCTAssertEqual(decoded.uploadStreamPort, 82)
+                XCTAssertEqual(decoded.uploadStreamWindow, 4096)
+                XCTAssertEqual(decoded.liveStudio?.uiPacks, true)
+            }
+        }
+    }
 
     func testLegacyStatusDecodesWithoutLiveStudio() {
         let json = """

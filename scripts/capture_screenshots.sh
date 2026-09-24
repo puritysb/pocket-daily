@@ -13,14 +13,25 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Overrides accept a simulator name or exact UDID. Use UDIDs when several
+# installed runtimes contain the same model name and a pinned run is needed.
 IPHONE_NAME="${POCKET_IPHONE_SIMULATOR:-iPhone 17 Pro Max}"
 IPAD_NAME="${POCKET_IPAD_SIMULATOR:-iPad Pro 13-inch (M5)}"
+DERIVED_DATA="${POCKET_SCREENSHOT_DERIVED_DATA:-.build/screenshots}"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+finish() {
+  local status=$?
+  if (( status == 0 )); then
+    rm -rf "$WORK"
+  else
+    echo "Capture failed; diagnostic result bundles retained at $WORK" >&2
+  fi
+}
+trap finish EXIT
 
 simulator_udid() {
   xcrun simctl list devices available -j | \
-    jq -r --arg name "$1" '.devices[][] | select(.name == $name) | .udid' | head -1
+    jq -r --arg name "$1" '.devices[][] | select(.name == $name or .udid == $name) | .udid' | head -1
 }
 
 capture_ios() {
@@ -33,7 +44,7 @@ capture_ios() {
     --wifiBars 3 --cellularBars 4 >/dev/null
   xcodebuild test \
     -project Pocket.xcodeproj -scheme Pocket -destination "id=$udid" \
-    -derivedDataPath .build/screenshots -resultBundlePath "$WORK/$folder.xcresult" \
+    -derivedDataPath "$DERIVED_DATA" -resultBundlePath "$WORK/$folder.xcresult" \
     -only-testing:PocketUITests CODE_SIGNING_ALLOWED=NO -quiet
   xcrun simctl status_bar "$udid" clear >/dev/null
   xcrun simctl shutdown "$udid" >/dev/null
@@ -46,7 +57,7 @@ capture_mac() {
   # PocketMacTests hosts the shipping views in an off-screen window instead.
   xcodebuild test \
     -project Pocket.xcodeproj -scheme PocketMac -destination 'platform=macOS' \
-    -derivedDataPath .build/screenshots -resultBundlePath "$WORK/mac-16x10.xcresult" \
+    -derivedDataPath "$DERIVED_DATA" -resultBundlePath "$WORK/mac-16x10.xcresult" \
     -only-testing:PocketMacTests CODE_SIGNING_ALLOWED=NO -quiet
   publish mac-16x10 2880 1800
 }
@@ -61,6 +72,9 @@ publish() {
   local count=0
   while IFS=$'\t' read -r exported name; do
     [[ "$exported" == *.png ]] || continue
+    # Functional UI tests also retain QA screenshots. Only explicitly numbered
+    # store captures belong in the published screenshot set.
+    [[ "$name" =~ ^[0-9][0-9]- ]] || continue
     swift scripts/flatten_png.swift "$export/$exported" "$target/${name%%_*}.png" "$width" "$height"
     count=$((count + 1))
   done < <(jq -r '.[].attachments[] | [.exportedFileName, .suggestedHumanReadableName] | @tsv' "$export/manifest.json")

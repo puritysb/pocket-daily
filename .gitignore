@@ -9,3 +9,4 @@ xcuserdata/
 .claude/settings.local.json
 .claude/worktrees/
 .codex/
+__pycache__/

@@ -1,0 +1,4 @@
+module PocketUIHost {
+  header "PocketUIHost.h"
+  export *
+}

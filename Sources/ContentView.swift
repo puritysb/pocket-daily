@@ -22,6 +22,7 @@ struct ContentView: View {
     @State private var sdSource: URL?
     @State private var pendingFirmwareTransfer: PendingFirmwareTransfer?
     @State private var showingProjectInfo = false
+    @State private var showingContentEditor = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -57,11 +58,15 @@ struct ContentView: View {
             if let lease, model.directConnectionRequested { model.useNearbyLease(lease) }
         }
         .onChange(of: nearby.state) { _, state in
+            if let message = state.failureMessage {
+                model.directDiscoveryFailed(message)
+            }
             if case let .connected(status) = state {
                 model.selectHardware(named: status.model)
                 if model.directConnectionRequested {
                     model.expectDirectReader(status.deviceID)
-                    do { try nearby.requestHotspot() } catch { model.post(error) }
+                    do { try nearby.requestHotspot() }
+                    catch { model.directDiscoveryFailed(error.localizedDescription) }
                 }
             }
         }
@@ -70,6 +75,8 @@ struct ContentView: View {
             if phase == .background {
                 nearby.disconnect()
                 model.pauseForBackground()
+            } else if phase == .active {
+                model.resumeForForeground()
             }
 #endif
         }
@@ -85,6 +92,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
+        }
+        .sheet(isPresented: $showingContentEditor) {
+            ContentEditorSheet(model: model)
         }
     }
 
@@ -183,8 +193,8 @@ struct ContentView: View {
             }
             Label(
                 model.readerScreenImageData == nil
-                    ? "Connect from Pocket Daily Nearby Sync to load the exact reader frame."
-                    : "Exact reader frame captured when Nearby Sync opened.",
+                    ? "Reader preview is optional. Content can be applied without a screen stream."
+                    : "Captured reader frame; it may not show the latest content.",
                 systemImage: model.readerScreenImageData == nil ? "rectangle.dashed" : "checkmark.rectangle"
             )
                 .font(.caption)
@@ -264,6 +274,9 @@ struct ContentView: View {
                 .buttonStyle(.borderless).disabled(model.isWorking || model.isDemoMode)
 #endif
             DeviceSettingsInspector(model: model)
+            Button("Edit content cards…") { showingContentEditor = true }
+                .accessibilityIdentifier("open-content-editor")
+                .buttonStyle(.bordered)
             ThemePackInspector(model: model)
             if !model.isDemoMode {
                 TroubleshootingInspector(model: model, nearby: nearby)
@@ -548,7 +561,7 @@ private struct ConnectionInspector: View {
                 Spacer()
                 if model.isWorking { ProgressView().controlSize(.small) }
             }
-            Button(model.isDemoMode ? "Exit demo" : (model.readerStatus == nil ? "Find & Connect" : "Reconnect")) {
+            Button(model.isDemoMode ? "Exit demo" : (model.readerStatus == nil ? "Find on same Wi-Fi" : "Reconnect")) {
                 if model.isDemoMode { model.exitDemoMode() } else { onConnect() }
             }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
@@ -559,8 +572,15 @@ private struct ConnectionInspector: View {
                     .frame(maxWidth: .infinity)
             }
             if !model.isDemoMode {
-                Text("Same Wi-Fi: reader → File Transfer → Join a Network. Away: prepare files first, then connect directly.")
-                    .font(.caption).foregroundStyle(.secondary)
+                if model.readerStatus == nil {
+                    Text("Same Wi-Fi · On the reader, choose Pocket Daily → Sync → Same Wi-Fi. Your phone or Mac stays on its current network.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("No router · Choose Direct connection on the reader, then Connect directly below. Bluetooth pairing starts a temporary reader Wi-Fi connection.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("Keep Pocket Daily Sync open on the reader while applying content and theme changes. You do not need to reconnect for each edit.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Button(model.hasDirectSession ? "Reconnect directly" : "Connect directly") {
                     confirmingDirectConnection = true
                 }
@@ -569,10 +589,21 @@ private struct ConnectionInspector: View {
                     Button("Cancel", role: .cancel) {}
                     Button("Connect directly") {
                         model.beginDirectConnection()
-                        if !model.resumeDirectConnection() { nearby.scan() }
+                        if !model.resumeDirectConnection() {
+                            nearby.scan()
+                            // Permission/radio failures may be synchronous and
+                            // identical to the previous state (no onChange).
+                            if let message = nearby.state.failureMessage {
+                                model.directDiscoveryFailed(message)
+                            }
+                        }
                     }
                 } message: {
                     Text("Your Wi-Fi will switch to the reader. Prepare cloud files first; internet may be unavailable. Keep Pocket Daily open during transfer.")
+                }
+                if model.readerStatus == nil {
+                    Text("Older firmware: Same Wi-Fi was called Join a Network; Direct connection was Nearby Sync. Use File Transfer only as a compatibility fallback.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
                 if model.readerStatus?.screenPreviewAvailable == true {
                     Button("Load reader preview") { model.loadReaderPreview() }
@@ -613,7 +644,7 @@ private struct ConnectionInspector: View {
         if model.manualHotspotFallback { return "Private Wi-Fi needs a manual join" }
         switch nearby.state {
         case .idle: return "Wake the reader to connect"
-        case .bluetoothUnavailable: return "Bluetooth unavailable — hotspot still works"
+        case .bluetoothUnavailable: return "Bluetooth unavailable — use the same Wi-Fi"
         case .scanning: return "Finding a reader for direct connection…"
         case let .connecting(name): return "Pairing securely with \(name)…"
         case let .connected(status): return "Bluetooth paired · \(status.deviceID)"
@@ -815,7 +846,7 @@ enum PocketPalette {
 }
 
 /// Owns a single picker presentation independently of connection/preview updates.
-private struct TransferFilePicker: ViewModifier {
+struct TransferFilePicker: ViewModifier {
     @Binding var isPresented: Bool
     let allowedContentTypes: [UTType]
     let completion: (Result<[URL], Error>) -> Void

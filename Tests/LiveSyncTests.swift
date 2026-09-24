@@ -51,6 +51,19 @@ final class LiveSyncTests: XCTestCase {
         XCTAssertNil(LiveStudioEvent.decode(#"{"hello":{"proto":"live-studio/1"},"bye":{}}"#))
     }
 
+    func testFrameAnnouncementMatchesFirmwareUInt32AndClientSizeBounds() {
+        XCTAssertEqual(LiveStudioEvent.decode(#"{"frame":{"seq":0,"bytes":64}}"#),
+                       .frame(seq: 0, bytes: 64))
+        XCTAssertEqual(LiveStudioEvent.decode(#"{"frame":{"seq":4294967295,"bytes":131072}}"#),
+                       .frame(seq: Int(UInt32.max), bytes: 128 * 1024))
+        for seq in ["-1", "4294967296", String(Int.max), "true", "false", "1.5", "null", "\"7\""] {
+            XCTAssertNil(LiveStudioEvent.decode("{\"frame\":{\"seq\":\(seq),\"bytes\":53918}}"), seq)
+        }
+        for bytes in ["-1", "0", "63", "131073", "4294967295", "true", "64.5", "null", "\"64\""] {
+            XCTAssertNil(LiveStudioEvent.decode("{\"frame\":{\"seq\":7,\"bytes\":\(bytes)}}"), bytes)
+        }
+    }
+
     // MARK: Fetch policy
 
     func testFetchPolicyCoalescesWhileInFlight() {
@@ -84,5 +97,18 @@ final class LiveSyncTests: XCTestCase {
         policy.reset()
         XCTAssertFalse(policy.inFlight)
         XCTAssertNil(policy.fetchCompleted())
+        XCTAssertTrue(policy.shouldFetch(seq: 1, at: Date(timeIntervalSince1970: 0.1)))
+    }
+
+    func testPendingFrameHasDeadlineWithoutAnotherAnnouncement() {
+        var policy = FrameFetchPolicy()
+        let start = Date(timeIntervalSince1970: 100)
+        XCTAssertTrue(policy.shouldFetch(seq: 1, at: start))
+        XCTAssertNil(policy.fetchCompleted())
+        XCTAssertFalse(policy.shouldFetch(seq: 2, at: start.addingTimeInterval(0.2)))
+        XCTAssertEqual(policy.delayUntilNextFetch(at: start.addingTimeInterval(0.2)), 0.8, accuracy: 0.001)
+        XCTAssertEqual(policy.pendingSeq, 2)
+        XCTAssertTrue(policy.shouldFetch(seq: 2, at: start.addingTimeInterval(1)))
+        XCTAssertNil(policy.pendingSeq)
     }
 }

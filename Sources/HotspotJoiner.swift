@@ -1,5 +1,39 @@
 import Foundation
 
+@MainActor
+protocol ReaderAssociationIO {
+    func join(_ lease: HotspotLease) async throws
+    func leave(ssid: String) async
+}
+
+@MainActor
+struct SystemReaderAssociationIO: ReaderAssociationIO {
+    func join(_ lease: HotspotLease) async throws { try await HotspotJoiner.join(lease) }
+    func leave(ssid: String) async { await HotspotJoiner.leave(ssid: ssid) }
+}
+
+/// Detached blocking work must still belong to the requesting connection.
+/// Cancellation cannot interrupt a system call already running, but reaches
+/// checkpoints before subsequent calls and prevents a late success receipt.
+enum ConnectionWorker {
+    static func run<Value: Sendable>(
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try Task.checkCancellation()
+        let worker = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            return try await operation()
+        }
+        return try await withTaskCancellationHandler {
+            let value = try await worker.value
+            try Task.checkCancellation()
+            return value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+}
+
 #if os(iOS)
 import NetworkExtension
 
@@ -60,10 +94,11 @@ enum HotspotJoiner {
         // passphrase came through the authenticated BLE channel and is never
         // written to Pocket's logs or preferences.
         try await LocationAuthorization.shared.authorize()
+        try Task.checkCancellation()
 
         let ssid = lease.ssid
         let passphrase = lease.passphrase
-        try await Task.detached(priority: .userInitiated) {
+        try await ConnectionWorker.run {
             guard let interface = CWWiFiClient.shared().interface() else {
                 throw HotspotJoinError.noWiFiInterface
             }
@@ -104,6 +139,9 @@ enum HotspotJoiner {
                 }
 
                 if let network {
+                    // A scan may finish after the owning connection was
+                    // cancelled. Never start association in that case.
+                    try Task.checkCancellation()
                     do {
                         try interface.associate(to: network, password: passphrase)
                         return
@@ -129,7 +167,7 @@ enum HotspotJoiner {
             }
             if let lastScanError { throw lastScanError }
             throw HotspotJoinError.networkNotFound(ssid)
-        }.value
+        }
     }
 
     static func leave(ssid: String) async {

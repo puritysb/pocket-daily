@@ -19,6 +19,27 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      - path: Support/PocketUIHost/PIN.json
+        buildPhase: resources
+      - path: Support/PocketUIHost/PROVENANCE.json
+        buildPhase: resources
+      - path: Support/PreviewFont
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - framework: Support/PocketUIHost/PocketUIHost.xcframework
+        embed: false
+      - sdk: libc++.tbd
+      - sdk: libz.tbd
+    preBuildScripts:
+      - name: Verify Host Renderer
+        script: /usr/bin/python3 "$SRCROOT/scripts/host_renderer_artifact.py" verify "$SRCROOT/Support/PocketUIHost"
+        inputFiles:
+          - $(SRCROOT)/scripts/host_renderer_artifact.py
+          - $(SRCROOT)/Support/PocketUIHost
+        inputFileLists:
+          - $(SRCROOT)/Support/PocketUIHost/RendererInputs.xcfilelist
+        basedOnDependencyAnalysis: false
     info:
       path: Support/Pocket-Info.plist
       properties:
@@ -55,6 +76,27 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      - path: Support/PocketUIHost/PIN.json
+        buildPhase: resources
+      - path: Support/PocketUIHost/PROVENANCE.json
+        buildPhase: resources
+      - path: Support/PreviewFont
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - framework: Support/PocketUIHost/PocketUIHost.xcframework
+        embed: false
+      - sdk: libc++.tbd
+      - sdk: libz.tbd
+    preBuildScripts:
+      - name: Verify Host Renderer
+        script: /usr/bin/python3 "$SRCROOT/scripts/host_renderer_artifact.py" verify "$SRCROOT/Support/PocketUIHost"
+        inputFiles:
+          - $(SRCROOT)/scripts/host_renderer_artifact.py
+          - $(SRCROOT)/Support/PocketUIHost
+        inputFileLists:
+          - $(SRCROOT)/Support/PocketUIHost/RendererInputs.xcfilelist
+        basedOnDependencyAnalysis: false
     info:
       path: Support/PocketMac-Info.plist
       properties:

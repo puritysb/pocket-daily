@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "font": "PocketSansWorld_12.cpfont",
+  "bytes": 10903872,
+  "sha256": "a1a15a6e9cdccd114cbaf34adb29fce08ad67d3dcd52b7970a77ab89db9ee753",
+  "family": "PocketSansWorld",
+  "pixels": 12,
+  "notices": [
+    "KR-SC-OFL.txt",
+    "JP-OFL.txt",
+    "NotoSans-OFL.txt",
+    "Hebrew-OFL.txt"
+  ]
+}

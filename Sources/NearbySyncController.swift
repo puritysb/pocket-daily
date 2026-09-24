@@ -11,6 +11,15 @@ final class NearbySyncController: NSObject, ObservableObject {
         case connected(PocketDeviceStatus)
         case switchingToHotspot
         case failed(String)
+
+        var failureMessage: String? {
+            switch self {
+            case let .failed(message): message
+            case .bluetoothUnavailable:
+                "Bluetooth is unavailable. Enable it to connect directly, or use Find on same Wi-Fi."
+            default: nil
+            }
+        }
     }
 
     @Published private(set) var state: State = .idle
@@ -75,7 +84,7 @@ final class NearbySyncController: NSObject, ObservableObject {
         }
     }
 
-    static let unauthorizedMessage = "Bluetooth access is off for Pocket Daily. Allow it in Settings, or connect over Wi-Fi with File Transfer → Join a Network."
+    static let unauthorizedMessage = "Bluetooth access is off for Pocket Daily. Allow it in Settings, or choose Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware)."
 
     private func beginScan(_ central: CBCentralManager) {
         disconnect()

@@ -6,6 +6,7 @@ import Foundation
 /// (`docs/live-studio-v1.md` in the firmware repository); the connection and
 /// transfer cases cover local session transitions.
 enum DeviceEvent: Equatable {
+    case sessionStarted(CrossPointStatus)
     case status(CrossPointStatus)
     case frame(seq: Int, capturedAt: Date, data: Data)
     case preferences(ReaderPreferences?)
@@ -51,9 +52,19 @@ enum DeviceStateReducer {
     static func apply(_ event: DeviceEvent, to state: DeviceState) -> DeviceState {
         var next = state
         switch event {
+        case let .sessionStarted(status):
+            next = apply(.status(status), to: DeviceState())
+            next.frameSequence = state.frameSequence
         case let .status(status):
+            if let previous = state.status,
+               previous.deviceID != status.deviceID || previous.device != status.device {
+                next = DeviceState()
+                next.frameSequence = state.frameSequence
+            }
             next.status = status
             next.phase = .connected
+            next.activePack = status.liveStudio?.activePack
+            next.activePackVersion = status.liveStudio?.activePackVersion
         case let .frame(seq, capturedAt, data):
             next.frameSequence = max(state.frameSequence + 1, seq)
             next.latestFrame = DeviceFrame(seq: seq, capturedAt: capturedAt, data: data)
@@ -62,13 +73,13 @@ enum DeviceStateReducer {
         case let .transferProgress(progress):
             next.transferProgress = progress
         case let .connection(phase):
-            next.phase = phase
-            if phase == .disconnected {
-                next.status = nil
-                next.preferences = nil
-                next.latestFrame = nil
-                next.transferProgress = nil
+            if phase != .connected {
+                // Searching/waiting is not evidence that the previous reader
+                // still owns the screen or pack shown by the mirror.
+                next = DeviceState()
+                next.frameSequence = state.frameSequence
             }
+            next.phase = phase
         case let .packStateChanged(activePack, version):
             next.activePack = activePack
             next.activePackVersion = version
@@ -98,11 +109,16 @@ enum DeviceSyncMode: Equatable {
 }
 
 enum SyncModePolicy {
+    // Match the firmware's listener admission floor, but use the current
+    // HTTP status rather than its earlier, pre-listener allocation snapshot.
+    // Opening a second socket and enabling frame capture are optional work.
+    static let minimumPushFreeHeap = 16 * 1024
     /// No reader (or demo mode) is offline. A reader without the
     /// advertisement is a legacy firmware and stays on the heartbeat poll; a
     /// non-push advertisement (private AP, low heap) also means polling.
     static func syncMode(status: CrossPointStatus?, isDemoMode: Bool = false) -> DeviceSyncMode {
         guard !isDemoMode, let status else { return .offline }
+        guard status.freeHeap >= minimumPushFreeHeap else { return .poll }
         guard let live = status.liveStudio,
               live.mode == "push",
               let port = live.wsPort, port > 0 else { return .poll }

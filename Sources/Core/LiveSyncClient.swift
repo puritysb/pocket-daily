@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 /// One decoded live-studio event off the WebSocket wire
 /// (`docs/live-studio-v1.md` in the firmware repository).
@@ -25,8 +26,8 @@ enum LiveStudioEvent: Equatable {
             return .status(decoded)
         }
         if let frame = object["frame"] as? [String: Any],
-           let seq = frame["seq"] as? Int,
-           let bytes = frame["bytes"] as? Int {
+           let seq = integer(frame["seq"], in: 0...Int(UInt32.max)),
+           let bytes = integer(frame["bytes"], in: 64...(128 * 1024)) {
             return .frame(seq: seq, bytes: bytes)
         }
         if let prefs = object["prefs"] as? [String: Any], prefs["changed"] as? Bool == true {
@@ -34,6 +35,14 @@ enum LiveStudioEvent: Equatable {
         }
         if object["bye"] != nil { return .bye }
         return nil
+    }
+
+    private static func integer(_ value: Any?, in range: ClosedRange<Int>) -> Int? {
+        // JSON booleans bridge through NSNumber too; a true sequence is not 1.
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              let integer = number as? Int, range.contains(integer) else { return nil }
+        return integer
     }
 }
 
@@ -48,6 +57,7 @@ struct FrameFetchPolicy {
     private(set) var inFlight = false
     private(set) var pendingSeq: Int?
     private var lastFetchAt = Date.distantPast
+    mutating func enqueue(seq: Int) { pendingSeq = seq }
 
     /// Records the announcement and returns true when a fetch should start
     /// now (nothing in flight and spacing elapsed).
@@ -71,6 +81,11 @@ struct FrameFetchPolicy {
     mutating func reset() {
         inFlight = false
         pendingSeq = nil
+        lastFetchAt = .distantPast
+    }
+
+    func delayUntilNextFetch(at now: Date = Date()) -> TimeInterval {
+        max(0, Self.minimumFetchSpacing - now.timeIntervalSince(lastFetchAt))
     }
 }
 
@@ -86,6 +101,7 @@ final class LiveSyncClient: NSObject {
 
     private var task: URLSessionWebSocketTask?
     private var session: URLSession?
+    var isRunning: Bool { task != nil }
 
     init(host: String, wsPort: Int) {
         self.host = host

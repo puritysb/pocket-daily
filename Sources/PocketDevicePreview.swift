@@ -218,7 +218,7 @@ private struct EInkSurface: View {
 
     private var fallbackDetail: String {
         if status != nil, status?.mode != "DEMO" {
-            return "Open Nearby Sync from Pocket Daily\nto capture the exact frame"
+            return "Screen streaming is unavailable\nNo live frame from this session"
         }
         return "\(hardware.screenWidth) × \(hardware.screenHeight) e-paper\n\(hardware.controlSummary)"
     }

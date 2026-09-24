@@ -1,6 +1,6 @@
 # Pocket Daily Live Studio — application architecture and delivery design
 
-STATUS: DESIGN, agreed 2026-09-19. Nothing here is implemented yet. The
+STATUS: PARTIALLY IMPLEMENTED; design agreed 2026-09-19, audited 2026-09-22. The
 firmware side of the contract (event protocol, `screen-live`, `.uipack`
 format, host renderer) is `docs/live-studio-v1.md` in the sibling
 `pocket-daily-firmware` repository. This document follows the shared
@@ -12,6 +12,39 @@ packs that deploy over the existing verified transfer path and apply on the
 device without reflashing.
 
 ## Why restructure
+
+Current scope check: reducer/mirror, DeviceSession seam, live event client,
+typed UI-pack encoder and model-driven apply/revert exist. The named target
+directory layout and full session split below remain a design, not a completed
+migration. `HostRendererBridge`, the pinned Apple artifact and renderer sync
+script now exist for content cards. The editor has an offline reference preview
+with bundled font, but connected-settings matching, other named native surfaces
+and host/device pixel parity are not implemented. Content revision transactions and physical end-to-end acceptance
+remain open in `IMPLEMENTATION_PLAN.md`. Passing protocol tests does not finish
+the studio or prove radio reliability.
+
+Host foundation update (2026-09-22): the sibling `test/gfx_host` target builds
+the real rasterizer/font/shaping stack with a memory-display HAL and compares
+Cached/BoundedUI text pixels locally. The independent library now powers the
+app's actor-isolated content bridge through an imported host-only XCFramework.
+The app exposes a labeled Base-layout content preview, not an exact mirror of
+connected-reader settings. No device firmware
+source/image was copied here; physical golden comparison remains pending.
+
+The sibling now also shares ContentPageRenderer between its device theme and
+host tests, plus ContentImageRenderer, with32 real-font text/card/empty/image
+frame comparisons. Its host font storage now uses read-only immutable assets
+bound per operation/thread, without the shared mutable fake-SD map or OS file
+access. Context owners must retain assets and serialize each renderer. This
+advances the common rendering boundary. The sibling now builds an independent
+`libpdui_host.a` with a content-page C ABI and public Swift-importable header.
+It owns copied font bytes, invalidates readback after failed renders and
+serializes rendering across contexts for MiniBidi's static scratch. Its C ABI
+matches24 direct page frames, and a macOS Swift executable renders/copies a
+Korean empty state. The builder now packages all five Apple slices and verifies
+source/artifact provenance. The app bridge now renders cards/empty pages, handles
+failure/cancellation and converts physical bits into logical orientation.
+Connected-configuration exact previews and physical device goldens remain pending.
 
 Today `PocketModel` (≈990 lines) fuses session control, discovery,
 heartbeat, transfer, preferences, demo mode, and UI state into one
@@ -47,6 +80,15 @@ migration and is deleted when the last view moves.
 
 ## Core: session, mirror, events
 
+Operation-ownership implementation update (2026-09-22): PocketModel now uses one
+token-owned work lane for file/content/theme operations, settings/preview, local
+preparation/journal/SD work, discovery, manual verification, direct association
+and session end. Connection replacement cancels and drains predecessor I/O and
+cleanup before starting the latest request; backgrounding does not release an
+in-flight OS join early. This removes the separate discovery/verification/join
+task owners, but does not implement the full LiveDeviceSession/PreviewSession
+split or move every view to the mirror. Physical acceptance remains pending.
+
 - `DeviceSession` — the seam. A protocol describing capabilities the app
   needs: `statusStream`, `preferences`, `frames`, `transfers`,
   `packDeployment`. Two conformers: `LiveDeviceSession` (real device via
@@ -67,17 +109,63 @@ migration and is deleted when the last view moves.
 
 ## LiveSyncClient
 
+Dedicated-session update (2026-09-24): COMPANION and POCKET_SYNC now both
+advertise poll-only and suppress automatic diagnostic/frame downloads. The app
+honors the existing advertisement without a new wire format. Same-Wi-Fi push
+remains a browser/File Transfer option, not a Pocket Sync requirement. See
+[SYNC_SESSIONS.md](SYNC_SESSIONS.md) for routes and physical acceptance gates.
+
+Current-memory admission (2026-09-23): an advertised push listener is not enough
+to open the optional WebSocket. The app requires at least16 KiB in the current
+HTTP status, matching the firmware listener admission floor. Below it, status
+uses the existing paced heartbeat and no frame subscription is opened. This
+addresses stale pre-listener admission, not a proven fix for the observed
+partial HTTP responses or radio loss; physical acceptance remains required.
+
+Implementation update (2026-09-21): bulk transfers now own the reader link.
+Frame fetches, preference reloads and heartbeats are cancelled and drained
+before upload; optional sync returns after commit/apply via a fresh heartbeat.
+Frame scheduling retains the newest announcement and explicitly wakes after
+the spacing deadline, even if no further event arrives. Session generations
+reject late results from a previous connection. A stopped WS transport can be
+recreated on the next successful heartbeat.
+
+The upload client's optional `uploadStreamWindow:4096` negotiation mirrors the
+sibling firmware contract: each 4 KiB block waits for an SD-accepted ACK before
+the next is sent. Legacy readers retain the original stream. Recovery uses
+bounded, paced LAN status probes and identity checks, not just private-AP
+reassociation. Physical heap/radio validation remains separate from loopback
+and simulator tests.
+
 - WebSocket client for the reader's live-studio listener; connects when
   `/api/status` advertises `liveStudio.wsPort` and `SyncModePolicy` selects
   push. Frame notifications trigger chunked HTTP fetch of
   `/api/pocket/v1/screen-live` — the same paged octet-stream pattern the
   app already uses for `screen-preview`.
-- Private AP or legacy readers: no WS; the mirror falls back to today's
-  heartbeat cadence (2 s while studio is active).
+- Private AP or legacy readers: no live WS; the current app uses a paced
+  15-second heartbeat, not the earlier draft's 2-second polling. One-second
+  frame-fetch spacing is separate from heartbeat cadence. Backgrounding stops
+  optional traffic; foreground restores monitoring of an existing LAN session
+  without automatic Wi-Fi joining or file resending.
 - The unused `HotspotLease.webSocketPort` parsing remains but the studio
   never assumes a fixed port.
 
+Firmware capture guard (2026-09-22): failed or pending live-content renders do
+not publish a new frame. The previous valid capture may remain available as
+history; it must not be treated as confirmation of a new content revision.
+Content Apply uses the separate identity/revision/generation-bound presentation
+receipt, not a frame event, to report driver completion. Wire formats are
+unchanged. Physical pixels and host/device parity remain unverified.
+
 ## Studio UX
+
+Content live editing update (2026-09-22): the card editor has an explicit,
+non-persistent Start live apply authorization for one reader/connection session.
+It coalesces valid edits and awaits the existing activation plus redraw receipt
+before processing the newest edit. Failure, editor closure, backgrounding or
+session replacement stops automation. This is content-only; the theme-pack
+manual deployment contract below and firmware installation confirmation remain
+unchanged. See CONTENT_EDITOR.md. Physical acceptance remains pending.
 
 ```
 ┌───────────────────────────────┬──────────────────────┐
@@ -106,17 +194,42 @@ migration and is deleted when the last view moves.
 
 ## HostRendererBridge
 
-Links `Support/PocketUIHost/libpdui_host.a` (copied by
-`scripts/sync_host_renderer.sh` from the sibling firmware checkout, with
-`PROVENANCE.txt` pinning the firmware SHA — the documented cross-repo
-artifact exception in the firmware contract). A small Swift wrapper owns
-the C ABI context, applies pack bytes, renders named surfaces, and returns
-a 1-bit buffer the existing `EInkSurface` path can display unchanged.
-When the artifact is missing or the provenance SHA does not match the
-sibling checkout, the bridge reports "host preview unavailable" instead of
+Links `Support/PocketUIHost/PocketUIHost.xcframework`, built by sibling
+`host/build_apple.py` for macOS arm64/x86_64, iOS arm64 and simulator arm64/x86_64.
+The app's `scripts/sync_host_renderer.sh` verifies/copies the package
+and `PROVENANCE.json`, pinning both commit and actual dirty-tree source/artifact
+hashes plus SDK/build metadata — the documented cross-repo artifact exception.
+A Swift actor owns the C ABI context and renders content cards/empty pages to
+physical1-bit frames with logical image conversion. UI-pack apply and the named
+native surfaces are not yet exposed. The content editor renders an offline
+reference preview with a pinned PocketSansWorld font and explicit default labels.
+When the artifact is missing or its pinned provenance does not match the
+accepted renderer version, the bridge reports "host preview unavailable" instead of
 silently degrading.
 
+Packaging verification compares the actual sibling source manifest, including
+uncommitted/untracked dependencies, not only HEAD. The sibling builder links an
+actual Swift consumer for all five architecture/platform slices. App tests now
+execute the bridge on the iOS simulator; this is not physical iOS/reader
+acceptance. Runtime verification uses bundled PIN/provenance plus ABI version;
+the sandboxed pre-build gate checks static artifact hashes. It never depends
+on a sibling checkout existing on an end user's device. See `HOST_RENDERER.md`.
+The import/packaging work does not turn provenance hashes into authentication.
+
 ## PackDocument / PackDeployer
+
+Current editor boundary (2026-09-22): the existing eight-metric inspector can
+be expanded and edited offline, including demo mode. Apply/Revert alone require
+UI-pack capability, a nonempty reader identity and an idle non-demo session.
+Values are explicitly labeled local defaults/edits, not a readback of the
+active device pack. The eight-metric draft now has explicit actor-isolated local
+Save/reload, conflict checks and a storage-free demo model (`THEME_DRAFT.md`).
+Portable eight-metric JSON import/export also exists: bounded validation,
+current/imported comparison and explicit in-memory replacement precede separate
+Save/Apply actions. It is not a binary `.uipack` or a resource/font document.
+This does not implement the complete PackDocument with resources, pack
+import/export, or UI-pack host preview below. Activation and screen confirmation
+remain separate; editing never calls a transport method.
 
 - `PackDocument` is the editable model (theme overrides keyed by the stable
   field-id registry, string overrides, font assets). Serialization follows

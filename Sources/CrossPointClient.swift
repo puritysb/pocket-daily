@@ -20,9 +20,11 @@ struct CrossPointStatus: Codable, Equatable {
     let diagnosticsAffordable: Bool?
     var deviceID: String? = nil
     var sessionEnd: Bool? = nil
+    var contentPresentation: Bool? = nil
     /// Live-studio capability advertisement. Absent on readers that predate
     /// the contract (`docs/live-studio-v1.md` in the firmware repository).
     var liveStudio: LiveStudioAdvertisement? = nil
+    var uploadStreamWindow: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -35,6 +37,39 @@ struct LiveStudioAdvertisement: Codable, Equatable {
     let uiPacks: Bool?
     let activePack: String?
     let activePackVersion: String?
+}
+
+/// Status is evidence of activation, not merely a successful apply POST.
+enum UiPackVerification {
+    enum Failure: LocalizedError {
+        case unidentifiedReader
+        case differentReader
+        case notConfirmed
+
+        var errorDescription: String? {
+            switch self {
+            case .unidentifiedReader: "The reader must provide an identity before changing its UI pack."
+            case .differentReader: "The reader identity changed. UI pack activation cannot be confirmed."
+            case .notConfirmed: "The UI pack result could not be confirmed. Reconnect and check the active pack before retrying."
+            }
+        }
+    }
+
+    static func identity(_ value: String?) throws -> String {
+        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw Failure.unidentifiedReader
+        }
+        return value
+    }
+
+    static func validate(_ status: CrossPointStatus, expectedDeviceID: String,
+                         name: String?, version: String?) throws {
+        guard status.deviceID == expectedDeviceID else { throw Failure.differentReader }
+        guard let studio = status.liveStudio, studio.uiPacks == true,
+              studio.activePack == name, studio.activePackVersion == version else {
+            throw Failure.notConfirmed
+        }
+    }
 }
 
 struct CrashDiagnostic: Equatable, Sendable {
@@ -219,6 +254,9 @@ final class PocketStreamUploader: @unchecked Sendable {
         var isTransient: Bool {
             switch self {
             case .disconnected, .stalled: true
+            // These exact protocol replies mean the reader retained a prefix.
+            // SD/validation rejections must remain terminal.
+            case .readerRejected("Upload timed out"), .readerRejected("Upload disconnected"): true
             default: false
             }
         }
@@ -240,6 +278,7 @@ final class PocketStreamUploader: @unchecked Sendable {
     enum Reply: Equatable {
         case ok(size: Int64, crc32: UInt32)
         case resume(offset: Int64)
+        case ack(offset: Int64)
         case error(String)
         case invalid(String)
 
@@ -258,6 +297,9 @@ final class PocketStreamUploader: @unchecked Sendable {
                 return .resume(offset: offset)
             case "ERROR":
                 return .error(fields.dropFirst().joined(separator: " "))
+            case "ACK":
+                guard fields.count == 2, let offset = Int64(fields[1]), offset > 0 else { return .invalid(trimmed) }
+                return .ack(offset: offset)
             default:
                 return .invalid(trimmed)
             }
@@ -268,9 +310,10 @@ final class PocketStreamUploader: @unchecked Sendable {
     static let stallTimeout: Duration = .seconds(30)
     static let overallTimeout: TimeInterval = 900
 
-    static func header(path: String, size: Int64, resume: Bool) -> Data {
+    static func header(path: String, size: Int64, resume: Bool, flowControl: Bool = false) -> Data {
         var text = "POCKET-PUT/1\nPath: \(path)\nSize: \(size)\n"
-        if resume { text += "Resume: 1\n" }
+        if resume || flowControl { text += "Resume: 1\n" }
+        if flowControl { text += "Window: 4096\n" }
         text += "\n"
         return Data(text.utf8)
     }
@@ -280,6 +323,7 @@ final class PocketStreamUploader: @unchecked Sendable {
     private let total: Int64
     private let remotePath: String
     private let resume: Bool
+    private let flowControl: Bool
     private let progress: @Sendable (Int64, Int64) -> Void
     private let queue = DispatchQueue(label: "bound.serendipity.pocket.daily.upload-stream")
     private var continuation: CheckedContinuation<UInt32, Error>?
@@ -298,6 +342,7 @@ final class PocketStreamUploader: @unchecked Sendable {
         remotePath: String,
         total: Int64,
         resume: Bool = false,
+        flowControl: Bool = false,
         progress: @escaping @Sendable (Int64, Int64) -> Void
     ) throws {
         guard let endpointPort = NWEndpoint.Port(rawValue: UInt16(exactly: port) ?? 0), port > 0 else {
@@ -306,11 +351,15 @@ final class PocketStreamUploader: @unchecked Sendable {
         guard remotePath.hasPrefix("/"), !remotePath.contains("\n"), !remotePath.contains("\r") else {
             throw StreamError.invalidPath
         }
-        connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort,
+                                  using: NWParameters(tls: nil, tcp: tcp))
         input = try FileHandle(forReadingFrom: fileURL)
         self.total = total
         self.remotePath = remotePath
-        self.resume = resume
+        self.resume = resume || flowControl
+        self.flowControl = flowControl
         self.progress = progress
     }
 
@@ -376,7 +425,7 @@ final class PocketStreamUploader: @unchecked Sendable {
     }
 
     private func sendHeader() {
-        let header = Self.header(path: remotePath, size: total, resume: resume)
+        let header = Self.header(path: remotePath, size: total, resume: resume, flowControl: flowControl)
         connection.send(content: header, completion: .contentProcessed { [weak self] error in
             guard let self else { return }
             if let error {
@@ -424,15 +473,20 @@ final class PocketStreamUploader: @unchecked Sendable {
     }
 
     private func sendNextChunk() {
+        guard continuation != nil else { return }
         do {
-            guard let chunk = try input.read(upToCount: Self.chunkBytes), !chunk.isEmpty else {
+            guard let chunk = try input.read(upToCount: flowControl ? 4096 : Self.chunkBytes), !chunk.isEmpty else {
                 if bytesRead != total { finish(.failure(StreamError.verificationFailed)) }
                 return  // The receive loop delivers the reader's OK line.
             }
             crc.update(chunk)
             bytesRead += Int64(chunk.count)
+            if flowControl {
+                sendFlowFragment(chunk, offset: 0)
+                return
+            }
             connection.send(content: chunk, completion: .contentProcessed { [weak self] error in
-                guard let self else { return }
+                guard let self, self.continuation != nil else { return }
                 if let error {
                     self.finish(.failure(error))
                     return
@@ -445,6 +499,24 @@ final class PocketStreamUploader: @unchecked Sendable {
         } catch {
             finish(.failure(error))
         }
+    }
+
+    private func sendFlowFragment(_ chunk: Data, offset: Int) {
+        guard continuation != nil, offset < chunk.count else { return }
+        // The reader still grants one 4 KiB SD window. Avoid putting that
+        // entire window into its scarce Wi-Fi RX heap in one burst.
+        let end = min(offset + 512, chunk.count)
+        connection.send(content: chunk.subdata(in: offset..<end), completion: .contentProcessed { [weak self] error in
+            guard let self, self.continuation != nil else { return }
+            if let error {
+                self.finish(.failure(error))
+                return
+            }
+            guard end < chunk.count else { return } // Only SD ACK grants the next window.
+            self.queue.asyncAfter(deadline: .now() + .milliseconds(10)) { [weak self] in
+                self?.sendFlowFragment(chunk, offset: end)
+            }
+        })
     }
 
     private func receiveNextLine() {
@@ -489,7 +561,16 @@ final class PocketStreamUploader: @unchecked Sendable {
                 finish(.failure(StreamError.verificationFailed))
                 return
             }
+            progress(total, total)
             finish(.success(readerCRC))
+        case let .ack(offset):
+            guard flowControl, streaming, offset == bytesRead, offset > sent, offset < total else {
+                finish(.failure(StreamError.invalidResponse(raw)))
+                return
+            }
+            sent = offset
+            progress(sent, total)
+            sendNextChunk()
         case let .error(message):
             finish(.failure(StreamError.readerRejected(message.isEmpty ? "unspecified error" : message)))
         case let .invalid(line):
@@ -531,6 +612,56 @@ enum UploadRetryPolicy {
     }
 }
 
+/// One HTTP request per reader host. Actor isolation alone does not provide
+/// this: awaiting URLSession lets another caller enter the actor. Different
+/// hosts remain independent so LAN discovery retains its bounded parallelism.
+private actor ReaderHTTPTransport {
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Error>
+    }
+    private var active: Set<String> = []
+    private var waiting: [String: [Waiter]] = [:]
+
+    func data(for request: URLRequest, session: URLSession) async throws -> (Data, URLResponse) {
+        guard let host = request.url?.host?.lowercased() else { throw URLError(.badURL) }
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try await acquire(host: host, id: id)
+            defer { release(host: host) }
+            try Task.checkCancellation()
+            return try await session.data(for: request)
+        } onCancel: {
+            Task { await self.cancelWaiting(host: host, id: id) }
+        }
+    }
+
+    private func acquire(host: String, id: UUID) async throws {
+        try Task.checkCancellation()
+        if active.insert(host).inserted { return }
+        try await withCheckedThrowingContinuation { continuation in
+            waiting[host, default: []].append(Waiter(id: id, continuation: continuation))
+        }
+    }
+
+    private func release(host: String) {
+        guard var queue = waiting[host], !queue.isEmpty else {
+            active.remove(host)
+            return
+        }
+        let next = queue.removeFirst()
+        waiting[host] = queue.isEmpty ? nil : queue
+        next.continuation.resume()
+    }
+
+    private func cancelWaiting(host: String, id: UUID) {
+        guard var queue = waiting[host], let index = queue.firstIndex(where: { $0.id == id }) else { return }
+        let cancelled = queue.remove(at: index)
+        waiting[host] = queue.isEmpty ? nil : queue
+        cancelled.continuation.resume(throwing: CancellationError())
+    }
+}
+
 actor CrossPointClient {
     enum ClientError: LocalizedError {
         case invalidAddress
@@ -549,9 +680,71 @@ actor CrossPointClient {
     }
 
     private let session: URLSession
+    private let http = ReaderHTTPTransport()
 
     init(session: URLSession = .shared) {
         self.session = session
+    }
+
+    /// Preparation after manifest/asset staging may copy existing reader assets.
+    /// Uses the per-reader HTTP queue; never retries a busy/storage failure.
+    func inspectPreparedContent(
+        _ revision: ContentRevision, deviceID: String, host: String, port: Int
+    ) async throws -> ContentPreparation {
+        let body = try await contentResponse(action: "prepare", method: "POST", revision: revision.revision,
+                                             deviceID: deviceID, host: host, port: port)
+        return try ContentPreparationReceipt.decode(body, target: revision, deviceID: deviceID)
+    }
+
+    func contentState(deviceID: String, host: String, port: Int) async throws -> ContentDeviceState {
+        let body = try await contentResponse(action: "state", method: "GET", revision: nil,
+                                             deviceID: deviceID, host: host, port: port)
+        return try ContentStateReceipt.decode(body, deviceID: deviceID)
+    }
+
+    func presentContent(_ active: ContentActiveReceipt, deviceID: String, host: String, port: Int) async throws -> ContentPresentationReceipt {
+        let body = try await contentResponse(action: "present", method: "POST", revision: active.revision,
+                                             deviceID: deviceID, host: host, port: port)
+        return try ContentPresentationReceipt.decode(body, deviceID: deviceID, active: active)
+    }
+
+    func contentPresentation(_ active: ContentActiveReceipt, deviceID: String, host: String, port: Int) async throws -> ContentPresentationReceipt {
+        let body = try await contentResponse(action: "presentation", method: "GET", revision: active.revision,
+                                             deviceID: deviceID, host: host, port: port)
+        return try ContentPresentationReceipt.decode(body, deviceID: deviceID, active: active)
+    }
+
+    /// This request can commit even when its response is lost. The deployment
+    /// coordinator must read contentState afterward and must not blindly retry.
+    func activateContent(_ revision: ContentRevision, deviceID: String, host: String, port: Int) async throws {
+        let body = try await contentResponse(action: "activate", method: "POST", revision: revision.revision,
+                                             deviceID: deviceID, host: host, port: port)
+        let state = try ContentStateReceipt.decode(body, deviceID: deviceID)
+        guard state.active?.revision == revision.revision else { throw ClientError.verificationFailed }
+    }
+
+    private func contentResponse(action: String, method: String, revision: String?, deviceID: String,
+                                 host: String, port: Int) async throws -> Data {
+        guard deviceID.utf8.count == 8,
+              deviceID.utf8.allSatisfy({ (48...57).contains($0) || (65...70).contains($0) }) else {
+            throw ClientError.verificationFailed
+        }
+        var query = ["deviceID": deviceID]
+        if let revision { query["revision"] = revision }
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/content/" + action,
+                                 query: query) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        try Self.requireSuccess(response, body: body)
+        guard body.count <= 512 else { throw ClientError.verificationFailed }
+        return body
     }
 
     func status(
@@ -566,7 +759,7 @@ actor CrossPointClient {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = timeout
         request.setValue("close", forHTTPHeaderField: "Connection")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response)
         return try JSONDecoder().decode(CrossPointStatus.self, from: data)
     }
@@ -578,7 +771,7 @@ actor CrossPointClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 3
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response, body: data)
     }
 
@@ -599,7 +792,7 @@ actor CrossPointClient {
             var request = URLRequest(url: url)
             request.timeoutInterval = 4
             request.setValue("close", forHTTPHeaderField: "Connection")
-            let (chunk, response) = try await session.data(for: request)
+            let (chunk, response) = try await http.data(for: request, session: session)
             try Self.requireSuccess(response, body: chunk)
             guard !chunk.isEmpty, reportData.count + chunk.count <= expectedBytes else {
                 throw ClientError.unexpectedMessage("invalid crash report chunk")
@@ -634,7 +827,7 @@ actor CrossPointClient {
             var request = URLRequest(url: url)
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.timeoutInterval = 10
-            let (chunk, response) = try await session.data(for: request)
+            let (chunk, response) = try await http.data(for: request, session: session)
             try Self.requireSuccess(response, body: chunk)
             guard !chunk.isEmpty else { break }
             frame.append(chunk)
@@ -662,7 +855,7 @@ actor CrossPointClient {
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.timeoutInterval = 10
             request.setValue("close", forHTTPHeaderField: "Connection")
-            let (chunk, response) = try await session.data(for: request)
+            let (chunk, response) = try await http.data(for: request, session: session)
             try Self.requireSuccess(response, body: chunk)
             guard !chunk.isEmpty, previewData.count + chunk.count <= expectedBytes else {
                 throw ClientError.unexpectedMessage("invalid screen preview chunk")
@@ -687,7 +880,7 @@ actor CrossPointClient {
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["name": name])
-        let (body, response) = try await session.data(for: request)
+        let (body, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response, body: body)
     }
 
@@ -696,7 +889,7 @@ actor CrossPointClient {
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 6
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response)
         let preferences = try JSONDecoder().decode(PocketPreferencesResponse.self, from: data)
         return ReaderPreferences(
@@ -721,7 +914,7 @@ actor CrossPointClient {
             "sleepTimeoutMinutes": preferences.sleepTimeoutMinutes,
             "fontSize": preferences.fontSize,
         ])
-        let (_, response) = try await session.data(for: request)
+        let (_, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response)
     }
 
@@ -734,6 +927,8 @@ actor CrossPointClient {
         uploadChunkBytes: Int? = nil,
         uploadStreamPort: Int? = nil,
         uploadStreamResume: Bool = false,
+        uploadStreamWindow: Int? = nil,
+        expectedDeviceID: String? = nil,
         transferID: UUID = UUID(),
         note: (@Sendable (String) -> Void)? = nil,
         reconnect: (@Sendable () async -> Bool)? = nil,
@@ -774,6 +969,7 @@ actor CrossPointClient {
                         remotePath: stagingPath,
                         total: total,
                         resume: resume,
+                        flowControl: uploadStreamWindow == 4096,
                         progress: progress
                     )
                     crc32 = try await uploader.upload()
@@ -783,11 +979,8 @@ actor CrossPointClient {
                     guard UploadRetryPolicy.shouldRetry(error, attempt: attempt) else { throw error }
                     note?("Transfer interrupted: \(error.localizedDescription) Reconnecting (attempt \(attempt + 1) of \(UploadRetryPolicy.maxAttempts))…")
                     try await Task.sleep(for: UploadRetryPolicy.delay(afterAttempt: attempt))
-                    if (try? await status(host: host, port: port, timeout: 3)) == nil {
-                        // The private hotspot itself dropped. Let the caller rejoin
-                        // it before continuing; otherwise report the original failure.
-                        guard let reconnect, await reconnect() else { throw error }
-                    }
+                    try await waitForReader(host: host, port: port, expectedDeviceID: expectedDeviceID,
+                                            reconnect: reconnect)
                     resume = uploadStreamResume
                 }
             }
@@ -864,7 +1057,7 @@ actor CrossPointClient {
             "size": total,
             "crc32": String(format: "%08X", crc32),
         ])
-        let (commitData, commitResponse) = try await session.data(for: commitRequest)
+        let (commitData, commitResponse) = try await http.data(for: commitRequest, session: session)
         try Self.requireSuccess(commitResponse, body: commitData)
         let committed = try JSONDecoder().decode(PocketCommitResponse.self, from: commitData)
         guard committed.size == total,
@@ -872,6 +1065,41 @@ actor CrossPointClient {
             throw ClientError.verificationFailed
         }
         return targetPath
+    }
+
+    /// Recovery is bounded and probe-gated on LAN as well as a private AP.
+    /// Never open another bulk socket while the reader is still unreachable.
+    func waitForReader(
+        host: String, port: Int, expectedDeviceID: String?,
+        reconnect: (@Sendable () async -> Bool)? = nil,
+        recoveryBudget: Duration = .seconds(45), probeSpacing: Duration = .seconds(3)
+    ) async throws {
+        let deadline = ContinuousClock.now + recoveryBudget
+        var attemptedRejoin = false
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            let recovered: CrossPointStatus?
+            do { recovered = try await status(host: host, port: port, timeout: 3) }
+            catch {
+                try Task.checkCancellation()
+                // Invalid HTTP/JSON responses are not evidence of a lost link.
+                guard UploadRetryPolicy.shouldRetry(error, attempt: 1) else { throw error }
+                recovered = nil
+            }
+            if let recovered {
+                guard PocketHardware(deviceName: recovered.device) != nil,
+                      expectedDeviceID == nil || recovered.deviceID == expectedDeviceID else {
+                    throw ClientError.unexpectedMessage("The reader changed during recovery. Reconnect before sending files.")
+                }
+                return
+            }
+            if !attemptedRejoin, let reconnect {
+                attemptedRejoin = true
+                _ = await reconnect()
+            }
+            try await Task.sleep(for: probeSpacing)
+        }
+        throw PocketStreamUploader.StreamError.stalled
     }
 
     private static func makeMultipartBody(

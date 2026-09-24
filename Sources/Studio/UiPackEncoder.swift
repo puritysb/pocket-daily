@@ -3,7 +3,7 @@ import Foundation
 
 /// Encodes `.uipack` theme-override packs (`docs/live-studio-v1.md`, mirrored
 /// by `UiPack.h` in the firmware repository). The layout is the wire
-/// contract: 100-byte header + theme-override records, little-endian.
+/// contract: 120-byte header + seven-byte theme records, little-endian.
 enum UiPackEncoder {
     /// Field ids from the generated registry (`scripts/gen_theme_fields.py`
     /// in the firmware repository emits `theme_fields.json`; this list mirrors
@@ -55,23 +55,74 @@ enum UiPackEncoder {
 
     enum EncodeError: LocalizedError {
         case unknownField(String)
+        case invalidValue(String)
+        case invalidMetadata
 
         var errorDescription: String? {
             switch self {
             case let .unknownField(name): "The reader firmware does not know the theme field '\(name)'."
+            case let .invalidValue(name): "The value for '\(name)' does not match the reader's field type."
+            case .invalidMetadata: "Use a pack name of 1–24 ASCII letters, digits, hyphens or underscores, and a version of 1–16 such characters or dots."
             }
         }
     }
 
     static func encode(name: String, version: String, theme: [String: Int]) throws -> Data {
+        var values: [String: Value] = [:]
+        for (key, value) in theme {
+            guard let field = fields[key] else { throw EncodeError.unknownField(key) }
+            switch registry[field].type {
+            case 2:
+                guard value == 0 || value == 1 else { throw EncodeError.invalidValue(key) }
+                values[key] = .bool(value == 1)
+            case 3: values[key] = .float(Float(value))
+            default: values[key] = .integer(value)
+            }
+        }
+        return try encodeValues(name: name, version: version, theme: values)
+    }
+
+    enum Value {
+        case integer(Int)
+        case bool(Bool)
+        case float(Float)
+    }
+
+    static func encodeValues(name: String, version: String, theme: [String: Value]) throws -> Data {
+        let nameCharacters = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_".utf8)
+        guard !name.isEmpty, !version.isEmpty, name.utf8.count <= 24, version.utf8.count <= 16,
+              name.utf8.allSatisfy({ nameCharacters.contains($0) }),
+              version.utf8.allSatisfy({ nameCharacters.contains($0) || $0 == 46 }) else {
+            throw EncodeError.invalidMetadata
+        }
         var payload = Data()
         let ordered = theme.sorted { $0.key < $1.key }
         for (fieldName, value) in ordered {
             guard let field = fields[fieldName] else { throw EncodeError.unknownField(fieldName) }
+            let type = registry[field].type
+            let raw: UInt32
+            switch (type, value) {
+            case (1, let .integer(number)):
+                guard let number = Int32(exactly: number) else { throw EncodeError.invalidValue(fieldName) }
+                // Mirrored by firmware UiPack.cpp: divisor and resource budget,
+                // independent of the selected panel or its orientation.
+                if fieldName == "homeCoverHeight", !(1...2048).contains(number) {
+                    throw EncodeError.invalidValue(fieldName)
+                }
+                raw = UInt32(bitPattern: number)
+            case (2, let .bool(flag)): raw = flag ? 1 : 0
+            case (3, let .float(number)):
+                guard number.isFinite else { throw EncodeError.invalidValue(fieldName) }
+                if fieldName == "popupTopOffsetRatio", !(0...1).contains(number) {
+                    throw EncodeError.invalidValue(fieldName)
+                }
+                raw = number.bitPattern
+            default: throw EncodeError.invalidValue(fieldName)
+            }
             var id = UInt16(field).littleEndian
             payload.append(contentsOf: withUnsafeBytes(of: &id) { Array($0) })
-            payload.append(UInt8(1))  // int records only in the v1 editor
-            var bits = Int32(clamping: value).littleEndian
+            payload.append(UInt8(type))
+            var bits = raw.littleEndian
             payload.append(contentsOf: withUnsafeBytes(of: &bits) { Array($0) })
         }
 
