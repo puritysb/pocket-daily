@@ -101,6 +101,19 @@ struct ContentView: View {
     private var desktopStudio: some View {
         HStack(spacing: 0) {
             ScrollView {
+#if os(macOS)
+                // Mac content studio: the reader canvas is the editing surface
+                // and Send to reader is the single content action.
+                VStack(alignment: .leading, spacing: 18) {
+                    desktopHeader
+                    readerLine
+                    ContentStudioView(model: model)
+                }
+                .padding(.horizontal, 34)
+                .padding(.vertical, 24)
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
+#else
                 VStack(spacing: 18) {
                     desktopHeader
                     previewHeader
@@ -115,6 +128,7 @@ struct ContentView: View {
                 .padding(.horizontal, 34)
                 .padding(.vertical, 24)
                 .frame(maxWidth: .infinity)
+#endif
             }
             .background(PocketPalette.stage)
             Divider()
@@ -162,7 +176,48 @@ struct ContentView: View {
             Button("About & Privacy", systemImage: "info.circle") { showingProjectInfo = true }
                 .buttonStyle(.bordered)
         }
+#if os(macOS)
+        .frame(maxWidth: .infinity)
+#else
         .frame(maxWidth: 560)
+#endif
+    }
+
+    /// Mac studio: which reader the cards go to, in one line.
+    private var readerLine: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                if let status = model.readerStatus, !model.isDemoMode {
+                    Label("\(status.device) · \(model.hasDirectSession ? "Direct connection" : "Same Wi-Fi")",
+                          systemImage: "dot.radiowaves.left.and.right")
+                        .font(.callout.weight(.semibold))
+                    syncModeBadge
+                } else {
+                    Label(model.isDemoMode ? "Demo · no reader" : "No reader connected", systemImage: "rectangle.portrait.slash")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Picker("Preview device", selection: $model.preferredHardware) {
+                        ForEach(PocketHardware.allCases) { hardware in
+                            Text(hardware.rawValue).tag(hardware)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 112)
+                }
+                Spacer()
+                Text("\(model.hardware.screenWidth) × \(model.hardware.screenHeight)")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if case let .updateAvailable(current, minimum) = firmwareAdvice {
+                Label(
+                    "Reader firmware \(current) is behind \(minimum). On the reader: Settings → System → Update.",
+                    systemImage: "arrow.down.circle"
+                )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
     }
 
     private var previewHeader: some View {
@@ -274,9 +329,11 @@ struct ContentView: View {
                 .buttonStyle(.borderless).disabled(model.isWorking || model.isDemoMode)
 #endif
             DeviceSettingsInspector(model: model)
+#if !os(macOS)
             Button("Edit content cards…") { showingContentEditor = true }
                 .accessibilityIdentifier("open-content-editor")
                 .buttonStyle(.bordered)
+#endif
             ThemePackInspector(model: model)
             if !model.isDemoMode {
                 TroubleshootingInspector(model: model, nearby: nearby)
@@ -707,7 +764,7 @@ private struct DeviceSettingsInspector: View {
                     Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
                 }
                 .pickerStyle(.segmented)
-                Button(model.isDemoMode ? "Demo preview only" : "Apply to \(model.hardware.rawValue)") { model.savePreferences() }
+                Button(model.isDemoMode ? "Demo preview only" : "Save reading settings") { model.savePreferences() }
                     .buttonStyle(.bordered).disabled(model.isDemoMode || !model.preferencesDirty || model.isWorking)
             } else {
                 Text("Connect to load settings from the reader.")

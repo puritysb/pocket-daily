@@ -66,6 +66,8 @@
 		70C1388C6930C40CA2BFE011 /* PocketHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C61AC1FD88CD54C5818106 /* PocketHardware.swift */; };
 		719D681093345D163F816123 /* ThemeEditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EAD9474E08B205ADB3FA6A0 /* ThemeEditorModel.swift */; };
 		71A8E7C92B39B1F48C5E90C2 /* ContentCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11D0FF030626566E51FE773 /* ContentCardTests.swift */; };
+		75A887C214F159872F87B60B /* ContentStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09AD8AE76A61E6B965746838 /* ContentStudioView.swift */; };
+		76B6B1FD45AE0FC9BAC63A96 /* ContentSendStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */; };
 		77C5FDC1549F4F15AD4DB347 /* ContentLiveApply.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7213E026BC02D5F62CB392 /* ContentLiveApply.swift */; };
 		788D4EED6684B798538AB59F /* ContentDeploymentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C48A3F763A66DC6549ED067 /* ContentDeploymentTests.swift */; };
 		7ADA4110ACED2E32A5262A27 /* ContentDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FF14323D43CE94B45BE8AD2 /* ContentDraftStore.swift */; };
@@ -76,9 +78,11 @@
 		894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */; };
 		89D8E54D274F31B26C44362E /* ThemeEditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EAD9474E08B205ADB3FA6A0 /* ThemeEditorModel.swift */; };
 		8D4C4B162E3D49AD16DFD7A2 /* UiPackEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB94FECF792B1A9BFF585E18 /* UiPackEncoder.swift */; };
+		8E11736F7C7F820EBA854F76 /* ContentSendStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */; };
 		92A64EA6EF3A5C85BEE23C02 /* ContentCardPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6BF4F0D64624DF2E9977A22 /* ContentCardPreview.swift */; };
 		99F8E48A3902BF0E3DE6D172 /* PocketScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */; };
 		9A45EFEC72AD5450556937E9 /* ContentActivationJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1921597C30EF1ECE33916E94 /* ContentActivationJournal.swift */; };
+		9C973EE036CE9FFE03CC6F30 /* ContentStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09AD8AE76A61E6B965746838 /* ContentStudioView.swift */; };
 		9D8C3DB52CCA40194D31DD88 /* ContentDraftFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40700F9050393C248572BB7 /* ContentDraftFile.swift */; };
 		A04A8E788D0D3BCB473D9EFD /* ContentDeployment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5CDB7619C59CB8CC6E9426 /* ContentDeployment.swift */; };
 		A0A560FFC6CEB57DF471B578 /* ContentRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FA699FD202B240470E8A0C /* ContentRevision.swift */; };
@@ -100,6 +104,7 @@
 		B6CB797378B125002CFCB77E /* ContentDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FF14323D43CE94B45BE8AD2 /* ContentDraftStore.swift */; };
 		B6D4497CDDCA5038487735DE /* ThemePackInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C6FF83A2E149B0E54B1B4AD /* ThemePackInspector.swift */; };
 		B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5893AB01049A60E87A4353F /* LiveSyncTests.swift */; };
+		B98659838FB4DA55E8CBC8C1 /* ContentSendStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */; };
 		BAC8BE97D29D857629A19653 /* ReaderContentTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0276250491E92462800CC7CB /* ReaderContentTransportTests.swift */; };
 		BAD05CC44C8FCA99CC9F8E73 /* ThemeDraftFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64A30B895C94C2C55F8828E /* ThemeDraftFileTests.swift */; };
 		BB1B2115ACA29E87C9F1A51A /* LocalReaderDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C5706F004643C8427F5DEF /* LocalReaderDiscovery.swift */; };
@@ -160,6 +165,7 @@
 		02FA699FD202B240470E8A0C /* ContentRevision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRevision.swift; sourceTree = "<group>"; };
 		037226D140697D15166E6091 /* FirmwareImageValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareImageValidator.swift; sourceTree = "<group>"; };
 		05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketModel.swift; sourceTree = "<group>"; };
+		09AD8AE76A61E6B965746838 /* ContentStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentStudioView.swift; sourceTree = "<group>"; };
 		0AE6405CB650DB45FCE162A5 /* ThemeDraftTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeDraftTests.swift; sourceTree = "<group>"; };
 		13C0A23B6F3DB13FD2EEB751 /* ContentManifestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentManifestTests.swift; sourceTree = "<group>"; };
 		15F6370CE0221DE9161710BC /* ContentActivationJournalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentActivationJournalTests.swift; sourceTree = "<group>"; };
@@ -181,6 +187,7 @@
 		508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidanceTests.swift; sourceTree = "<group>"; };
 		5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMacScreenshotTests.swift; sourceTree = "<group>"; };
 		5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostRendererBridgeTests.swift; sourceTree = "<group>"; };
+		5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSendStatusTests.swift; sourceTree = "<group>"; };
 		5D46C68C6D1477B48D78B01C /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
 		5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFontStore.swift; sourceTree = "<group>"; };
 		6C96AB061106DE9C5EA26485 /* ContentDraftFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftFileTests.swift; sourceTree = "<group>"; };
@@ -228,6 +235,7 @@
 		EAE0C268F1C01D32A9B6CCF7 /* ContentPreviewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewModelTests.swift; sourceTree = "<group>"; };
 		ED14B15E886AE48D45407B10 /* NearbySyncProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncProtocol.swift; sourceTree = "<group>"; };
 		EE15BB729CB36D826770B602 /* ThemeDraftUITestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeDraftUITestStore.swift; sourceTree = "<group>"; };
+		EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSendStatus.swift; sourceTree = "<group>"; };
 		EF248AD34F385ED9F2F09847 /* Pocket.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pocket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidance.swift; sourceTree = "<group>"; };
 		F40700F9050393C248572BB7 /* ContentDraftFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftFile.swift; sourceTree = "<group>"; };
@@ -323,6 +331,7 @@
 				C659337A9E03491E0F4C3172 /* ContentPresentationTests.swift */,
 				EAE0C268F1C01D32A9B6CCF7 /* ContentPreviewModelTests.swift */,
 				E9D87C009E70F5E9A8868771 /* ContentRevisionTests.swift */,
+				5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */,
 				8D65074F70247BF2542F483F /* DeviceCoreTests.swift */,
 				508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */,
 				5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */,
@@ -377,7 +386,9 @@
 				E1988366ACAAA3D45E411A30 /* ContentPresentation.swift */,
 				8ECD37D9F915D53A73EDFF92 /* ContentPreviewModel.swift */,
 				02FA699FD202B240470E8A0C /* ContentRevision.swift */,
+				EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */,
 				1AAC7D167DC4796E9883FA0B /* ContentStateReceipt.swift */,
+				09AD8AE76A61E6B965746838 /* ContentStudioView.swift */,
 				197D11D851B078BA98D06299 /* HostRendererBridge.swift */,
 				5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */,
 				B0E3DC4EBC78C9155C40A9D4 /* ReaderContentTransport.swift */,
@@ -664,6 +675,7 @@
 				050C13EBEB9CB6DC62B44254 /* ContentPresentationTests.swift in Sources */,
 				E8B4CDE7F30ADFA9BF210DBA /* ContentPreviewModelTests.swift in Sources */,
 				0BBC0567D7ADE7BA48A4C12E /* ContentRevisionTests.swift in Sources */,
+				B98659838FB4DA55E8CBC8C1 /* ContentSendStatusTests.swift in Sources */,
 				E90B3D0617FFE6C249E40D24 /* DeviceCoreTests.swift in Sources */,
 				C4C665425569754870E021C7 /* FirmwareGuidanceTests.swift in Sources */,
 				07C2801BF9C5C8FEE95B882B /* HostRendererBridgeTests.swift in Sources */,
@@ -696,7 +708,9 @@
 				68B775E824A762E3BB247813 /* ContentPresentation.swift in Sources */,
 				0EB919B8DC0F8B261A198D50 /* ContentPreviewModel.swift in Sources */,
 				A0A560FFC6CEB57DF471B578 /* ContentRevision.swift in Sources */,
+				76B6B1FD45AE0FC9BAC63A96 /* ContentSendStatus.swift in Sources */,
 				60803444EEA4ACDE05DD9900 /* ContentStateReceipt.swift in Sources */,
+				75A887C214F159872F87B60B /* ContentStudioView.swift in Sources */,
 				E72A0BD7BB8E36855DA96247 /* ContentView.swift in Sources */,
 				FEAC785F7C5914FA98BBB52B /* CrossPointClient.swift in Sources */,
 				0368E20577EA2F31604B9D73 /* DeviceCore.swift in Sources */,
@@ -743,7 +757,9 @@
 				C9A078B230DA0C16B54E92BA /* ContentPresentation.swift in Sources */,
 				E1D2B5D2BB5D7B75954534AD /* ContentPreviewModel.swift in Sources */,
 				230CD450C1CF6929F8CC87D0 /* ContentRevision.swift in Sources */,
+				8E11736F7C7F820EBA854F76 /* ContentSendStatus.swift in Sources */,
 				677EADB49600A4441B0D9138 /* ContentStateReceipt.swift in Sources */,
+				9C973EE036CE9FFE03CC6F30 /* ContentStudioView.swift in Sources */,
 				A6208CA1D1EDD27DDD132C2F /* ContentView.swift in Sources */,
 				136F7173D3544851F4C78858 /* CrossPointClient.swift in Sources */,
 				6A1BD5C811438399B452357D /* DeviceCore.swift in Sources */,

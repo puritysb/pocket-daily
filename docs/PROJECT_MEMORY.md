@@ -6,6 +6,22 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-24 repeated Apply unblocked by sibling firmware (TIME_WAIT purge in
+  Sync; see its PROJECT_MEMORY and sync-route-memory.md). Actual Mac app edits
+  on X3 w0482f45b: gen4 rendered 17,524B/8,180B, same-session gen5 rendered
+  20,428B/13,300B (driver receipts). A user test showed three "Apply" buttons
+  were confusing. Mac UX step U1: content editing is the main window
+  (ContentStudioView) with the exact host-rendered frame in the chassis, one
+  Send to reader, opt-in session Auto-send, 1s local autosave, no content
+  confirmation dialogs; ContentSendStatus (pure, 9 tests) gates Send and only
+  reports "Shown on reader" for the redraw receipt of the canvas revision.
+  Settings button is "Save reading settings", theme button "Send theme".
+  iPad/iPhone keep the sheet until U4. User then ran the new Mac build on X3:
+  edit -> Send to reader reached "Shown on reader" and the e-ink screen updated.
+  Direction change the same day: U2 inline card editing stopped in favour of a
+  Pocket Daily profile (home sections/order, feature on/off, then sleep screen)
+  via P0 inventory -> P1 firmware/host renderer -> P2 studio. See NEXT_STEPS.md.
+
 - 2026-09-24 physical follow-up: cleanup firmware wbcb431b1 installed once
   wirelessly and automatically returned to dedicated Pocket Daily Sync STA.
   Latest Mac app connected without a reader re-entry or Mac network change.

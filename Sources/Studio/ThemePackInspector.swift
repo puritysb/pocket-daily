@@ -134,15 +134,16 @@ private struct ThemeDraftControls: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             HStack {
-                Button("Apply live") { model.applyThemePack(editor.draft.overrides) }
+                // Secondary to the studio's Send to reader; named for what it sends.
+                Button("Send theme") { model.applyThemePack(editor.draft.overrides) }
                     .accessibilityIdentifier("theme-apply")
-                    .buttonStyle(.borderedProminent).disabled(!canApply)
+                    .buttonStyle(.bordered).disabled(!canApply)
                 Button("Revert") { model.revertThemePack() }
                     .accessibilityIdentifier("theme-revert")
                     .buttonStyle(.bordered).disabled(!canChangeReader)
             }
-            Text(canApply ? "Apply sends a data pack, never firmware. Activation is verified separately from the displayed screen." :
-                 "Edit without a reader. Applying or reverting requires an identified reader with UI-pack support; demo mode never changes a device.")
+            Text(canApply ? "Send theme sends a data pack, never firmware. Activation is verified separately from the displayed screen." :
+                 "Edit without a reader. Sending or reverting requires an identified reader with UI-pack support; demo mode never changes a device.")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .task { if !editor.hasLoaded && !editor.isBusy { await load() } }

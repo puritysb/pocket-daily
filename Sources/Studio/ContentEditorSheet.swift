@@ -359,7 +359,7 @@ private struct ContentEditorForm: View {
     }
 }
 
-private struct ContentImportReview: View {
+struct ContentImportReview: View {
     let proposal: ContentEditorModel.ImportProposal
     let error: String?
     let cancel: () -> Void
@@ -410,7 +410,7 @@ private struct ContentImportReview: View {
     }
 }
 
-private struct ContentImagePreview: View {
+struct ContentImagePreview: View {
     let data: Data
     @State private var image: CGImage?
     @State private var failed = false
@@ -441,7 +441,7 @@ private struct ContentImagePreview: View {
     }
 }
 
-private struct ContentJournalRecovery: View {
+struct ContentJournalRecovery: View {
     @ObservedObject var model: PocketModel
     @State private var confirming = false
 
@@ -465,7 +465,7 @@ private struct ContentJournalRecovery: View {
     }
 }
 
-private struct ContentDeploymentStatus: View {
+struct ContentDeploymentStatus: View {
     @ObservedObject var deployment: ContentDeployment
     @ObservedObject var model: PocketModel
     @State private var confirmingArchive = false

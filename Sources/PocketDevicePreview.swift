@@ -9,6 +9,9 @@ struct PocketDevicePreview: View {
     let hardware: PocketHardware
     let status: CrossPointStatus?
     let screenImageData: Data?
+    /// Exact host-rendered reader frame (content studio canvas). Takes
+    /// precedence over a captured frame; it is a local render, not a capture.
+    var renderedScreen: CGImage? = nil
 
     var body: some View {
         GeometryReader { proxy in
@@ -41,7 +44,7 @@ struct PocketDevicePreview: View {
                     }
                     .padding(.horizontal, width * 0.08)
 
-                    EInkSurface(hardware: hardware, status: status, screenImageData: screenImageData)
+                    EInkSurface(hardware: hardware, status: status, screenImageData: screenImageData, renderedScreen: renderedScreen)
                         .clipShape(RoundedRectangle(cornerRadius: width * 0.012))
                         .padding(.horizontal, width * 0.067)
 
@@ -157,6 +160,7 @@ private struct EInkSurface: View {
     let hardware: PocketHardware
     let status: CrossPointStatus?
     let screenImageData: Data?
+    let renderedScreen: CGImage?
 
     var body: some View {
         ZStack {
@@ -185,6 +189,7 @@ private struct EInkSurface: View {
     }
 
     private var screenImage: Image? {
+        if let renderedScreen { return Image(decorative: renderedScreen, scale: 1) }
         guard let screenImageData else { return nil }
 #if os(macOS)
         guard let image = NSImage(data: screenImageData) else { return nil }

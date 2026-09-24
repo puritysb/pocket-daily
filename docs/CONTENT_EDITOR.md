@@ -62,6 +62,34 @@ input. Apply requires explicit confirmation (including the empty-set meaning)
 and calls PocketModel's exclusive deployment lane; it never saves implicitly.
 Deployment labels distinguish stored activation from actual screen confirmation.
 
+## Mac content studio (2026-09-24)
+
+On macOS the card editor is the main window instead of a sheet
+(`ContentStudioView`). The left canvas is the connected hardware chassis
+showing the exact host-rendered reader frame for the selected card
+(`PocketDevicePreview.renderedScreen`); layout and preview orientation sit
+above it, card chips and Add below, and the selected card's fields beside it.
+iPad and iPhone keep ContentEditorSheet until the Mac workflow is validated.
+
+- One content action: **Send to reader** (Command-Return). It calls the same
+  exclusive `applyContent` lane with no confirmation dialog. Every send
+  refreshes e-ink, so sending is never automatic by default.
+- **Auto-send** is an opt-in toggle for the current reader session only; it is
+  the existing coalescing live apply without its confirmation dialog, and it
+  stops on session change, backgrounding or draft import.
+- `ContentSendStatus` (pure, unit tested) drives the status line. "Shown on
+  reader" requires the redraw receipt for the exact revision on the canvas;
+  storage-only activation, unknown outcomes and failures stay distinct.
+  Identical cards already shown cannot be resent (it would only refresh e-ink).
+- An empty draft cannot be sent from the studio, so clearing the reader is
+  never a side effect of deleting cards.
+- Drafts save locally one second after typing pauses; saving never contacts a
+  reader. Load/save conflicts keep the explicit preserve-and-recover path, and
+  draft import keeps its side-by-side review because it replaces every card.
+- Demo shows one in-memory sample card; nothing is saved or sent.
+- Other "Apply" labels were renamed for what they send: reading settings use
+  **Save reading settings**, the theme inspector uses **Send theme**.
+
 ## Explicit live editing session
 
 Start live apply is a separate confirmation for the currently identified reader
