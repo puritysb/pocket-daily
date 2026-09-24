@@ -361,9 +361,13 @@ machine.
 ## Multi-agent collaboration — 2026-09-19
 
 - OpenCode, Claude Code, and Codex all work in this repository. `AGENTS.md` is
-  the single operational entry point for every agent, `CLAUDE.md` is the shared
-  product constitution, and this file is the shared cross-agent memory. No
-  agent keeps a private instruction file or separate memory.
+  the only project instruction file (constitution and workflow) and this file
+  is the shared cross-agent memory. No agent keeps a private instruction file
+  or separate memory.
+- 2026-09-24: `CLAUDE.md` was folded into `AGENTS.md` and removed, because
+  Claude Code 2.1.277+ reads `AGENTS.md` natively but only when no
+  `CLAUDE.md`/`CLAUDE.local.md` exists in the working directory or above.
+  Do not reintroduce either file.
 - On 2026-09-19 the working tree held verified but uncommitted work dated
   2026-09-06 through 2026-09-09 (direct sessions, LAN discovery pacing, the
   screenshot pipeline, and App Store submission updates) while `origin/main`

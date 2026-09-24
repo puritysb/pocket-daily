@@ -52,9 +52,9 @@ installed. Treat `project.yml` as the source of truth: regenerate with XcodeGen
 after project or file-membership changes, and do not hand-edit
 `Pocket.xcodeproj/project.pbxproj`.
 
-Agent-assisted work starts with [`AGENTS.md`](AGENTS.md). Stable product and
-engineering constraints are in [`CLAUDE.md`](CLAUDE.md), while dated durable
-handoff context is in [`docs/PROJECT_MEMORY.md`](docs/PROJECT_MEMORY.md).
+Agent-assisted work starts with [`AGENTS.md`](AGENTS.md), the single instruction
+file for every coding agent, covering product constraints and workflow. Dated
+durable handoff context is in [`docs/PROJECT_MEMORY.md`](docs/PROJECT_MEMORY.md).
 
 For local macOS hardware testing, sign the built app with a Developer ID
 identity and `Support/PocketMacDeveloperID.entitlements`. This keeps Bluetooth,
