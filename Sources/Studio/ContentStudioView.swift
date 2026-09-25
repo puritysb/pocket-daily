@@ -95,6 +95,8 @@ private struct ContentStudioWorkspace: View {
     @State private var exportDocument: ContentDraftDocument?
     @State private var importTask: Task<Void, Never>?
     @State private var importError: String?
+    @State private var lastRemoved: RemovedContentCard?
+    @Environment(\.undoManager) private var undoManager
 
     private var cards: [ContentCard] { editor.draft.cards }
     private var selectedIndex: Int? {
@@ -394,6 +396,19 @@ private struct ContentStudioWorkspace: View {
                     .buttonStyle(.bordered)
                     .disabled(editor.isBusy)
             }
+            if let removed = lastRemoved {
+                HStack {
+                    Label("Removed “\(removed.card.title.isEmpty ? "Untitled" : removed.card.title)”", systemImage: "trash")
+                        .font(.caption)
+                    Spacer()
+                    Button("Undo") { restore(removed) }
+                        .font(.caption)
+                        .disabled(locked || editor.isBusy)
+                        .accessibilityIdentifier("studio-undo-remove")
+                }
+                .padding(8)
+                .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 8))
+            }
             Divider().padding(.vertical, 4)
             draftFooter
         }
@@ -509,14 +524,26 @@ private struct ContentStudioWorkspace: View {
         editor.edit(draft)
     }
 
+    /// Deleting is autosaved, so it is always undoable: inline and with ⌘Z.
     private func remove(_ index: Int) {
-        var draft = editor.draft
-        guard draft.cards.indices.contains(index) else { return }
-        draft.cards.remove(at: index)
-        let referenced = Set(draft.cards.map(\.imagePath))
-        draft.images = draft.images.filter { referenced.contains($0.key) }
+        guard let (draft, removed) = editor.draft.removingCard(at: index) else { return }
         editor.edit(draft)
         selectedID = draft.cards.isEmpty ? nil : draft.cards[min(index, draft.cards.count - 1)].id
+        lastRemoved = removed
+        undoManager?.registerUndo(withTarget: editor) { _ in
+            Task { @MainActor in restore(removed) }
+        }
+        undoManager?.setActionName("Remove Card")
+    }
+
+    private func restore(_ removed: RemovedContentCard) {
+        guard let draft = editor.draft.restoring(removed) else {
+            operationError = "The removed card cannot be restored: the card limit is reached or its ID is in use."
+            return
+        }
+        editor.edit(draft)
+        selectedID = removed.card.id
+        if lastRemoved == removed { lastRemoved = nil }
     }
 
     private var layoutBinding: Binding<ContentCard.Layout> {

@@ -148,3 +148,34 @@ actor ContentDraftStore {
         return Recovery(saved: saved, backup: backup)
     }
 }
+
+/// A card taken out of a draft, with the image only it referenced, so the
+/// studio can undo a deletion even after later edits.
+struct RemovedContentCard: Equatable, Sendable {
+    let card: ContentCard
+    let image: Data?
+    let index: Int
+}
+
+extension ContentDraft {
+    /// Removes a card and any image no remaining card references.
+    func removingCard(at index: Int) -> (ContentDraft, RemovedContentCard)? {
+        guard cards.indices.contains(index) else { return nil }
+        var draft = self
+        let card = draft.cards.remove(at: index)
+        let referenced = Set(draft.cards.map(\.imagePath))
+        let image = card.imagePath.isEmpty || referenced.contains(card.imagePath) ? nil : images[card.imagePath]
+        draft.images = draft.images.filter { referenced.contains($0.key) }
+        return (draft, RemovedContentCard(card: card, image: image, index: index))
+    }
+
+    /// Puts a removed card back at (or near) its old position. nil when it can
+    /// no longer fit: the ID reappeared or the three-card limit is reached.
+    func restoring(_ removed: RemovedContentCard, limit: Int = 3) -> ContentDraft? {
+        guard cards.count < limit, !cards.contains(where: { $0.id == removed.card.id }) else { return nil }
+        var draft = self
+        draft.cards.insert(removed.card, at: min(removed.index, draft.cards.count))
+        if let image = removed.image, !removed.card.imagePath.isEmpty { draft.images[removed.card.imagePath] = image }
+        return draft
+    }
+}
