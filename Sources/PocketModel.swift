@@ -384,6 +384,40 @@ final class PocketModel: ObservableObject, DeviceSession {
         if started == nil { profileSend = .idle }
     }
 
+    /// Identified reader whose firmware serves its published card files.
+    var canLoadReaderCards: Bool { contentEditingSession != nil && readerStatus?.contentRead == 1 }
+
+    /// Reads the reader's active card set in the exclusive reader lane and hands
+    /// the verified draft back (nil when the reader has no app cards). Read-only:
+    /// nothing on the reader or in the local draft changes here.
+    @discardableResult
+    func loadReaderCards(_ deliver: @escaping @MainActor (Result<ContentDraft?, Error>) -> Void) -> Bool {
+        guard canLoadReaderCards, !isWorking, !hasReaderWork, let identity = readerStatus?.deviceID else { return false }
+        let host = activeHost
+        let port = activeHTTPPort
+        let attempt = connectionAttempt
+        let started = startReaderWork(attempt: attempt, kind: .preview) { [self] owner in
+            do {
+                let state = try await client.contentState(deviceID: identity, host: host, port: port)
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                guard let active = state.active else {
+                    deliver(.success(nil))
+                    return
+                }
+                let draft = try await ReaderContentPull.draft(revision: active.revision) { [client] name, offset in
+                    try await client.contentFileChunk(revision: active.revision, name: name, offset: offset,
+                                                      deviceID: identity, host: host, port: port)
+                }
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                deliver(.success(draft))
+            } catch {
+                guard attempt == connectionAttempt else { return }
+                deliver(.failure(error))
+            }
+        }
+        return started != nil
+    }
+
     /// One read-only GET inside an existing sequential reader lane (the reader
     /// serves one HTTP client at a time). nil = labelled reference preview.
     private func loadReaderDisplay(_ status: CrossPointStatus, host: String, port: Int) async -> ReaderDisplayState? {

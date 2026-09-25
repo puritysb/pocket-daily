@@ -6,6 +6,15 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-25 Load cards from the reader: Cards shows "Load cards from the
+  reader…" when status has contentRead: 1 (firmware docs/content-read-v1.md).
+  PocketModel.loadReaderCards reads content/state then chunked
+  /content/file reads in the reader lane; ReaderContentPull verifies manifest
+  SHA == revision, canonical manifest/card bytes and each file hash; the
+  editor's import review (prepareImport(_:sourceName:)) gates Replace.
+  ReaderContentPullTests cover goldens, chunking and integrity failures. Not
+  exercised on a reader.
+
 - 2026-09-25 U4 studio on every platform (firmware e81427dc renderer): Home & Sleep
   first, then Cards, with the Reader inspector (connection, files, reader
   settings, folded Advanced = theme metrics + diagnostics, About & Privacy

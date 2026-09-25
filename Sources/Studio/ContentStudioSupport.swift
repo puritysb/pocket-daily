@@ -11,7 +11,7 @@ struct ContentImportReview: View {
         NavigationStack {
             Form {
                 Text(proposal.sourceName).font(.headline)
-                Text("Compare the complete sets below. Replace discards unsaved edits in memory only. The saved draft and reader stay unchanged until you explicitly Save or Apply.")
+                Text("Replace swaps every card in this editor for the set below. The reader does not change until you choose Send.")
                     .font(.caption)
                 if proposal.draft.cards.isEmpty {
                     Text("The imported draft is empty. Confirming will remove all cards from this editor.")
@@ -21,7 +21,7 @@ struct ContentImportReview: View {
                 cards("Imported cards", draft: proposal.draft)
                 if let error { Text(error).foregroundStyle(.red) }
             }
-            .navigationTitle("Import content draft")
+            .navigationTitle("Replace cards?")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: cancel) }
                 ToolbarItem(placement: .confirmationAction) {

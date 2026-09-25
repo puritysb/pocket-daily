@@ -99,6 +99,8 @@ private struct ContentStudioWorkspace: View {
     @State private var importTask: Task<Void, Never>?
     @State private var importError: String?
     @State private var lastRemoved: RemovedContentCard?
+    @State private var loadingReaderCards = false
+    @State private var readerCardsNotice: String?
     @Environment(\.undoManager) private var undoManager
 
     private var cards: [ContentCard] { editor.draft.cards }
@@ -441,6 +443,25 @@ private struct ContentStudioWorkspace: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(draftStateLabel).font(.caption).foregroundStyle(.secondary)
                 .accessibilityIdentifier("studio-draft-state")
+            if model.canLoadReaderCards {
+                Button {
+                    loadReaderCards()
+                } label: {
+                    if loadingReaderCards {
+                        Label("Loading cards from the reader…", systemImage: "arrow.down.circle")
+                    } else {
+                        Label("Load cards from the reader…", systemImage: "arrow.down.circle")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .disabled(loadingReaderCards || editor.isBusy || model.isWorking || autoSend.isEnabled)
+                .help("Brings the cards the reader shows now into this editor for review. The reader is not changed.")
+                .accessibilityIdentifier("studio-load-reader")
+            }
+            if let readerCardsNotice {
+                Text(readerCardsNotice).font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Button("Import cards…") {
                     guard !locked, !model.isWorking else { return }
@@ -500,6 +521,30 @@ private struct ContentStudioWorkspace: View {
     }
 
     // MARK: Actions
+
+    /// Read-only: the verified set opens in the same review as a file import.
+    private func loadReaderCards() {
+        guard !locked else { return }
+        operationError = nil
+        readerCardsNotice = nil
+        let device = model.readerStatus?.device ?? "the reader"
+        loadingReaderCards = model.loadReaderCards { result in
+            loadingReaderCards = false
+            switch result {
+            case .success(nil):
+                readerCardsNotice = "\(device) has no cards from this app."
+            case let .success(draft?):
+                if draft == editor.draft {
+                    readerCardsNotice = "This editor already matches the cards on \(device)."
+                    return
+                }
+                do { try editor.prepareImport(draft, sourceName: "Cards on \(device)") }
+                catch { operationError = error.localizedDescription }
+            case let .failure(error):
+                operationError = error.localizedDescription
+            }
+        }
+    }
 
     private func send() {
         guard let revision, !autoSend.isEnabled else { return }

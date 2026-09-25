@@ -59,6 +59,41 @@ enum ContentManifest {
         return data
     }
 
+    struct Decoded: Equatable {
+        let files: [File]
+        let requiredCapabilities: UInt16
+    }
+
+    /// Strict reader for manifests read back from a reader. Accepts only the
+    /// canonical bytes `encode` would produce for the same files, which covers
+    /// shape, CRC, limits, names, order and the capability bits at once.
+    static func decode(_ data: Data) throws -> Decoded {
+        let bytes = [UInt8](data)
+        func u16(_ at: Int) -> UInt16 { UInt16(bytes[at]) | UInt16(bytes[at + 1]) << 8 }
+        func u32(_ at: Int) -> UInt32 { UInt32(u16(at)) | UInt32(u16(at + 2)) << 16 }
+        guard bytes.count >= 20, bytes.count <= 20 + 104 * 16, bytes.starts(with: Array("PDCM".utf8)),
+              u16(4) == 1, u16(6) == 16 else { throw ValidationError.size }
+        let count = Int(u16(8))
+        guard count <= 16, bytes.count == 20 + 104 * count, u32(12) == UInt32(bytes.count) else {
+            throw ValidationError.count
+        }
+        let capabilities = u16(10)
+        var files: [File] = []
+        for index in 0..<count {
+            let entry = 16 + 104 * index
+            guard let kind = Kind(rawValue: bytes[entry]) else { throw ValidationError.path }
+            let field = bytes[(entry + 40)..<(entry + 104)]
+            guard let end = field.firstIndex(of: 0),
+                  let path = String(bytes: field[field.startIndex..<end], encoding: .utf8) else {
+                throw ValidationError.path
+            }
+            files.append(.init(path: path, kind: kind, bytes: u32(entry + 4),
+                               sha256: Data(bytes[(entry + 8)..<(entry + 40)])))
+        }
+        guard try encode(files, cardLayout: capabilities & 4 != 0) == data else { throw ValidationError.digest }
+        return .init(files: files, requiredCapabilities: capabilities)
+    }
+
     static func revision(of manifest: Data) -> String {
         SHA256.hash(data: manifest).map { String(format: "%02x", $0) }.joined()
     }

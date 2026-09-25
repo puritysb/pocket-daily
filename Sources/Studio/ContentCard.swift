@@ -72,6 +72,30 @@ struct ContentCard: Equatable, Codable, Sendable {
         return data
     }
 
+    /// Reads a card back from a reader. Accepts only bytes this app would write
+    /// for the same fields (`encoded()`), so CRC, padding, limits and layout are
+    /// all checked by one canonical comparison.
+    static func decode(_ data: Data) throws -> ContentCard {
+        let bytes = [UInt8](data)
+        guard bytes.count == 512, bytes.starts(with: Array("PDCT".utf8)), bytes[4] == 1 || bytes[4] == 2 else {
+            throw ValidationError.identifier
+        }
+        func field(_ offset: Int, _ capacity: Int, _ name: String) throws -> String {
+            let slice = bytes[offset..<(offset + capacity)]
+            guard let end = slice.firstIndex(of: 0),
+                  let text = String(bytes: slice[slice.startIndex..<end], encoding: .utf8) else {
+                throw ValidationError.text(field: name, maximumBytes: capacity - 1)
+            }
+            return text
+        }
+        guard let layout = Layout(rawValue: bytes[4] == 2 ? bytes[491] : 0) else { throw ValidationError.identifier }
+        let card = ContentCard(id: try field(16, 33, "id"), title: try field(49, 25, "title"),
+                               question: try field(74, 161, "question"), context: try field(235, 192, "context"),
+                               imagePath: try field(427, 64, "image"), layout: layout)
+        guard try card.encoded() == data else { throw ValidationError.identifier }
+        return card
+    }
+
     private func validateText(_ value: String, field: String, maximum: Int, required: Bool, multiline: Bool) throws {
         guard (!required || !value.isEmpty), value.utf8.count <= maximum,
               value.unicodeScalars.allSatisfy({ scalar in

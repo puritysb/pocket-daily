@@ -73,6 +73,16 @@ final class ContentEditorModel: ObservableObject {
         pendingImport = .init(sourceName: url.lastPathComponent, before: draft, draft: imported, editGeneration: started)
     }
 
+    /// Proposes a draft that was read rather than chosen as a file (the
+    /// reader's own cards); the same side-by-side review then applies.
+    func prepareImport(_ imported: ContentDraft, sourceName: String) throws {
+        guard !isDemo else { throw Failure.demo }
+        guard !isBusy else { throw Failure.busy }
+        guard hasLoaded else { throw Failure.notLoaded }
+        try ContentDraftFile.validate(imported)
+        pendingImport = .init(sourceName: sourceName, before: draft, draft: imported, editGeneration: editGeneration)
+    }
+
     func confirmImport(id: UUID) throws {
         guard !isDemo else { throw Failure.demo }
         guard !isBusy else { throw Failure.busy }

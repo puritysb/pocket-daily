@@ -94,6 +94,13 @@ fields beside it (below it when stacked).
   reader. Load/save conflicts keep the explicit preserve-and-recover path, and
   draft import keeps its side-by-side review because it replaces every card.
 - Demo shows one in-memory sample card; nothing is saved or sent.
+- **Load cards from the reader…** (2026-09-25; sibling docs/content-read-v1.md)
+  appears for identified readers that advertise `contentRead: 1`. It reads
+  the active revision's manifest, cards and images in the reader lane,
+  verifies the manifest against the revision and every file against the
+  manifest (`ReaderContentPull`), and opens the result in the same review as
+  a draft import ("Cards on X3"). Replace changes only the editor; nothing on
+  the reader changes, and a failed or partial read leaves the draft as is.
 - Removing a card is autosaved, so it is always undoable (2026-09-25): an
   inline Undo and ⌘Z put the card and the image only it used back at its old
   position, keeping later edits; restoring is refused (with a message) once

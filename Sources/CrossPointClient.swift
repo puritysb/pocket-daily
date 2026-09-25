@@ -27,6 +27,8 @@ struct CrossPointStatus: Codable, Equatable {
     var uploadStreamWindow: Int? = nil
     /// Pocket Daily profile endpoints (sibling docs/pocket-profile-v1.md).
     var pocketProfile: Int? = nil
+    /// Read-only published content files (sibling docs/content-read-v1.md).
+    var contentRead: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -714,6 +716,25 @@ actor CrossPointClient {
         let body = try await contentResponse(action: "presentation", method: "GET", revision: active.revision,
                                              deviceID: deviceID, host: host, port: port)
         return try ContentPresentationReceipt.decode(body, deviceID: deviceID, active: active)
+    }
+
+    /// One chunk of one file of a published content revision. The caller
+    /// verifies every byte (ReaderContentPull); this is transport only.
+    func contentFileChunk(revision: String, name: String, offset: Int, deviceID: String, host: String,
+                          port: Int) async throws -> Data {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/content/file",
+                                 query: ["deviceID": deviceID, "revision": revision, "name": name,
+                                         "offset": String(offset)]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        try Self.requireSuccess(response, body: body)
+        return body
     }
 
     enum ProfileRequestError: LocalizedError, Equatable {
