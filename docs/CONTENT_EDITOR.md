@@ -57,22 +57,43 @@ comparison/import and persistent backup browsing are not yet implemented.
 ## Studio layout (all platforms, 2026-09-25)
 
 One studio serves Mac, iPad and iPhone (`ContentView`, `StudioSection`):
-**Home & Sleep** opens first, **Cards** second, and the reader controls
-(connection, files, reader settings, then a folded **Advanced** group with
-theme metrics and diagnostics, and About & Privacy last) form the Reader
-inspector. Wide windows (at least 920 pt) show a header with the two studio
-tabs and the reader state beside a 320 pt inspector; the canvas and its
-controls sit side by side when the studio is at least 720 pt wide and stack
-otherwise. Narrower windows (iPhone, iPad split view) use three tabs, with the
-reader state in the toolbar. Explanations live in help tooltips or the
-"How to connect" disclosure rather than on screen. The iOS content sheet
-(`ContentEditorSheet`) and its separate Save/Apply/live-apply buttons were
-retired; all platforms use the card studio below. The bundled preview-font
-notices moved to About & Privacy.
+**Home & Sleep** holds everything the reader shows from Pocket Daily (Home
+items, **My cards**, weather, sleep screen, and the reader settings "Open
+Pocket Daily when the reader starts", book cover, sleep timeout and text size)
+with one Send. The **Reader** inspector holds the connection, files ("Write
+text to read" makes a .txt), troubleshooting (folded) and About & Privacy.
+Wide windows (at least 920 pt) show the header with the reader state beside a
+320 pt inspector; the canvas stays in view while the controls scroll, and
+stacks above them below 720 pt of studio width. Narrower windows (iPhone,
+iPad split view) use two tabs. Removed in the same change: the Cards tab (now
+My cards), the theme-metric inspector, the reader-screen capture download and
+live-frame fetching (no view showed them), the LIVE/POLL badge, JSON card
+import/export and Auto-send.
 
-## Card studio (2026-09-24, all platforms since 2026-09-25)
+Send (`PocketModel.sendReaderLayout`) posts the profile and reader settings in
+one reader work item, only the parts that changed, then applies My cards
+through the content lane when their revision differs from the reader's
+(`readerContentRevision`, read once per connection). Revert restores the
+profile and settings last loaded; cards are local drafts (Load from reader
+restores them).
 
-The card editor is a studio surface (`ContentStudioView`). The canvas is the
+## My cards (2026-09-25)
+
+Up to three pages (`MyCardsEditor`): title, text, note and an optional 1-bit
+image. The image menu makes a QR code from text or a link on the device
+(`ContentQRCode`: CoreImage, error correction M, 4-module quiet zone,
+whole-pixel modules within 240 px because the reader never enlarges images),
+fetches an image from an HTTPS link (`ContentImageImport.load(remote:)`:
+no cookies or cache, 20 MB, image types only), or converts a chosen file.
+Editing a card shows the Card surface (the page as opened on the reader);
+Home and Sleep previews draw the user's cards through `pdui_set_cards`.
+Profile item `word` (daily word as its own page) and sleep section `card`
+(first card with its image, always shown) are offered when the reader
+advertises them.
+
+## Card studio (2026-09-24; history, now My cards)
+
+The card editor was a studio surface (`ContentStudioView`). The canvas is the
 connected hardware chassis showing the exact host-rendered reader frame for
 the selected card (`PocketDevicePreview.renderedScreen`); layout and preview
 orientation sit above it, card chips and Add below, and the selected card's

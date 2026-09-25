@@ -16,13 +16,13 @@ sponsorship, or endorsement.
 
 The app opens on **Home & Sleep**. It has an explicit, local demo mode for
 review without an account or reader: open **Reader** (a tab on iPhone, the
-panel on the right on iPad and Mac) and choose **Try demo**. Home & Sleep and
-Cards then show previews drawn by the reader's own layout code with built-in
-sample content, captioned "Sample content"; nothing in them is read from a
-device. Demo settings are populated, but Send, file transfer and applying
-settings are disabled so review data can never be mistaken for a connected
-device. When a connected reader offers it, **Show reader screen** loads the
-e-paper frame the reader captured before Sync opened.
+panel on the right on iPad and Mac) and choose **Try demo**. Home & Sleep then
+shows previews drawn by the reader's own layout code with a sample card and
+built-in sample content, captioned as sample content; nothing in them is read
+from a device. Its My cards section makes QR codes on the device. Demo
+settings are populated, but Send, file transfer and applying settings are
+disabled so review data can never be mistaken for a connected device. Cards a
+connected reader already shows can be loaded back for review.
 
 Live hardware actions require a compatible reader:
 

@@ -205,33 +205,69 @@ actor HostRendererBridge {
 
     /// The Pocket Daily Home face drawn by the firmware's own painter with
     /// representative sample content (sibling docs/pocket-profile-v1.md P1-3).
-    func renderHome(profile: PocketProfile, samples: LayoutSamples = .all, selected: Int = 0) throws -> Frame {
+    /// `cards` are the user's own cards ("My cards"), shown instead of the
+    /// sample study card; incomplete cards are skipped as they cannot be sent.
+    func renderHome(profile: PocketProfile, cards: ContentDraft = .init(), samples: LayoutSamples = .all,
+                    selected: Int = 0) throws -> Frame {
         try Task.checkCancellation()
         var native = try Self.nativeProfile(profile)
         let context = try nativeContext()
+        try setCards(cards, on: context)
         let status = pdui_render_home(context.pointer, &native, samples.rawValue, UInt32(clamping: max(0, selected)))
         guard status == PDUI_OK else { throw Failure.render(status) }
         return try copyFrame(context)
     }
 
     /// The powered-off Daily Brief in the profile's section order.
-    func renderBrief(profile: PocketProfile, samples: LayoutSamples = .all) throws -> Frame {
+    func renderBrief(profile: PocketProfile, cards: ContentDraft = .init(), samples: LayoutSamples = .all) throws -> Frame {
         try Task.checkCancellation()
         var native = try Self.nativeProfile(profile)
         let context = try nativeContext()
+        try setCards(cards, on: context)
         let status = pdui_render_brief(context.pointer, &native, samples.rawValue)
         guard status == PDUI_OK else { throw Failure.render(status) }
         return try copyFrame(context)
+    }
+
+    /// Cards the reader could show: complete text and, when named, the image.
+    static func previewCards(_ draft: ContentDraft) -> [(card: Data, image: Data?)] {
+        draft.cards.prefix(3).compactMap { card in
+            guard let bytes = try? card.encoded() else { return nil }
+            if card.imagePath.isEmpty { return (bytes, nil) }
+            guard let image = draft.images[card.imagePath] else { return nil }
+            return (bytes, image)
+        }
+    }
+
+    private func setCards(_ draft: ContentDraft, on context: Context) throws {
+        let cards = Self.previewCards(draft)
+        // Copies stay alive for the call; the renderer keeps its own.
+        var buffers: [UnsafeMutableRawBufferPointer] = []
+        defer { buffers.forEach { $0.deallocate() } }
+        func copy(_ data: Data) -> UnsafePointer<UInt8> {
+            let buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: max(1, data.count), alignment: 1)
+            data.copyBytes(to: buffer.bindMemory(to: UInt8.self))
+            buffers.append(buffer)
+            return UnsafePointer(buffer.baseAddress!.assumingMemoryBound(to: UInt8.self))
+        }
+        var inputs = cards.map { card in
+            pdui_card_input(card: copy(card.card), card_size: card.card.count,
+                            image: card.image.map(copy), image_size: card.image?.count ?? 0)
+        }
+        let status = inputs.withUnsafeMutableBufferPointer {
+            pdui_set_cards(context.pointer, $0.baseAddress, UInt32($0.count))
+        }
+        guard status == PDUI_OK else { throw Failure.render(status) }
     }
 
     /// Same IDs as the firmware profile record (PocketProfile.h).
     static func nativeProfile(_ profile: PocketProfile) throws -> pdui_profile {
         guard profile.validationError == nil else { throw Failure.invalidOptions }
         let home: [UInt8] = profile.home.items.map {
-            switch $0 { case .reading: 1; case .study: 2; case .provider: 3; case .monitor: 4 }
+            switch $0 { case .reading: 1; case .study: 2; case .provider: 3; case .monitor: 4; case .word: 5 }
         } + [0, 0, 0, 0]
         let sleep: [UInt8] = profile.sleep.sections.map {
-            switch $0 { case .reading: 1; case .study: 2; case .weather: 3; case .today: 4 }
+            switch $0 { case .reading: 1; case .study: 2; case .weather: 3; case .today: 4; case .card: 5 }
         } + [0, 0, 0, 0]
         var native = pdui_profile()
         native.home_items = (home[0], home[1], home[2], home[3])

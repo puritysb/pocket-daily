@@ -11,8 +11,9 @@ This first vertical slice includes:
 
 - iPhone/iPad and macOS SwiftUI targets under one App Store bundle identifier
 - one studio on every platform: a Home & Sleep editor for the reader's Pocket
-  Daily profile, previewed with the firmware's own layout code, and a card
-  studio, each with a single explicit Send
+  Daily profile, reader settings and "My cards" (with QR codes), previewed
+  with the firmware's own layout code and sent with a single explicit Send
+- books (EPUB, TXT, Markdown, XTC) and typed or pasted text sent to the reader
 - CoreBluetooth discovery, system passkey pairing, and encrypted control records
 - automatic private-hotspot joining on iOS and macOS, with a visible manual
   fallback when association is unavailable

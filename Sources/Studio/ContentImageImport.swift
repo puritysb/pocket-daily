@@ -40,6 +40,40 @@ enum ContentImageImport {
         return imported
     }
 
+    enum RemoteFailure: LocalizedError, Equatable {
+        case scheme, notImage, status(Int)
+        var errorDescription: String? {
+            switch self {
+            case .scheme: "Enter an https:// link to an image."
+            case .notImage: "That link returns a web page or other file, not an image. Use a link that opens the image itself."
+            case let .status(code): "The link could not be loaded (HTTP \(code))."
+            }
+        }
+    }
+
+    /// Fetches one image the user linked (for example a QR code a service
+    /// generates) and converts it like a chosen file. HTTPS only, no cookies
+    /// or cache, bounded to the same 20 MB.
+    static func load(remote url: URL, session: URLSession = .init(configuration: .ephemeral)) async throws -> Imported {
+        guard url.scheme?.lowercased() == "https", url.host?.isEmpty == false else { throw RemoteFailure.scheme }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpShouldHandleCookies = false
+        let (bytes, response) = try await session.data(for: request)
+        try Task.checkCancellation()
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw RemoteFailure.status(http.statusCode)
+        }
+        guard bytes.count <= maximumFileBytes else { throw Failure.size }
+        if let type = response.mimeType?.lowercased(), !type.hasPrefix("image/"), type != "application/octet-stream" {
+            throw RemoteFailure.notImage
+        }
+        return try await Task.detached(priority: .userInitiated) {
+            do { return try convert(bytes) } catch Failure.format { throw RemoteFailure.notImage }
+        }.value
+    }
+
     /// ImageIO applies EXIF orientation while producing a <=512px thumbnail.
     /// We never request a full-resolution decoded source image. SDK-internal
     /// codec memory is not covered by the app's bounded RGBA scratch size.
@@ -94,7 +128,7 @@ enum ContentImageImport {
         return try ContentImage(width: width, height: height, raster: raster)
     }
 
-    private static func imported(_ image: ContentImage) throws -> Imported {
+    static func imported(_ image: ContentImage) throws -> Imported {
         let data = image.encoded()
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         return Imported(path: "image-" + hash.prefix(48) + ".pbm", data: data, width: image.width, height: image.height)

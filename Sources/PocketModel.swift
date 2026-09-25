@@ -131,10 +131,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     var syncMode: DeviceSyncMode { SyncModePolicy.syncMode(status: readerStatus, isDemoMode: isDemoMode) }
 
     private var liveSync: LiveSyncClient?
-    private var frameFetchPolicy = FrameFetchPolicy()
-    private var frameTask: Task<Void, Never>?
     private var preferencesTask: Task<Void, Never>?
-    private var pendingFrameBytes = 0
     private var liveGeneration = 0
 
     private func startLiveSync(host: String, wsPort: Int) {
@@ -152,13 +149,10 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     private func stopLiveSync() {
         liveGeneration += 1
-        frameTask?.cancel()
         preferencesTask?.cancel()
-        frameTask = nil
         preferencesTask = nil
         liveSync?.stop()
         liveSync = nil
-        frameFetchPolicy.reset()
     }
 
     private func handleLiveEvent(_ event: LiveStudioEvent) {
@@ -171,50 +165,12 @@ final class PocketModel: ObservableObject, DeviceSession {
             }
             readerStatus = status
             mirror.apply(.status(status))
-        case let .frame(seq, bytes):
-            fetchLiveFrame(seq: seq, bytes: bytes)
         case .prefsChanged:
             reloadPreferencesFromReader()
-        case .hello, .bye:
+        case .frame, .hello, .bye:
+            // Frames are not fetched: no view shows them, and each fetch costs
+            // the reader a 50+ KB transfer.
             break
-        }
-    }
-
-    private func fetchLiveFrame(seq: Int, bytes: Int) {
-        guard !isWorking, readerStatus != nil, bytes > 0 else { return }
-        pendingFrameBytes = bytes
-        if frameTask != nil {
-            frameFetchPolicy.enqueue(seq: seq)
-            return
-        }
-        _ = frameFetchPolicy.shouldFetch(seq: seq)
-        let host = activeHost
-        let port = activeHTTPPort
-        let attempt = connectionAttempt
-        let generation = liveGeneration
-        frameTask = Task {
-            defer { if generation == liveGeneration { frameTask = nil } }
-            var nextSeq = seq
-            while !Task.isCancelled, generation == liveGeneration, attempt == connectionAttempt, !isWorking {
-                if !frameFetchPolicy.inFlight {
-                    do { try await Task.sleep(for: .seconds(frameFetchPolicy.delayUntilNextFetch())) }
-                    catch { return }
-                    guard !Task.isCancelled, generation == liveGeneration else { return }
-                    nextSeq = frameFetchPolicy.pendingSeq ?? nextSeq
-                    guard frameFetchPolicy.shouldFetch(seq: nextSeq) else { continue }
-                }
-                let expectedBytes = pendingFrameBytes
-                do {
-                    let data = try await client.screenLive(host: host, port: port, expectedBytes: expectedBytes)
-                    guard !Task.isCancelled, generation == liveGeneration, attempt == connectionAttempt else { return }
-                    readerScreenImageData = data
-                    mirror.apply(.frame(seq: nextSeq, capturedAt: Date(), data: data))
-                } catch {
-                    guard !Task.isCancelled, generation == liveGeneration, attempt == connectionAttempt else { return }
-                }
-                guard let pending = frameFetchPolicy.fetchCompleted() else { return }
-                nextSeq = pending
-            }
         }
     }
 
@@ -227,6 +183,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             guard let loaded = try? await client.preferences(host: activeHost, port: activeHTTPPort),
                   !Task.isCancelled, generation == liveGeneration, attempt == connectionAttempt else { return }
             preferences = loaded
+            preferencesBaseline = loaded
             preferencesDirty = false
             mirror.apply(.preferences(loaded))
         }
@@ -235,13 +192,11 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// A transfer owns the reader connection until commit/apply finishes.
     /// Cancel AND drain existing requests before opening the upload socket.
     private func quiesceReaderTraffic() async {
-        let frame = frameTask
         let prefs = preferencesTask
         let heartbeat = heartbeatTask
         heartbeatTask?.cancel()
         heartbeatTask = nil
         stopLiveSync()
-        await frame?.value
         await prefs?.value
         await heartbeat?.value
     }
@@ -293,6 +248,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 readerProfile = nil
                 profileSend = .idle
             }
+            if oldValue?.deviceID != readerStatus?.deviceID || readerStatus == nil { loadedContentRevision = nil }
         }
     }
     /// Resolved content-page inputs of the connected reader; nil means previews
@@ -301,15 +257,25 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// The connected reader's stored Pocket Daily profile (nil: not loaded,
     /// unsupported firmware, demo or offline).
     @Published private(set) var readerProfile: ReaderProfileState?
+    /// The reader's active card revision as last read or sent ("" = no cards,
+    /// nil = unknown), so Home & Sleep knows whether My cards need sending.
+    @Published private(set) var loadedContentRevision: String?
+    var readerContentRevision: String? {
+        if case let .complete(active)? = contentDeployment?.phase { return active.revision }
+        return loadedContentRevision
+    }
     enum ProfileSendState: Equatable { case idle, sending, saved(UInt32), failed(String), conflict }
     @Published private(set) var profileSend: ProfileSendState = .idle
     @Published private(set) var message = PocketModel.initialMessage
     @Published private(set) var messageTone: StatusTone = .neutral
     @Published var isWorking = false
     @Published var uploadProgress: Double = 0
-    @Published var preferences: ReaderPreferences?
+    @Published var preferences: ReaderPreferences? {
+        didSet { if preferences == nil { preferencesBaseline = nil } }
+    }
+    /// The reader's settings as last loaded or saved; Revert returns to them.
+    private var preferencesBaseline: ReaderPreferences?
     @Published var crashDiagnostic: CrashDiagnostic?
-    @Published var readerScreenImageData: Data?
     @Published var preferencesDirty = false
     @Published var preferredHardware: PocketHardware = .x3
     @Published var manualHotspotFallback = false
@@ -322,29 +288,6 @@ final class PocketModel: ObservableObject, DeviceSession {
     @Published private(set) var activationRecordError: String?
     @Published private(set) var activationRecordBackup: URL?
     private var savedContentEditor: ContentEditorModel?
-    private var savedThemeEditor: ThemeEditorModel?
-    private var demoThemeEditor: ThemeEditorModel?
-
-    func themeEditorModel() throws -> ThemeEditorModel {
-        if isDemoMode {
-            if let demoThemeEditor { return demoThemeEditor }
-            let editor = ThemeEditorModel(store: nil)
-            demoThemeEditor = editor
-            return editor
-        }
-        if let savedThemeEditor { return savedThemeEditor }
-#if DEBUG
-        if let fixture = ProcessInfo.processInfo.environment["POCKET_UI_TEST_THEME_DRAFT_ID"],
-           let id = UUID(uuidString: fixture) {
-            let editor = ThemeEditorModel(store: ThemeDraftUITestStore(id: id))
-            savedThemeEditor = editor
-            return editor
-        }
-#endif
-        let editor = ThemeEditorModel(store: try ThemeDraftStore.applicationStore())
-        savedThemeEditor = editor
-        return editor
-    }
 
     /// Profile-capable, identified, foreground, non-demo session.
     var canEditReaderProfile: Bool {
@@ -384,6 +327,70 @@ final class PocketModel: ObservableObject, DeviceSession {
         if started == nil { profileSend = .idle }
     }
 
+    /// Home & Sleep's single Send: the profile and reader settings in one reader
+    /// work item, then My cards through the content lane once those succeeded.
+    /// Each part is sent only when it changed; nothing is retried.
+    func sendReaderLayout(profile: PocketProfile?, cards: ContentRevision?) {
+        guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, readerStatus != nil else { return }
+        let settings = preferencesDirty ? preferences : nil
+        let profile = canEditReaderProfile ? profile : nil
+        guard profile != nil || settings != nil || cards != nil else { return }
+        let host = activeHost
+        let port = activeHTTPPort
+        let attempt = connectionAttempt
+        let identity = readerStatus?.deviceID
+        let generation = readerProfile?.generation ?? 0
+        final class Outcome { var succeeded = false }
+        let outcome = Outcome()
+        if profile != nil { profileSend = .sending }
+        let settingsWork = profile == nil && settings == nil ? nil :
+            startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+                do {
+                    if let profile, let identity {
+                        do {
+                            let saved = try await client.saveReaderProfile(profile, generation: generation,
+                                                                           deviceID: identity, host: host, port: port)
+                            guard ownsReaderWork(owner, attempt: attempt) else { return }
+                            readerProfile = saved
+                            profileSend = .saved(saved.generation)
+                        } catch CrossPointClient.ProfileRequestError.conflict {
+                            guard ownsReaderWork(owner, attempt: attempt) else { return }
+                            readerProfile = try? await client.readerProfile(deviceID: identity, host: host, port: port)
+                            profileSend = .conflict
+                            throw CrossPointClient.ProfileRequestError.conflict
+                        }
+                    }
+                    if let settings {
+                        try await client.save(preferences: settings, host: host, port: port)
+                        guard ownsReaderWork(owner, attempt: attempt) else { return }
+                        preferencesBaseline = settings
+                        preferencesDirty = preferences != settings
+                    }
+                    outcome.succeeded = true
+                    if cards == nil {
+                        post("Saved on \(hardware.rawValue). Home and sleep changes show the next time Pocket Daily opens.",
+                             tone: .success)
+                    }
+                } catch {
+                    guard attempt == connectionAttempt else { return }
+                    if profileSend == .sending { profileSend = .failed(error.localizedDescription) }
+                    post(error)
+                }
+            }
+        if settingsWork == nil, profile != nil || settings != nil {
+            if profileSend == .sending { profileSend = .idle }
+            return
+        }
+        guard let cards else { return }
+        Task { @MainActor [self] in
+            if let settingsWork {
+                await settingsWork.value
+                guard outcome.succeeded, attempt == connectionAttempt else { return }
+            }
+            applyContent(cards)
+        }
+    }
+
     /// Identified reader whose firmware serves its published card files.
     var canLoadReaderCards: Bool { contentEditingSession != nil && readerStatus?.contentRead == 1 }
 
@@ -400,6 +407,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             do {
                 let state = try await client.contentState(deviceID: identity, host: host, port: port)
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
+                loadedContentRevision = state.active?.revision ?? ""
                 guard let active = state.active else {
                     deliver(.success(nil))
                     return
@@ -725,8 +733,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             diagnosticsAffordable: nil
         )
         preferences = ReaderPreferences()
+        preferencesBaseline = preferences
         crashDiagnostic = nil
-        readerScreenImageData = nil
         preferencesDirty = false
         manualHotspotFallback = false
         locationPermissionRequired = false
@@ -740,7 +748,6 @@ final class PocketModel: ObservableObject, DeviceSession {
         isDemoMode = false
         readerStatus = nil
         preferences = nil
-        readerScreenImageData = nil
         preferencesDirty = false
         stopLiveSync()
         mirror.apply(.connection(.disconnected))
@@ -898,7 +905,6 @@ final class PocketModel: ObservableObject, DeviceSession {
                 guard !Task.isCancelled, attempt == connectionAttempt else { return }
                 readerStatus = nil
                 preferences = nil
-                readerScreenImageData = nil
                 stopLiveSync()
                 mirror.apply(.connection(.disconnected))
                 post("Reader not found. Open Create Hotspot on the reader and try again.", tone: .failure)
@@ -921,7 +927,6 @@ final class PocketModel: ObservableObject, DeviceSession {
         // for legacy readers whose nil identities cannot distinguish devices.
         preferences = nil
         preferencesDirty = false
-        readerScreenImageData = nil
         crashDiagnostic = nil
         readerStatus = status
         mirror.apply(.sessionStarted(status))
@@ -935,6 +940,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         let loadedPreferences = try? await client.preferences(host: host, port: httpPort)
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         preferences = loadedPreferences
+        preferencesBaseline = loadedPreferences
         mirror.apply(.preferences(preferences))
         let loadedDisplay = await loadReaderDisplay(status, host: host, port: httpPort)
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
@@ -944,18 +950,15 @@ final class PocketModel: ObservableObject, DeviceSession {
             guard !Task.isCancelled, attempt == connectionAttempt else { return }
             readerProfile = loadedProfile
         }
-        readerScreenImageData = nil
+        if status.contentPresentation == true, let identity = status.deviceID,
+           let state = try? await client.contentState(deviceID: identity, host: host, port: httpPort) {
+            guard !Task.isCancelled, attempt == connectionAttempt else { return }
+            loadedContentRevision = state.active?.revision ?? ""
+        }
         let diagnosticsAffordable = nearbyLease == nil && ReaderDiagnosticsPolicy.canFetchDiagnostics(
             freeHeap: status.freeHeap,
             readerSaysAffordable: status.diagnosticsAffordable
         )
-        if diagnosticsAffordable, status.screenPreviewAvailable == true,
-           let bytes = status.screenPreviewBytes,
-           let preview = try? await client.screenPreview(host: host, port: httpPort, expectedBytes: bytes) {
-            guard !Task.isCancelled, attempt == connectionAttempt else { return }
-            readerScreenImageData = preview
-            mirror.apply(.frame(seq: mirror.state.frameSequence + 1, capturedAt: Date(), data: preview))
-        }
         crashDiagnostic = nil
         if diagnosticsAffordable, status.crashReportAvailable == true, let bytes = status.crashReportBytes, bytes > 0,
            let diagnostic = try? await client.crashDiagnostic(host: host, port: httpPort, expectedBytes: bytes) {
@@ -987,15 +990,13 @@ final class PocketModel: ObservableObject, DeviceSession {
         if nearbyLease != nil {
             post("Direct connection ready. Optional diagnostics are deferred to leave memory for transfers. Keep this app open.")
         } else if !diagnosticsAffordable {
-            post("Connected to \(status.device). Reader memory is low (\(status.freeHeap / 1024) KB free), so the screen preview and crash report were skipped to keep transfers stable.")
+            post("Connected to \(status.device). Reader memory is low (\(status.freeHeap / 1024) KB free), so the crash report was skipped to keep transfers stable.")
         } else if crashDiagnostic != nil {
             post("Connected to \(status.device). A saved crash report is available below.")
-        } else if readerScreenImageData != nil {
-            post("Connected to \(status.device). The captured reader frame is shown exactly.")
         } else if status.mode == "STA" {
             post("Connected to \(status.device) over your Wi-Fi network — the most reliable path for firmware and content transfers.")
         } else {
-            post("Connected to \(status.device). This session does not provide screen capture; content and theme controls use the reader's advertised capabilities.")
+            post("Connected to \(status.device).")
         }
         startHeartbeat(host: host, port: httpPort)
     }
@@ -1037,7 +1038,6 @@ final class PocketModel: ObservableObject, DeviceSession {
                     guard heartbeat.recordFailure() else { continue }
                     self.readerStatus = nil
                     self.preferences = nil
-                    self.readerScreenImageData = nil
                     self.preferencesDirty = false
                     self.stopLiveSync()
                     self.mirror.apply(.connection(.disconnected))
@@ -1063,38 +1063,16 @@ final class PocketModel: ObservableObject, DeviceSession {
         preferencesDirty = true
     }
 
+    /// Back to the settings last loaded from or saved on the reader.
+    func revertPreferences() {
+        guard let preferencesBaseline else { return }
+        preferences = preferencesBaseline
+        preferencesDirty = false
+    }
+
     func setFontSize(_ size: Int) {
         preferences?.fontSize = size
         preferencesDirty = true
-    }
-
-    func loadReaderPreview() {
-        guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, readerStatus != nil else { return }
-        let host = activeHost
-        let port = activeHTTPPort
-        let attempt = connectionAttempt
-        startReaderWork(attempt: attempt, kind: .preview) { [self] owner in
-            do {
-                let status = try await client.status(host: host, port: port)
-                guard ownsReaderWork(owner, attempt: attempt) else { return }
-                guard status.deviceID == readerStatus?.deviceID,
-                      status.screenPreviewAvailable == true,
-                      ReaderDiagnosticsPolicy.canFetchDiagnostics(freeHeap: status.freeHeap,
-                                                                 readerSaysAffordable: status.diagnosticsAffordable),
-                      let bytes = status.screenPreviewBytes else {
-                    post("A preview is unavailable in this reader profile or memory state.")
-                    return
-                }
-                let data = try await client.screenPreview(host: host, port: port, expectedBytes: bytes)
-                guard ownsReaderWork(owner, attempt: attempt) else { return }
-                readerScreenImageData = data
-                mirror.apply(.frame(seq: mirror.state.frameSequence + 1, capturedAt: Date(), data: data))
-                post("Loaded the reader frame captured before Sync opened.")
-            } catch {
-                guard attempt == connectionAttempt else { return }
-                post(error)
-            }
-        }
     }
 
     func savePreferences() {
@@ -1110,6 +1088,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             do {
                 try await client.save(preferences: preferences, host: host, port: port)
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
+                preferencesBaseline = preferences
                 preferencesDirty = self.preferences != preferences
                 post("Settings were applied to \(hardware.rawValue).", tone: .success)
             } catch {
@@ -1375,7 +1354,6 @@ final class PocketModel: ObservableObject, DeviceSession {
         locationPermissionRequired = false
         readerStatus = nil
         preferences = nil
-        readerScreenImageData = nil
         stopLiveSync()
         mirror.apply(.connection(.disconnected))
         if !preserveMessage { post("Session ended. Check Wi-Fi settings if your usual connection has not returned.") }
@@ -1430,7 +1408,6 @@ final class PocketModel: ObservableObject, DeviceSession {
     private func destination(for url: URL) -> String {
         switch url.pathExtension.lowercased() {
         case "pdl": "/pocket-daily/learning"
-        case "uipack": "/pocket-daily/ui-packs"
         default: "/"
         }
     }
@@ -1449,7 +1426,8 @@ final class PocketModel: ObservableObject, DeviceSession {
         return .init(generation: connectionAttempt, deviceID: identity)
     }
 
-    /// One explicitly authorized editing session. Never reconnects or flashes.
+    /// Applies within one reader session and reports whether the redraw of this
+    /// exact revision was confirmed. Never reconnects or flashes.
     func applyLiveContent(_ revision: ContentRevision, session: ContentEditingSession) async -> Bool {
         guard !Task.isCancelled, contentEditingSession == session,
               let operation = applyContent(revision) else { return false }
@@ -1531,7 +1509,6 @@ final class PocketModel: ObservableObject, DeviceSession {
                     readerStatus = nil
                     preferences = nil
                     preferencesDirty = false
-                    readerScreenImageData = nil
                     stopLiveSync()
                     mirror.apply(.connection(.disconnected))
                     post("The reader did not respond. No content was sent; your draft is unchanged. Check the reader, then reconnect using the same connection method.", tone: .failure)
@@ -1600,121 +1577,6 @@ final class PocketModel: ObservableObject, DeviceSession {
                 post("Unreadable activation record preserved and local tracking reset. No reader changes were requested.")
             } catch { post(error) }
         }
-    }
-
-    /// Live Studio M3: encode a theme pack, ship it, and apply it live. The
-    /// reader reports the exact activated version before success is shown.
-    /// A lost response leaves the outcome unknown, not necessarily reverted.
-    func applyThemePack(_ theme: [String: Int]) {
-        guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
-              readerStatus?.liveStudio?.uiPacks == true, let status = readerStatus else {
-            post(readerStatus == nil ? "Connect to a reader to apply theme packs." :
-                  isDemoMode ? "Demo preview does not change a reader." :
-                  "This reader's firmware does not support UI packs yet.")
-            return
-        }
-        let host = activeHost
-        let port = activeHTTPPort
-        let attempt = connectionAttempt
-        startReaderWork(attempt: attempt) { [self] owner in
-            do {
-                let identity = try UiPackVerification.identity(status.deviceID)
-                let version = Self.packTimestamp()
-                // Preserve the active pack file until the new revision is verified.
-                let name = "studio-" + version
-                let pack = try UiPackEncoder.encode(name: name, version: version, theme: theme)
-                let folder = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("pocket-packs", isDirectory: true)
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                let url = folder.appendingPathComponent(name + ".uipack")
-                try pack.write(to: url, options: .atomic)
-                try Task.checkCancellation()
-                guard attempt == connectionAttempt else { return }
-                _ = try await client.uploadAtomically(
-                    fileURL: url, publishedFilename: nil, destination: "/pocket-daily/ui-packs",
-                    host: host, port: port,
-                    uploadChunkBytes: status.uploadChunkBytes, uploadStreamPort: status.uploadStreamPort,
-                    uploadStreamResume: status.uploadStreamResume ?? false,
-                    uploadStreamWindow: status.uploadStreamWindow,
-                    expectedDeviceID: status.deviceID,
-                    transferID: status.deviceID.flatMap { UUID(uuidString: $0) } ?? UUID(),
-                    note: { [weak self] text in Task { @MainActor in
-                        guard let self, self.ownsReaderWork(owner, attempt: attempt) else { return }
-                        self.post(text)
-                    } },
-                    reconnect: { [weak self] in await self?.reconnectForTransfer(owner: owner, attempt: attempt) ?? false }
-                ) { _, _ in }
-                guard ownsReaderWork(owner, attempt: attempt) else { return }
-                try await client.applyUiPack(name: name, host: host, port: port)
-                guard attempt == connectionAttempt else { return }
-                let refreshed = try await confirmedPackStatus(host: host, port: port, identity: identity,
-                                                              name: name, version: version)
-                guard attempt == connectionAttempt else { return }
-                readerStatus = refreshed
-                mirror.apply(.status(refreshed))
-                mirror.apply(.packStateChanged(activePack: refreshed.liveStudio?.activePack,
-                                               version: refreshed.liveStudio?.activePackVersion))
-                // Pack metrics change the content page; re-read resolved inputs.
-                let display = await loadReaderDisplay(refreshed, host: host, port: port)
-                guard attempt == connectionAttempt else { return }
-                readerDisplay = display
-                post("Theme pack activation confirmed by the reader.", tone: .success)
-            } catch {
-                guard attempt == connectionAttempt else { return }
-                post(error)
-            }
-        }
-    }
-
-    func revertThemePack() {
-        guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
-              readerStatus?.liveStudio?.uiPacks == true, let status = readerStatus else {
-            post("Connect to a pack-capable reader to revert.")
-            return
-        }
-        let host = activeHost
-        let port = activeHTTPPort
-        let attempt = connectionAttempt
-        startReaderWork(attempt: attempt) { [self] owner in
-            do {
-                let identity = try UiPackVerification.identity(status.deviceID)
-                try Task.checkCancellation()
-                try await client.applyUiPack(name: "", host: host, port: port)
-                guard attempt == connectionAttempt else { return }
-                let refreshed = try await confirmedPackStatus(host: host, port: port, identity: identity,
-                                                              name: nil, version: nil)
-                guard attempt == connectionAttempt else { return }
-                readerStatus = refreshed
-                mirror.apply(.status(refreshed))
-                mirror.apply(.packStateChanged(activePack: nil, version: nil))
-                let display = await loadReaderDisplay(refreshed, host: host, port: port)
-                guard attempt == connectionAttempt else { return }
-                readerDisplay = display
-                post("Reader reverted to its theme's own metrics.", tone: .success)
-            } catch {
-                guard attempt == connectionAttempt else { return }
-                post(error)
-            }
-        }
-    }
-
-    private static func packTimestamp() -> String {
-        // Fixed-width ASCII; two deployments within one second must differ.
-        String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16)).lowercased()
-    }
-
-    private func confirmedPackStatus(host: String, port: Int, identity: String,
-                                     name: String?, version: String?) async throws -> CrossPointStatus {
-        let refreshed: CrossPointStatus
-        do {
-            refreshed = try await client.status(host: host, port: port)
-        } catch {
-            try Task.checkCancellation()
-            throw UiPackVerification.Failure.notConfirmed
-        }
-        try Task.checkCancellation()
-        try UiPackVerification.validate(refreshed, expectedDeviceID: identity, name: name, version: version)
-        return refreshed
     }
 
     /// Copies one user-selected file into the mounted SD card layout. Firmware

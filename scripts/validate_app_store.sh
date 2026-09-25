@@ -47,14 +47,14 @@ done
 
 # Every set opens on Home & Sleep. The compact layout keeps the reader controls in their own
 # tab and earns a Reader shot; iPad shows them beside the studio and shows X4 instead. The Mac
-# set is rendered offscreen and carries three.
+# set is rendered offscreen (Home, a card page, the X4 sleep frame) and carries three.
 for section in 01-home-x3 02-sleep-x3 03-cards 04-reader; do
   check_image "appstore/screenshots/en-US/iphone-6.9/$section.png" 1320 2868
 done
 for section in 01-home-x3 02-sleep-x3 03-cards 04-home-x4; do
   check_image "appstore/screenshots/en-US/ipad-13/$section.png" 2064 2752
 done
-for section in 01-home-x3 02-cards 03-home-x4; do
+for section in 01-home-x3 02-card-x3 03-sleep-x4; do
   check_image "appstore/screenshots/en-US/mac-16x10/$section.png" 2880 1800
 done
 

@@ -4,12 +4,14 @@ import Foundation
 /// and visibility, the weather panel and next-event line, and the sleep frame.
 /// The reader stores it; the app edits a copy and sends the whole document.
 struct PocketProfile: Equatable, Sendable, Codable {
+    /// Wire IDs are the firmware's; `study` is the companion's own cards.
     enum HomeItem: String, CaseIterable, Codable, Sendable {
-        case reading, study, provider, monitor
+        case reading, study, word, provider, monitor
         var title: String {
             switch self {
             case .reading: "Continue Reading"
-            case .study: "Study cards"
+            case .study: "My cards"
+            case .word: "Daily word"
             case .provider: "Provider cards"
             case .monitor: "Monitoring"
             }
@@ -17,9 +19,10 @@ struct PocketProfile: Equatable, Sendable, Codable {
         var detail: String {
             switch self {
             case .reading: "The open book, when there is one"
-            case .study: "Your app cards, or the daily word"
-            case .provider: "Cards carried from an optional provider"
-            case .monitor: "Read-only usage summary, when data was carried"
+            case .study: "The cards you write below, with their images"
+            case .word: "A new word each day from the reader or an SD learning pack"
+            case .provider: "Cards carried from an optional AgentDeck provider"
+            case .monitor: "Usage summary carried from an optional AgentDeck provider"
             }
         }
     }
@@ -32,16 +35,30 @@ struct PocketProfile: Equatable, Sendable, Codable {
         var title: String { self == .brief ? "Daily Brief" : "Reader's sleep screen" }
     }
     enum SleepSection: String, CaseIterable, Codable, Sendable {
-        case reading, study, weather, today
+        case reading, card, study, weather, today
         var title: String {
             switch self {
             case .reading: "Continue Reading"
-            case .study: "Study card"
+            case .card: "My first card"
+            case .study: "Card or daily word"
             case .weather: "Weather"
             case .today: "Today's schedule"
             }
         }
+        var detail: String {
+            switch self {
+            case .reading: "The open book and its cover"
+            case .card: "Always shown, with its image (for example, contact details)"
+            case .study: "Shown only when no book is open"
+            case .weather: "From an optional AgentDeck provider"
+            case .today: "From an optional AgentDeck provider"
+            }
+        }
     }
+
+    /// IDs every profile-capable reader accepts (firmware before `word`/`card`).
+    static let baseHomeItems: Set<HomeItem> = [.reading, .study, .provider, .monitor]
+    static let baseSleepSections: Set<SleepSection> = [.reading, .study, .weather, .today]
     struct Home: Equatable, Sendable, Codable {
         var items: [HomeItem]
         var dailyWord: Bool
@@ -92,11 +109,18 @@ struct ReaderProfileState: Equatable, Sendable {
     let generation: UInt32
     let profile: PocketProfile
     let maxHomeItems: Int
+    /// What this reader accepts; the editor offers nothing else.
+    var homeItems: Set<PocketProfile.HomeItem> = PocketProfile.baseHomeItems
+    var sleepSections: Set<PocketProfile.SleepSection> = PocketProfile.baseSleepSections
 
     enum Failure: Error, Equatable { case malformed, identity, unsupportedSchema, unknownValue }
 
     private struct Wire: Decodable {
-        struct Capabilities: Decodable { let maxHomeItems: Int? }
+        struct Capabilities: Decodable {
+            let maxHomeItems: Int?
+            let homeItems: [String]?
+            let sleepSections: [String]?
+        }
         let schema: Int
         let deviceID: String
         let generation: UInt32
@@ -118,7 +142,14 @@ struct ReaderProfileState: Equatable, Sendable {
         guard wire.deviceID == expected else { throw Failure.identity }
         let profile = PocketProfile(home: wire.home, sleep: wire.sleep)
         guard profile.validationError == nil else { throw Failure.malformed }
+        // Capability names this app does not know yet are ignored; the document
+        // itself may only use known IDs (checked above).
+        let homeItems = wire.capabilities?.homeItems.map { Set($0.compactMap(PocketProfile.HomeItem.init(rawValue:))) }
+        let sleepSections = wire.capabilities?.sleepSections
+            .map { Set($0.compactMap(PocketProfile.SleepSection.init(rawValue:))) }
         return .init(deviceID: wire.deviceID, generation: wire.generation, profile: profile,
-                     maxHomeItems: wire.capabilities?.maxHomeItems ?? PocketProfile.maxHomeItems)
+                     maxHomeItems: wire.capabilities?.maxHomeItems ?? PocketProfile.maxHomeItems,
+                     homeItems: homeItems ?? PocketProfile.baseHomeItems,
+                     sleepSections: sleepSections ?? PocketProfile.baseSleepSections)
     }
 }

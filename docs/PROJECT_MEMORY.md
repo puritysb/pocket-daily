@@ -6,6 +6,17 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-25 My cards and cleanup: the Cards tab became "My cards" inside Home
+  & Sleep (QR codes from text/links via CoreImage, images from HTTPS links,
+  Card preview surface, Load from reader); reader settings moved into Home &
+  Sleep with one Send (sendReaderLayout: profile + settings, then cards when
+  their revision differs from readerContentRevision). Removed: theme-metric
+  inspector and .uipack encoder (firmware contract kept), reader-screen
+  capture and live-frame fetching (unused downloads of 50-128 KB per event or
+  connection), LIVE/POLL badge, JSON card import/export, Auto-send. Files adds
+  "Write text to read" (.txt) and lists TXT/MD/XTC. Needs firmware with
+  `word`/`card` and pdui_set_cards (firmware 4b5f37f9).
+
 - 2026-09-25 Load cards from the reader: Cards shows "Load cards from the
   reader…" when status has contentRead: 1 (firmware docs/content-read-v1.md).
   PocketModel.loadReaderCards reads content/state then chunked

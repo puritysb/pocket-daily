@@ -1,16 +1,16 @@
 Pocket Daily is a private, local-first studio for a compatible pocket e-paper reader.
 
 Shape your reader's Home and Sleep screens
-Choose which Home pages appear and in what order (continue reading, study cards, provider cards, a monitoring summary), place the weather panel, and compose the Daily Brief the reader shows while asleep. The preview is drawn by the reader's own layout code with sample content, and one Send saves the layout on the reader without reinstalling firmware.
+Choose which Home pages appear and in what order (continue reading, your own cards, the daily word, provider cards, a monitoring summary), place the weather panel, and compose the Daily Brief the reader shows while asleep. The preview is drawn by the reader's own layout code with your cards and sample content, and one Send saves the layout and reader settings without reinstalling firmware.
 
-Write study cards that look right on e-paper
-Edit up to three cards with text and images and see each one at the reader's resolution before you send it. Drafts are saved on your device, and each Send refreshes the reader over the same connection.
+Your own cards, with QR codes
+Write up to three cards (a reading goal, a question, contact details in case the reader is lost) and add an image, a QR code made from a link or text, or an image from a link. The first card can stay on the sleep screen. If you lose your local copy, load the cards back from the reader.
 
-Move your own content directly
-Send supported books, Pocket Daily study packs, and compatible firmware over a direct local connection. On Mac, you can also copy files to an SD card. Transfers do not pass through a Pocket Daily cloud service.
+Send what you want to read
+Send books (EPUB, TXT, Markdown, XTC), Pocket Daily study packs, or text you type or paste, over a direct local connection. On Mac, you can also copy files to an SD card. Transfers do not pass through a Pocket Daily cloud service.
 
 Safer device management
-Adjust reader settings, and stage firmware only after a clear compatibility warning. Firmware installation still requires confirmation on the reader.
+Stage firmware only after a clear compatibility warning. Firmware installation still requires confirmation on the reader.
 
 Private by design
 No Pocket Daily account. No ads. No analytics. No cloud relay. Discovery and transfer use Bluetooth and the local network. Files stay between your Apple device, your reader, and storage you choose.

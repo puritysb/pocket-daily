@@ -22,7 +22,10 @@ final class PocketParityTests: XCTestCase {
         let displayData = try Data(contentsOf: dir.appendingPathComponent("display.json"))
         let deviceID = try XCTUnwrap((try JSONSerialization.jsonObject(with: displayData) as? [String: Any])?["deviceID"] as? String)
         let display = try ReaderDisplayState.decode(displayData, deviceID: deviceID)
-        let draft = try ContentDraftFile.decode(Data(contentsOf: dir.appendingPathComponent("cards.json")))
+        // cards.json is a draft exported by an earlier app build ({format, schema, draft}).
+        struct Exported: Decodable { let draft: ContentDraft }
+        let draft = try JSONDecoder().decode(Exported.self,
+                                             from: Data(contentsOf: dir.appendingPathComponent("cards.json"))).draft
 
         // Same content bytes as the reader's active revision, not a look-alike.
         let state = try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent("state.json"))) as? [String: Any]

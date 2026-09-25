@@ -1,16 +1,9 @@
 import SwiftUI
-#if os(macOS)
-import AppKit
-#else
-import UIKit
-#endif
 
 struct PocketDevicePreview: View {
     let hardware: PocketHardware
     let status: CrossPointStatus?
-    let screenImageData: Data?
-    /// Exact host-rendered reader frame (content studio canvas). Takes
-    /// precedence over a captured frame; it is a local render, not a capture.
+    /// Host-rendered reader frame (a local render, not a capture).
     var renderedScreen: CGImage? = nil
 
     var body: some View {
@@ -44,7 +37,7 @@ struct PocketDevicePreview: View {
                     }
                     .padding(.horizontal, width * 0.08)
 
-                    EInkSurface(hardware: hardware, status: status, screenImageData: screenImageData, renderedScreen: renderedScreen)
+                    EInkSurface(hardware: hardware, renderedScreen: renderedScreen)
                         .clipShape(RoundedRectangle(cornerRadius: width * 0.012))
                         .padding(.horizontal, width * 0.067)
 
@@ -71,11 +64,7 @@ struct PocketDevicePreview: View {
         }
         .aspectRatio(hardware.chassisAspect, contentMode: .fit)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(
-            screenImageData == nil
-                ? "Pocket Daily \(hardware.rawValue) hardware profile. No reader frame is available."
-                : "Pocket Daily \(hardware.rawValue) with the exact reader frame captured before Nearby Sync."
-        )
+        .accessibilityLabel("Pocket Daily \(hardware.rawValue)")
     }
 
     @ViewBuilder
@@ -156,75 +145,22 @@ struct PocketDevicePreview: View {
     }
 }
 
+/// The reader's screen: the host-rendered frame when one is ready, otherwise
+/// blank paper (the caller labels loading or failure).
 private struct EInkSurface: View {
     let hardware: PocketHardware
-    let status: CrossPointStatus?
-    let screenImageData: Data?
     let renderedScreen: CGImage?
 
     var body: some View {
         ZStack {
             Color(red: 0.93, green: 0.92, blue: 0.87)
-            if let screenImage {
-                screenImage
+            if let renderedScreen {
+                Image(decorative: renderedScreen, scale: 1)
                     .resizable()
                     .interpolation(.none)
                     .scaledToFit()
-            } else {
-                VStack(spacing: 0) {
-                    HStack { Text("POCKET DAILY"); Spacer(); Text(hardware.rawValue) }
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .padding(.horizontal, 16).padding(.vertical, 13)
-                    Rectangle().fill(Color.black.opacity(0.75)).frame(height: 1)
-                    content.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    HStack { Text("LOCAL COMPANION"); Spacer(); Text(status?.mode ?? "PROFILE") }
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .padding(.horizontal, 15).padding(.vertical, 10)
-                        .overlay(alignment: .top) { Rectangle().fill(Color.black.opacity(0.65)).frame(height: 1) }
-                }
-                .foregroundStyle(Color.black.opacity(0.86))
             }
         }
         .aspectRatio(hardware.screenAspect, contentMode: .fit)
-    }
-
-    private var screenImage: Image? {
-        if let renderedScreen { return Image(decorative: renderedScreen, scale: 1) }
-        guard let screenImageData else { return nil }
-#if os(macOS)
-        guard let image = NSImage(data: screenImageData) else { return nil }
-        return Image(nsImage: image)
-#else
-        guard let image = UIImage(data: screenImageData) else { return nil }
-        return Image(uiImage: image)
-#endif
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        VStack(spacing: 15) {
-            Spacer()
-            Image(systemName: "rectangle.portrait")
-                .font(.system(size: hardware == .x3 ? 82 : 74, weight: .ultraLight))
-            Text(hardware.rawValue)
-                .font(.system(size: hardware == .x3 ? 40 : 36, weight: .medium, design: .rounded))
-            Text(status == nil || status?.mode == "DEMO" ? "HARDWARE PROFILE" : "SCREEN PREVIEW UNAVAILABLE")
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .tracking(1.1)
-                .multilineTextAlignment(.center)
-            Rectangle().frame(width: 116, height: 1)
-            Text(fallbackDetail)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-            Spacer()
-        }
-    }
-
-    private var fallbackDetail: String {
-        if status != nil, status?.mode != "DEMO" {
-            return "Screen streaming is unavailable\nNo live frame from this session"
-        }
-        return "\(hardware.screenWidth) × \(hardware.screenHeight) e-paper\n\(hardware.controlSummary)"
     }
 }

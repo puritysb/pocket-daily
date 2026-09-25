@@ -54,6 +54,8 @@ struct ContentImportReview: View {
 
 struct ContentImagePreview: View {
     let data: Data
+    /// Size note under the image; thumbnails leave it out.
+    var showsCaption = true
     @State private var image: CGImage?
     @State private var failed = false
 
@@ -63,11 +65,13 @@ struct ContentImagePreview: View {
                 Image(decorative: image, scale: 1).resizable().interpolation(.none)
                     .scaledToFit().frame(maxWidth: 300, maxHeight: 180)
                     .accessibilityLabel("Black-and-white content image")
-                Text("\(image.width) × \(image.height) · Image preview, not reader layout")
-                    .font(.caption2).foregroundStyle(.secondary)
+                if showsCaption {
+                    Text("\(image.width) × \(image.height) px")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             } else if failed {
                 Text("Image cannot be previewed. Replace or remove it.").font(.caption).foregroundStyle(.red)
-            } else { ProgressView("Preparing image preview…") }
+            } else { ProgressView() }
         }
         .task(id: data) {
             image = nil

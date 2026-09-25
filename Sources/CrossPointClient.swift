@@ -43,39 +43,6 @@ struct LiveStudioAdvertisement: Codable, Equatable {
     let activePackVersion: String?
 }
 
-/// Status is evidence of activation, not merely a successful apply POST.
-enum UiPackVerification {
-    enum Failure: LocalizedError {
-        case unidentifiedReader
-        case differentReader
-        case notConfirmed
-
-        var errorDescription: String? {
-            switch self {
-            case .unidentifiedReader: "The reader must provide an identity before changing its UI pack."
-            case .differentReader: "The reader identity changed. UI pack activation cannot be confirmed."
-            case .notConfirmed: "The UI pack result could not be confirmed. Reconnect and check the active pack before retrying."
-            }
-        }
-    }
-
-    static func identity(_ value: String?) throws -> String {
-        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw Failure.unidentifiedReader
-        }
-        return value
-    }
-
-    static func validate(_ status: CrossPointStatus, expectedDeviceID: String,
-                         name: String?, version: String?) throws {
-        guard status.deviceID == expectedDeviceID else { throw Failure.differentReader }
-        guard let studio = status.liveStudio, studio.uiPacks == true,
-              studio.activePack == name, studio.activePackVersion == version else {
-            throw Failure.notConfirmed
-        }
-    }
-}
-
 struct CrashDiagnostic: Equatable, Sendable {
     let version: String
     let resetReason: String
@@ -896,84 +863,6 @@ actor CrossPointClient {
             throw ClientError.unexpectedMessage("empty crash report")
         }
         return CrashDiagnostic(report: report)
-    }
-
-    /// Live-studio frame fetch (`docs/live-studio-v1.md`). Paged like the
-    /// one-shot preview but sized by the `frame` event and only called on
-    /// frame notifications — the reader's WebServer closes every request, so
-    /// per-chunk connections are unavoidable and pacing lives with the
-    /// caller (`FrameFetchPolicy`).
-    func screenLive(host: String, port: Int, expectedBytes: Int) async throws -> Data {
-        guard expectedBytes >= 64, expectedBytes <= 128 * 1_024 else {
-            throw ClientError.unexpectedMessage("invalid live frame size")
-        }
-        var frame = Data()
-        frame.reserveCapacity(expectedBytes)
-        while frame.count < expectedBytes {
-            guard let url = Self.url(
-                host: host,
-                port: port,
-                path: "/api/pocket/v1/screen-live",
-                query: ["offset": String(frame.count)]
-            ) else { throw ClientError.invalidAddress }
-            var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 10
-            let (chunk, response) = try await http.data(for: request, session: session)
-            try Self.requireSuccess(response, body: chunk)
-            guard !chunk.isEmpty else { break }
-            frame.append(chunk)
-        }
-        guard frame.count == expectedBytes, frame.starts(with: [0x42, 0x4D]) else {
-            throw ClientError.unexpectedMessage("invalid live frame BMP")
-        }
-        return frame
-    }
-
-    func screenPreview(host: String, port: Int, expectedBytes: Int) async throws -> Data {        guard expectedBytes >= 64, expectedBytes <= 128 * 1_024 else {
-            throw ClientError.unexpectedMessage("invalid screen preview size")
-        }
-
-        var previewData = Data()
-        previewData.reserveCapacity(expectedBytes)
-        while previewData.count < expectedBytes {
-            guard let url = Self.url(
-                host: host,
-                port: port,
-                path: "/api/pocket/v1/screen-preview",
-                query: ["offset": String(previewData.count)]
-            ) else { throw ClientError.invalidAddress }
-            var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 10
-            request.setValue("close", forHTTPHeaderField: "Connection")
-            let (chunk, response) = try await http.data(for: request, session: session)
-            try Self.requireSuccess(response, body: chunk)
-            guard !chunk.isEmpty, previewData.count + chunk.count <= expectedBytes else {
-                throw ClientError.unexpectedMessage("invalid screen preview chunk")
-            }
-            previewData.append(chunk)
-        }
-
-        guard previewData.count == expectedBytes, previewData.starts(with: [0x42, 0x4D]) else {
-            throw ClientError.unexpectedMessage("invalid BMP screen preview")
-        }
-        return previewData
-    }
-
-    /// Live Studio LS-3: apply (or, with an empty name, revert) a `.uipack`
-    /// previously uploaded to `/pocket-daily/ui-packs`.
-    func applyUiPack(name: String, host: String, port: Int) async throws {
-        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/ui-pack/apply") else {
-            throw ClientError.invalidAddress
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 15
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["name": name])
-        let (body, response) = try await http.data(for: request, session: session)
-        try Self.requireSuccess(response, body: body)
     }
 
     func preferences(host: String, port: Int) async throws -> ReaderPreferences {        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {

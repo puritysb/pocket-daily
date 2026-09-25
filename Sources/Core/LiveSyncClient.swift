@@ -46,49 +46,6 @@ enum LiveStudioEvent: Equatable {
     }
 }
 
-/// Coalesces live-frame fetches against the reader's connection budget: one
-/// fetch in flight at a time, newer announcements replace older pending ones,
-/// and fetch starts are spaced at least a second apart. The X3's radio went
-/// deaf after connection-per-chunk hammering, so pacing is part of the
-/// contract, not an optimization.
-struct FrameFetchPolicy {
-    static let minimumFetchSpacing: TimeInterval = 1.0
-
-    private(set) var inFlight = false
-    private(set) var pendingSeq: Int?
-    private var lastFetchAt = Date.distantPast
-    mutating func enqueue(seq: Int) { pendingSeq = seq }
-
-    /// Records the announcement and returns true when a fetch should start
-    /// now (nothing in flight and spacing elapsed).
-    mutating func shouldFetch(seq: Int, at now: Date = Date()) -> Bool {
-        pendingSeq = seq
-        guard !inFlight else { return false }
-        guard now.timeIntervalSince(lastFetchAt) >= Self.minimumFetchSpacing else { return false }
-        inFlight = true
-        lastFetchAt = now
-        pendingSeq = nil
-        return true
-    }
-
-    /// Marks the in-flight fetch done; returns the newest seq announced while
-    /// it ran, if any. The caller re-offers it through `shouldFetch`.
-    mutating func fetchCompleted() -> Int? {
-        inFlight = false
-        return pendingSeq
-    }
-
-    mutating func reset() {
-        inFlight = false
-        pendingSeq = nil
-        lastFetchAt = .distantPast
-    }
-
-    func delayUntilNextFetch(at now: Date = Date()) -> TimeInterval {
-        max(0, Self.minimumFetchSpacing - now.timeIntervalSince(lastFetchAt))
-    }
-}
-
 /// WebSocket client for the reader's live-studio listener. Subscribes after
 /// `hello`, surfaces decoded events on the main actor, and shuts down
 /// cleanly. Reconnection is left to the session layer (heartbeat + user

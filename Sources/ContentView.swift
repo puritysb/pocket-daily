@@ -1,15 +1,15 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// One studio on every platform: Home & Sleep first, then Cards; the reader
-/// connection, files and settings sit in the inspector (a Reader tab on iPhone).
+/// One studio on every platform: Home & Sleep (layout, My cards and reader
+/// settings); the connection and files sit in the inspector (a Reader tab on
+/// iPhone).
 enum StudioSection: String, CaseIterable, Hashable {
-    case layout = "Home & Sleep", cards = "Cards", reader = "Reader"
+    case layout = "Home & Sleep", reader = "Reader"
 
     var symbol: String {
         switch self {
         case .layout: "rectangle.3.group"
-        case .cards: "rectangle.stack"
         case .reader: "dot.radiowaves.left.and.right"
         }
     }
@@ -46,9 +46,12 @@ struct ContentView: View {
     @State private var pendingFirmwareTransfer: PendingFirmwareTransfer?
     @State private var showingProjectInfo = false
 
-    /// `initialSection` lets the store screenshots open a given studio tab.
-    init(initialSection: StudioSection = .layout) {
+    private let initialPreview: ProfileStudioView.PreviewSurface
+
+    /// The store screenshots open a given tab and preview surface.
+    init(initialSection: StudioSection = .layout, initialPreview: ProfileStudioView.PreviewSurface = .home) {
         _section = State(initialValue: initialSection)
+        self.initialPreview = initialPreview
     }
 
     var body: some View {
@@ -135,11 +138,21 @@ struct ContentView: View {
                     .padding(.horizontal, 24)
                     .padding(.vertical, 14)
                 Divider()
-                ScrollView {
-                    studio(section == .reader ? .layout : section, stacked: stacked)
+                if stacked {
+                    ScrollView {
+                        studio(.layout, stacked: true)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 20)
+                            .frame(maxWidth: 900, alignment: .leading)
+                            .frame(maxWidth: .infinity)
+                    }
+                } else {
+                    // The canvas stays in view; only the controls scroll.
+                    ProfileStudioView(model: model, editor: profileEditor, scrollsControls: true,
+                                      initialPreview: initialPreview)
                         .padding(.horizontal, 24)
-                        .padding(.vertical, 20)
-                        .frame(maxWidth: 900, alignment: .leading)
+                        .padding(.top, 20)
+                        .frame(maxWidth: 900, maxHeight: .infinity, alignment: .topLeading)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -185,28 +198,21 @@ struct ContentView: View {
 
     @ViewBuilder private func studio(_ section: StudioSection, stacked: Bool) -> some View {
         switch section {
-        case .layout: ProfileStudioView(model: model, editor: profileEditor, stacked: stacked)
-        case .cards: ContentStudioView(model: model, stacked: stacked)
+        case .layout: ProfileStudioView(model: model, editor: profileEditor, stacked: stacked,
+                                        initialPreview: initialPreview)
         case .reader: inspector
         }
     }
 
-    /// Wide header: the product, the two studio tabs and the reader in one line.
+    /// Wide header: the product and the reader in one line.
     private var studioTopBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 14) {
                 PocketMark()
                 Text("Pocket Daily").font(.title3.weight(.semibold))
-                Picker("Studio", selection: Binding(
-                    get: { section == .reader ? .layout : section }, set: { section = $0 })) {
-                    Text(StudioSection.layout.rawValue).tag(StudioSection.layout)
-                    Text(StudioSection.cards.rawValue).tag(StudioSection.cards)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .padding(.leading, 12)
-                .accessibilityIdentifier("studio-mode")
+                Text(StudioSection.layout.rawValue)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
                 Spacer(minLength: 12)
                 ReaderChip(model: model)
             }
@@ -245,8 +251,9 @@ struct ContentView: View {
                 importAction = .sdSource
                 importing = true
             }
-            DeviceSettingsInspector(model: model)
-            AdvancedInspector(model: model, nearby: nearby)
+            if !model.isDemoMode {
+                TroubleshootingInspector(model: model, nearby: nearby)
+            }
             Button {
                 showingProjectInfo = true
             } label: {
@@ -314,7 +321,6 @@ private struct ReaderChip: View {
                 Text(status.device).font(.callout.weight(.semibold))
                 Text(model.hasDirectSession ? "Direct" : "Same Wi-Fi")
                     .font(.caption).foregroundStyle(.secondary)
-                SyncModeBadge(mode: model.syncMode)
             } else {
                 Text(model.isDemoMode ? "Demo" : "No reader")
                     .font(.caption.weight(.semibold))
@@ -359,29 +365,6 @@ private struct CompactReaderMenu: View {
             }
             .accessibilityIdentifier("reader-menu")
         }
-    }
-}
-
-/// Live-studio sync mode, surfaced: push means real-time events and the
-/// frame stream; poll means the reader's radio budget kept the listener
-/// off and the app rides the heartbeat.
-private struct SyncModeBadge: View {
-    let mode: DeviceSyncMode
-
-    var body: some View {
-        let (text, color): (String, Color) = {
-            switch mode {
-            case .push: return ("LIVE", .green)
-            case .poll: return ("POLL", .orange)
-            case .offline: return ("OFFLINE", .gray)
-            }
-        }()
-        Text(text)
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 7).padding(.vertical, 4)
-            .background(color.opacity(0.14), in: Capsule())
-            .foregroundStyle(color)
-            .help("LIVE: real-time events over WebSocket. POLL: heartbeat polling (reader memory is tight).")
     }
 }
 
@@ -697,18 +680,6 @@ private struct ConnectionInspector: View {
                     .padding(.top, 4)
                 }
                 .font(.caption)
-                if model.readerStatus?.screenPreviewAvailable == true {
-                    Button("Show reader screen") { model.loadReaderPreview() }
-                        .buttonStyle(.borderless)
-                        .font(.callout)
-                        .disabled(model.isWorking)
-                }
-                if let frame = model.readerScreenImageData {
-                    PocketDevicePreview(hardware: model.hardware, status: model.readerStatus, screenImageData: frame)
-                        .frame(height: 260)
-                        .frame(maxWidth: .infinity)
-                        .accessibilityIdentifier("reader-screen")
-                }
             }
             if let lease = nearby.hotspotLease, model.manualHotspotFallback {
                 VStack(alignment: .leading, spacing: 4) {
@@ -758,6 +729,7 @@ private struct FilesInspector: View {
     let choose: () -> Void
     let copyToSD: () -> Void
     @State private var targeted = false
+    @State private var writing = false
 
     private var isEnabled: Bool { model.canPrepareFiles }
 
@@ -767,9 +739,9 @@ private struct FilesInspector: View {
                 .font(.title2)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(targeted ? "Drop to prepare" : "Book, study pack or firmware")
+                Text(targeted ? "Drop to prepare" : "Books and documents")
                     .font(.callout.weight(.medium))
-                Text("EPUB · PDL · BIN").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                Text("EPUB · TXT · MD · XTC · PDL · BIN").font(.caption2.monospaced()).foregroundStyle(.secondary)
             }
         }
     }
@@ -808,6 +780,14 @@ private struct FilesInspector: View {
                 return true
             } isTargeted: { targeted = $0 }
             .opacity(isEnabled ? 1 : 0.55)
+            Button("Write text to read…", systemImage: "square.and.pencil") { writing = true }
+                .buttonStyle(.borderless)
+                .font(.callout)
+                .disabled(!isEnabled)
+                .accessibilityIdentifier("write-text")
+                .sheet(isPresented: $writing) {
+                    TextDocumentComposer { url in receive([url]) }
+                }
             if model.hasDirectSession {
                 Text("Only files already on this device can be prepared while connected directly.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -837,42 +817,9 @@ private struct FilesInspector: View {
     }
 }
 
-private struct DeviceSettingsInspector: View {
-    @ObservedObject var model: PocketModel
-
-    var body: some View {
-        InspectorCard(title: "READER SETTINGS", symbol: "slider.horizontal.3") {
-            if let preferences = model.preferences {
-                Toggle("Start on Pocket Daily", isOn: Binding(
-                    get: { preferences.startupApp == 1 }, set: { model.setStartupPocketDaily($0) }
-                ))
-                Toggle("Keep Daily card while asleep", isOn: Binding(
-                    get: { preferences.pocketDailySleepCover }, set: { model.setPocketDailySleepCover($0) }
-                ))
-                Stepper("Sleep after \(preferences.sleepTimeoutMinutes) min", value: Binding(
-                    get: { preferences.sleepTimeoutMinutes }, set: { model.setSleepTimeout($0) }
-                ), in: 1 ... 120)
-                LabeledContent("Reading size") {
-                    Picker("Reading size", selection: Binding(
-                        get: { preferences.fontSize }, set: { model.setFontSize($0) }
-                    )) {
-                        Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                }
-                Button(model.isDemoMode ? "Demo · not saved" : "Save settings") { model.savePreferences() }
-                    .buttonStyle(.bordered).disabled(model.isDemoMode || !model.preferencesDirty || model.isWorking)
-            } else {
-                Text("Connect a reader to change its settings.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-/// Rarely needed tools, folded away: theme metrics and connection diagnostics.
-private struct AdvancedInspector: View {
+/// Crash report and connection log, folded away until a connection needs
+/// attention.
+private struct TroubleshootingInspector: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
     @State private var expanded = false
@@ -880,31 +827,59 @@ private struct AdvancedInspector: View {
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 14) {
-                ThemePackInspector(model: model)
-                if !model.isDemoMode {
-                    TroubleshootingInspector(model: model, nearby: nearby)
+                if let diagnostic = model.crashDiagnostic {
+                    DiagnosticsInspector(diagnostic: diagnostic)
                 }
+                ConnectionTraceInspector(nearby: nearby)
             }
             .padding(.top, 8)
         } label: {
-            Label(model.crashDiagnostic == nil ? "Advanced" : "Advanced · crash report saved",
-                  systemImage: "gearshape.2")
+            Label(model.crashDiagnostic == nil ? "Troubleshooting" : "Troubleshooting · crash report saved",
+                  systemImage: "wrench.and.screwdriver")
                 .font(.callout.weight(.medium))
         }
     }
 }
 
-private struct TroubleshootingInspector: View {
-    @ObservedObject var model: PocketModel
-    @ObservedObject var nearby: NearbySyncController
+/// Pasted or typed text becomes a UTF-8 .txt book the reader opens like any
+/// other; it is prepared exactly like a chosen file.
+private struct TextDocumentComposer: View {
+    let prepare: (URL) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var text = ""
+    @State private var error: String?
 
     var body: some View {
-        InspectorCard(title: "TROUBLESHOOTING", symbol: "wrench.and.screwdriver") {
-            if let diagnostic = model.crashDiagnostic {
-                DiagnosticsInspector(diagnostic: diagnostic)
+        NavigationStack {
+            Form {
+                TextField("Title", text: $title)
+                    .accessibilityIdentifier("compose-title")
+                TextEditor(text: $text)
+                    .frame(minHeight: 220)
+                    .accessibilityIdentifier("compose-text")
+                if let error { Text(error).foregroundStyle(.red).font(.caption) }
             }
-            ConnectionTraceInspector(nearby: nearby)
+            .formStyle(.grouped)
+            .navigationTitle("Text to read")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Prepare") { write() }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("compose-prepare")
+                }
+            }
         }
+        .frame(minWidth: 420, minHeight: 420)
+    }
+
+    private func write() {
+        do {
+            let url = try TextDocument.write(title: title, text: text)
+            prepare(url)
+            dismiss()
+        } catch { self.error = error.localizedDescription }
     }
 }
 

@@ -65,13 +65,13 @@ int32_t pdui_copy_frame(const pdui_context* context, uint8_t* output, size_t cap
 // a plain header and a hatched cover, so the preview shows the profile's
 // placement and order rather than the reader's own data.
 typedef struct {
-  uint8_t home_items[4];      // 1 reading, 2 study, 3 provider, 4 monitor
+  uint8_t home_items[4];      // 1 reading, 2 my cards, 3 provider, 4 monitor, 5 daily word
   uint8_t home_count;         // 1..4, distinct
   uint8_t daily_word;         // 0/1
   uint8_t weather;            // 0 bottom, 1 top, 2 off
   uint8_t next_event;         // 0/1
   uint8_t sleep_mode;         // 0 Daily Brief, 1 reader's sleep screen
-  uint8_t sleep_sections[4];  // 1 reading, 2 study, 3 weather, 4 today
+  uint8_t sleep_sections[4];  // 1 reading, 2 study, 3 weather, 4 today, 5 first of my cards
   uint8_t sleep_count;        // 1..4, distinct
 } pdui_profile;
 enum {
@@ -88,6 +88,19 @@ int32_t pdui_render_home(pdui_context* context, const pdui_profile* profile, uin
                          uint32_t selected) PDUI_NOEXCEPT;
 // Daily Brief (powered-off sleep frame) sections in profile order.
 int32_t pdui_render_brief(pdui_context* context, const pdui_profile* profile, uint32_t samples) PDUI_NOEXCEPT;
+
+// Version 1 additive: the companion's own cards ("My cards") for the Home and
+// Daily Brief previews. Each entry is one PDCT card (docs/content-card-v1.md)
+// and, when the card names an image, its PBM bytes. They replace the sample
+// study card until the next call; count 0 clears them. Bytes are copied and
+// validated like pdui_render_content; on failure the previous set stays.
+typedef struct {
+  const uint8_t* card;
+  size_t card_size;
+  const uint8_t* image;  // NULL when the card has no image
+  size_t image_size;
+} pdui_card_input;
+int32_t pdui_set_cards(pdui_context* context, const pdui_card_input* cards, uint32_t count) PDUI_NOEXCEPT;
 #ifdef __cplusplus
 }
 #endif

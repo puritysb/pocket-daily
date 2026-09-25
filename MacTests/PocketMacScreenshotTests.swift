@@ -18,17 +18,18 @@ final class PocketMacScreenshotTests: XCTestCase {
     @MainActor
     func testRendersStoreScreenshots() throws {
         try render(name: "01-home-x3", hardware: .x3)
-        try render(name: "02-cards", hardware: .x3, section: .cards)
-        try render(name: "03-home-x4", hardware: .x4)
+        try render(name: "02-card-x3", hardware: .x3, preview: .card)
+        try render(name: "03-sleep-x4", hardware: .x4, preview: .sleep)
     }
 
     @MainActor
-    private func render(name: String, hardware: PocketHardware, section: StudioSection = .layout) throws {
+    private func render(name: String, hardware: PocketHardware,
+                        preview: ProfileStudioView.PreviewSurface = .home) throws {
         let model = PocketModel()
         model.preferredHardware = hardware
         model.enterDemoMode()
 
-        let content = ContentView(initialSection: section)
+        let content = ContentView(initialPreview: preview)
             .environmentObject(model)
             .preferredColorScheme(.light)
 

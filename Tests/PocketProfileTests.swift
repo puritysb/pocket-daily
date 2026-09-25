@@ -52,6 +52,25 @@ final class PocketProfileTests: XCTestCase {
         XCTAssertEqual(state.profile.sleep.sections, [.weather, .reading, .study])
     }
 
+    func testTheReaderAdvertisesWhichItemsItAccepts() throws {
+        // The captured v1 reader predates the daily word item and pinned card.
+        let old = try ReaderProfileState.decode(Data(readerResponse.utf8), deviceID: device)
+        XCTAssertEqual(old.homeItems, [.reading, .study, .provider, .monitor])
+        XCTAssertEqual(old.sleepSections, [.reading, .study, .weather, .today])
+        let newer = readerResponse
+            .replacingOccurrences(of: #""homeItems":["reading","study","provider","monitor"]"#,
+                                  with: #""homeItems":["reading","study","provider","monitor","word","future"]"#)
+            .replacingOccurrences(of: #""sleepSections":["reading","study","weather","today"]"#,
+                                  with: #""sleepSections":["reading","study","weather","today","card"]"#)
+            .replacingOccurrences(of: #"["study","reading","monitor"]"#, with: #"["word","study"]"#)
+            .replacingOccurrences(of: #"["weather","reading","study"]"#, with: #"["card","reading"]"#)
+        let state = try ReaderProfileState.decode(Data(newer.utf8), deviceID: device)
+        XCTAssertEqual(state.profile.home.items, [.word, .study])
+        XCTAssertEqual(state.profile.sleep.sections, [.card, .reading])
+        XCTAssertTrue(state.homeItems.contains(.word), "Known capabilities are offered; unknown names ignored")
+        XCTAssertTrue(state.sleepSections.contains(.card))
+    }
+
     func testRejectsAnotherReaderASchemaChangeOrAnUnknownId() {
         XCTAssertThrowsError(try ReaderProfileState.decode(Data(readerResponse.utf8), deviceID: "00000000")) {
             XCTAssertEqual($0 as? ReaderProfileState.Failure, .identity)

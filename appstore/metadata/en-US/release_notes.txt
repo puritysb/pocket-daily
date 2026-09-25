@@ -1,1 +1,1 @@
-Pocket Daily 1.0 is a local-first reader companion for iPhone, iPad, and Mac: a Home and Sleep layout editor previewed with the reader's own layout code, a study-card studio, direct content transfer, SD-card copy on Mac, guarded firmware staging, and a hardware-free demo mode.
+Pocket Daily 1.0 is a local-first reader companion for iPhone, iPad, and Mac: a Home and Sleep editor previewed with the reader's own layout code, your own cards with QR codes, books and typed text sent directly, SD-card copy on Mac, guarded firmware staging, and a hardware-free demo mode.

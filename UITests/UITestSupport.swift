@@ -6,23 +6,16 @@ import XCTest
 extension XCUIApplication {
     var isCompact: Bool { tabBars.firstMatch.exists }
 
-    /// Opens a studio section and waits until it is selected. Reader is
-    /// always visible beside the studio on wide layouts, so there it only
-    /// needs the inspector.
+    /// Opens a studio section (a tab on iPhone) and waits until it is selected.
+    /// Wide layouts show Home & Sleep and the Reader inspector side by side.
     func open(_ section: String) {
         let tabs = tabBars.firstMatch
-        let header = segmentedControls["studio-mode"]
+        let canvas = descendants(matching: .any)["profile-canvas"]
         let shown = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in tabs.exists || header.exists }, object: self)
+            predicate: NSPredicate { _, _ in tabs.exists || canvas.exists }, object: self)
         _ = XCTWaiter().wait(for: [shown], timeout: 10)
-        let target: XCUIElement
-        if tabs.exists {
-            target = tabs.buttons[section]
-        } else if section == "Reader" {
-            return
-        } else {
-            target = header.buttons[section]
-        }
+        guard tabs.exists else { return }
+        let target = tabs.buttons[section]
         // A tap during launch can land before the control is interactive.
         for _ in 0..<3 where !target.isSelected {
             target.tap()
@@ -47,7 +40,7 @@ extension XCUIApplication {
 
     /// The Home & Sleep canvas once its frame matches the current edit.
     @discardableResult
-    func waitForLayoutPreview(caption: String = "Sample content", timeout: TimeInterval = 15) -> Bool {
+    func waitForLayoutPreview(caption: String = "Your cards · sample content", timeout: TimeInterval = 15) -> Bool {
         let canvas = descendants(matching: .any)["profile-canvas"]
         let current = NSPredicate(format: "value == %@", "Current")
         let ready = XCTNSPredicateExpectation(predicate: current, object: canvas)

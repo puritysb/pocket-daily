@@ -229,9 +229,7 @@ final class NearbySyncProtocolTests: XCTestCase {
         defer { model.pauseForBackground() }
         model.preferences = ReaderPreferences(fontSize: 3)
         model.preferencesDirty = true
-        model.readerScreenImageData = Data([9])
         model.mirror.apply(.preferences(ReaderPreferences(fontSize: 3)))
-        model.mirror.apply(.frame(seq: 7, capturedAt: Date(), data: Data([9])))
         let connecting = Task { await model.verify(host: "reader.local", port: 80) }
         defer { connecting.cancel() }
         let status = try await heldRequest(0)
@@ -240,9 +238,7 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertEqual(model.readerStatus?.version, "new")
         XCTAssertNil(model.preferences)
         XCTAssertFalse(model.preferencesDirty)
-        XCTAssertNil(model.readerScreenImageData)
         XCTAssertNil(model.mirror.state.preferences)
-        XCTAssertNil(model.mirror.state.latestFrame)
         XCTAssertTrue(model.isWorking)
         prefs.succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":2}"#.utf8))
         await connecting.value
@@ -505,8 +501,16 @@ final class NearbySyncProtocolTests: XCTestCase {
             } else {
                 display.respond(status: 404)  // older firmware: labelled reference preview
             }
+            // The active card revision is read once so Home & Sleep knows
+            // whether My cards need sending.
+            let cards = try await heldRequest(next)
+            next += 1
+            XCTAssertEqual(cards.request.url?.path, "/api/pocket/v1/content/state")
+            XCTAssertEqual(cards.olderActiveRequests, 0)
+            cards.succeed(Data(#"{"schema":1,"deviceID":"1234ABCD","capabilities":7,"active":null}"#.utf8))
         }
         await connecting.value
+        if presentationPhase != nil { XCTAssertEqual(model.loadedContentRevision, "") }
         XCTAssertEqual(model.readerDisplay?.theme, presentationPhase == "rendered" ? "lyra" : nil)
 
         let target = try ContentRevision(cards: [.init(id: "a", title: "A", question: "Text")])
@@ -554,7 +558,7 @@ final class NearbySyncProtocolTests: XCTestCase {
             XCTAssertTrue(model.message.contains("screen display is not yet confirmed"))
         }
         XCTAssertNotNil(model.readerStatus)
-        XCTAssertEqual(HeldReaderURLProtocol.requests.count, presentationPhase == nil ? 3 : 6,
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, presentationPhase == nil ? 3 : 7,
                        "No staging, upload, reactivation or session termination is permitted")
     }
 
@@ -567,16 +571,11 @@ final class NearbySyncProtocolTests: XCTestCase {
 
     @MainActor
     func testInFlightSettingsCancellationCannotReleaseNewOperation() async throws {
-        try await checkInFlightOperationCancellation(preview: false)
+        try await checkInFlightOperationCancellation()
     }
 
     @MainActor
-    func testInFlightPreviewCancellationCannotReleaseNewOperation() async throws {
-        try await checkInFlightOperationCancellation(preview: true)
-    }
-
-    @MainActor
-    private func checkInFlightOperationCancellation(preview: Bool) async throws {
+    private func checkInFlightOperationCancellation() async throws {
         HeldReaderURLProtocol.reset()
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [HeldReaderURLProtocol.self]
@@ -588,12 +587,12 @@ final class NearbySyncProtocolTests: XCTestCase {
             #"{"version":"1.6.6","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
         model.preferences = ReaderPreferences()
         model.preferencesDirty = true
-        if preview { model.loadReaderPreview() } else { model.savePreferences() }
+        model.savePreferences()
         for _ in 0..<100 where HeldReaderURLProtocol.requests.count < 1 {
             try await Task.sleep(for: .milliseconds(10))
         }
         let old = try XCTUnwrap(HeldReaderURLProtocol.requests.first)
-        XCTAssertEqual(old.request.httpMethod, preview ? "GET" : "POST")
+        XCTAssertEqual(old.request.httpMethod, "POST")
         XCTAssertTrue(model.isWorking)
         let previousMessage = model.message
 
@@ -646,7 +645,6 @@ final class NearbySyncProtocolTests: XCTestCase {
         model.savePreferences()
         XCTAssertTrue(model.isWorking)
         model.savePreferences()
-        model.loadReaderPreview()
         // An edit made during the save must remain unsaved after its completion.
         model.setFontSize(2)
         for _ in 0..<100 where model.isWorking {
@@ -683,8 +681,8 @@ final class NearbySyncProtocolTests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsAndPreviewOwnSessionWithoutTransferControls() async throws {
-        for preview in [false, true] {
+    func testSettingsOwnSessionWithoutTransferControls() async throws {
+        do {
             HeldReaderURLProtocol.reset()
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [HeldReaderURLProtocol.self]
@@ -697,12 +695,11 @@ final class NearbySyncProtocolTests: XCTestCase {
                 #"{"version":"test","device":"X3","ip":"reader.test","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8))
             model.readerStatus = status
             model.preferences = ReaderPreferences()
-            if preview { model.loadReaderPreview() }
-            else { model.savePreferences() }
+            model.savePreferences()
             let request = try await heldRequest(0)
             XCTAssertTrue(model.isWorking)
             XCTAssertFalse(model.isTransferring)
-            model.pauseTransfer() // The file-transfer action does not cancel settings or preview.
+            model.pauseTransfer() // The file-transfer action does not cancel settings.
             var verificationReturned = false
             let verification = Task {
                 await model.verify(host: "must-not-contact.test", port: 80)
@@ -713,7 +710,6 @@ final class NearbySyncProtocolTests: XCTestCase {
             XCTAssertTrue(verificationReturned, "Connection replacement must be refused before HTTP")
             model.findOnLocalNetwork(retryIfMissing: false)
             model.savePreferences()
-            model.loadReaderPreview()
             XCTAssertEqual(io.bonjourCalls, 0)
             XCTAssertEqual(io.statusCalls, 0)
             XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
@@ -993,25 +989,6 @@ final class NearbySyncProtocolTests: XCTestCase {
         let status = try JSONDecoder().decode(CrossPointStatus.self, from: data)
         XCTAssertEqual(status.screenPreviewAvailable, true)
         XCTAssertEqual(status.screenPreviewBytes, 52_342)
-    }
-
-    func testScreenPreviewReassemblesBoundedChunks() async throws {
-        var expected = Data([0x42, 0x4D])
-        expected.append(Data((0 ..< 4_094).map { UInt8(truncatingIfNeeded: $0) }))
-        ScreenPreviewURLProtocol.payload = expected
-        ScreenPreviewURLProtocol.requestedOffsets = []
-        defer {
-            ScreenPreviewURLProtocol.payload = Data()
-            ScreenPreviewURLProtocol.requestedOffsets = []
-        }
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ScreenPreviewURLProtocol.self]
-        let client = CrossPointClient(session: URLSession(configuration: configuration))
-
-        let received = try await client.screenPreview(host: "reader.test", port: 80, expectedBytes: expected.count)
-        XCTAssertEqual(received, expected)
-        XCTAssertEqual(ScreenPreviewURLProtocol.requestedOffsets, [0, 1_024, 2_048, 3_072])
     }
 
     func testSubnetDiscoveryCoversSlash22AndStartsWithNeighbors() {
@@ -1433,38 +1410,6 @@ private final class HeldAssociationIO: ReaderAssociationIO {
         pending.removeAll()
         for waiter in waiters { waiter.resume(throwing: URLError(.cannotConnectToHost)) }
     }
-}
-
-private final class ScreenPreviewURLProtocol: URLProtocol, @unchecked Sendable {
-    nonisolated(unsafe) static var payload = Data()
-    nonisolated(unsafe) static var requestedOffsets: [Int] = []
-
-    override class func canInit(with request: URLRequest) -> Bool { true }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)
-        let offset = components?.queryItems?.first(where: { $0.name == "offset" })?.value.flatMap(Int.init) ?? -1
-        Self.requestedOffsets.append(offset)
-        guard offset >= 0, offset < Self.payload.count else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
-            return
-        }
-
-        let end = min(offset + 1_024, Self.payload.count)
-        let response = HTTPURLResponse(
-            url: request.url!,
-            statusCode: 200,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/octet-stream"]
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Self.payload.subdata(in: offset ..< end))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
 }
 
 // MARK: - Resumable upload stream

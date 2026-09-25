@@ -1,1 +1,1 @@
-e-reader,epub,e-paper,home screen,layout,study cards,file transfer,sd card,firmware,companion
+e-reader,epub,e-paper,home screen,layout,qr code,cards,file transfer,sd card,firmware

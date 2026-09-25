@@ -178,6 +178,11 @@ final class HostRendererBridgeTests: XCTestCase {
         XCTAssertEqual([native.sleep_sections.0, native.sleep_sections.1, native.sleep_sections.2, native.sleep_sections.3],
                        [4, 3, 2, 0])
         XCTAssertEqual(native.sleep_count, 3)
+        profile.home.items = [.word, .study]
+        profile.sleep.sections = [.card]
+        let words = try HostRendererBridge.nativeProfile(profile)
+        XCTAssertEqual([words.home_items.0, words.home_items.1], [5, 2])
+        XCTAssertEqual(words.sleep_sections.0, 5)
         profile.home.items = []
         XCTAssertThrowsError(try HostRendererBridge.nativeProfile(profile)) {
             XCTAssertEqual($0 as? HostRendererBridge.Failure, .invalidOptions)
@@ -213,6 +218,37 @@ final class HostRendererBridgeTests: XCTestCase {
             let card = try await renderer.render(card: nil, image: nil, options: options)
             XCTAssertTrue(card.pixels.contains(where: { $0 != 0xFF }))
         }
+    }
+
+    /// My cards replace the sample in Home and on the sleep frame; a QR image
+    /// is drawn; incomplete cards are skipped rather than failing the preview.
+    func testMyCardsAndTheirQRCodeAreDrawnOnHomeAndSleep() async throws {
+        let renderer = try HostRendererBridge(font: font(), hardware: .x3)
+        var profile = PocketProfile.defaults
+        profile.home.items = [.study, .reading]
+        profile.sleep.sections = [.card, .reading]
+        let none = try await renderer.renderHome(profile: profile, cards: .init())
+        let qr = try ContentQRCode.image(for: "https://example.com/pocket")
+        let plainCard = ContentCard(id: "note", title: "Goal", question: "Chapter three today")
+        var pictured = plainCard
+        pictured.imagePath = qr.path
+        let plain = try await renderer.renderHome(profile: profile, cards: .init(cards: [plainCard]))
+        let withQR = try await renderer.renderHome(profile: profile,
+                                                   cards: .init(cards: [pictured], images: [qr.path: qr.data]))
+        XCTAssertNotEqual(plain.pixels, none.pixels, "The user's card replaces the fallback")
+        XCTAssertGreaterThan(ink(withQR), ink(plain) + 2000, "The QR code is drawn on Home")
+        let sleepPlain = try await renderer.renderBrief(profile: profile, cards: .init(cards: [plainCard]))
+        let sleepQR = try await renderer.renderBrief(profile: profile,
+                                                     cards: .init(cards: [pictured], images: [qr.path: qr.data]))
+        XCTAssertGreaterThan(ink(sleepQR), ink(sleepPlain) + 2000, "The first card keeps its image on the sleep frame")
+        // An unfinished card (no text yet) is left out, not an error.
+        let unfinished = ContentCard(id: "draft", title: "", question: "")
+        let skipped = try await renderer.renderHome(profile: profile, cards: .init(cards: [unfinished]))
+        XCTAssertEqual(skipped.pixels, none.pixels)
+    }
+
+    private func ink(_ frame: HostRendererBridge.Frame) -> Int {
+        frame.pixels.reduce(0) { $0 + 8 - $1.nonzeroBitCount }
     }
 
     func testLayoutPreviewKeepsTheLastFrameAndReportsFailures() async {

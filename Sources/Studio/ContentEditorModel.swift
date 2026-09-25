@@ -15,7 +15,7 @@ final class ContentEditorModel: ObservableObject {
             case .imageCollision: "The image filename conflicts with another image. The draft was not changed."
             case .demo: "Demo content stays in memory and cannot import or export your files."
             case .notLoaded: "Load the saved content draft before importing or exporting."
-            case .staleImport: "The content changed while import was open. Your edits were kept. Choose the file again to compare."
+            case .staleImport: "The cards changed while the review was open. Your edits were kept. Load them again to compare."
             }
         }
     }
@@ -35,42 +35,15 @@ final class ContentEditorModel: ObservableObject {
     @Published private(set) var pendingImport: ImportProposal?
     private var editGeneration: UInt64 = 0
     let isDemo: Bool
-    private let importFile: @Sendable (URL) async throws -> ContentDraft
     private var generation: UInt64?
     private var recoveryID: UUID?
     private let store: ContentDraftStore
 
     var hasUnsavedChanges: Bool { draft != savedDraft }
 
-    init(store: ContentDraftStore, isDemo: Bool = false,
-         importFile: @escaping @Sendable (URL) async throws -> ContentDraft = { try await ContentDraftFile.load($0) }) {
+    init(store: ContentDraftStore, isDemo: Bool = false) {
         self.store = store
         self.isDemo = isDemo
-        self.importFile = importFile
-    }
-
-    func exportDocument() throws -> ContentDraftDocument {
-        guard !isDemo else { throw Failure.demo }
-        guard !isBusy else { throw Failure.busy }
-        guard hasLoaded else { throw Failure.notLoaded }
-        try ContentDraftFile.validate(draft)
-        return ContentDraftDocument(draft: draft)
-    }
-
-    func prepareImport(from url: URL) async throws {
-        guard !isDemo else { throw Failure.demo }
-        guard !isBusy else { throw Failure.busy }
-        guard hasLoaded else { throw Failure.notLoaded }
-        try Task.checkCancellation()
-        isBusy = true
-        pendingImport = nil
-        defer { isBusy = false }
-        let started = editGeneration
-        let imported = try await importFile(url)
-        try Task.checkCancellation()
-        try ContentDraftFile.validate(imported)
-        guard editGeneration == started else { throw Failure.staleImport }
-        pendingImport = .init(sourceName: url.lastPathComponent, before: draft, draft: imported, editGeneration: started)
     }
 
     /// Proposes a draft that was read rather than chosen as a file (the

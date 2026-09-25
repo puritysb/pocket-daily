@@ -223,7 +223,14 @@ The import/packaging work does not turn provenance hashes into authentication.
 
 ## PackDocument / PackDeployer
 
-Current editor boundary (2026-09-22): the existing eight-metric inspector can
+Retired from the app (2026-09-25): the eight-metric theme inspector, its local
+draft store, JSON import/export and the `.uipack` encoder were removed because
+numbers without a preview of the screens they change gave users no clear use.
+The firmware `.uipack` contract, endpoints and state files remain; git history
+has the app code if a previewed "screen density" design replaces it. The notes
+below are history.
+
+Former editor boundary (2026-09-22): the existing eight-metric inspector can
 be expanded and edited offline, including demo mode. Apply/Revert alone require
 UI-pack capability, a nonempty reader identity and an idle non-demo session.
 Values are explicitly labeled local defaults/edits, not a readback of the

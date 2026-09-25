@@ -21,11 +21,8 @@ final class PocketScreenshotTests: XCTestCase {
         XCTAssertTrue(app.waitForLayoutPreview(), "The Daily Brief never rendered")
         try save(name: "02-sleep-x3")
 
-        app.open("Cards")
-        let canvas = app.descendants(matching: .any)["studio-canvas"]
-        let rendered = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label == %@", "Reader preview of the selected card"), object: canvas)
-        XCTAssertEqual(XCTWaiter().wait(for: [rendered], timeout: 15), .completed, "The card preview never rendered")
+        app.buttons["Card"].tap()
+        XCTAssertTrue(app.waitForLayoutPreview(caption: "Card page"), "The card page never rendered")
         try save(name: "03-cards")
 
         if app.isCompact {

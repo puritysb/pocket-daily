@@ -49,200 +49,51 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
     }
 
-    func testCardStudioDemoIsEditableButCannotSend() {
+    /// My cards are edited in Home & Sleep; editing shows the card page.
+    func testMyCardsAreEditableInDemoButNotSent() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("Cards")
-        let title = app.textFields["studio-title"]
+        XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
+        let title = app.textFields["cards-title"]
+        app.revealInStudio(title)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        let canvas = app.descendants(matching: .any)["studio-canvas"]
-        XCTAssertTrue(canvas.waitForExistence(timeout: 5))
-        let rendered = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label == %@", "Reader preview of the selected card"), object: canvas)
-        XCTAssertEqual(XCTWaiter().wait(for: [rendered], timeout: 15), .completed, "The card preview never rendered")
         title.tap()
         title.typeText(" today")
-        // Where the caret lands depends on the field width; the edit must stick.
         let edited = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "today"), object: title)
-        XCTAssertEqual(XCTWaiter().wait(for: [edited], timeout: 5), .completed, "Demo cards must stay editable: \(title.value ?? "")")
-        XCTAssertFalse(app.buttons["studio-send"].isEnabled)
-        XCTAssertFalse(app.switches["studio-auto-send"].isEnabled)
-        app.swipeDown()
-        let importCards = app.buttons["studio-import"]
-        app.revealInStudio(importCards)
-        XCTAssertTrue(importCards.exists)
-        XCTAssertFalse(importCards.isEnabled)
-        XCTAssertFalse(app.buttons["studio-export"].isEnabled)
-        XCTAssertTrue(app.staticTexts["Demo · edits are not saved"].exists)
-        attach(app, "card-studio-demo")
+        XCTAssertEqual(XCTWaiter().wait(for: [edited], timeout: 5), .completed, "Demo cards must stay editable")
+        XCTAssertTrue(app.waitForLayoutPreview(caption: "Card page"), "Editing a card shows its page")
+        XCTAssertFalse(app.buttons["profile-send"].isEnabled)
+        XCTAssertTrue(app.staticTexts["Demo · cards are not saved"].exists)
+        attach(app, "my-cards-demo")
     }
 
-    /// Import is reviewed before it replaces the draft; the confirmed draft is
-    /// then saved locally and survives a relaunch without being sent.
-    func testCardImportReviewCancelConfirmAndLocalSave() {
-        let app = XCUIApplication()
-        app.launchEnvironment["POCKET_UI_TEST_CONTENT_FILES_ID"] = UUID().uuidString
-        app.launch()
-        func openCards() {
-            app.open("Cards")
-            let loaded = app.descendants(matching: .any).matching(
-                NSPredicate(format: "identifier IN %@", ["studio-title", "studio-import"])).firstMatch
-            XCTAssertTrue(loaded.waitForExistence(timeout: 10))
-        }
-        func importDraft() {
-            let button = app.buttons["studio-import"]
-            app.revealInStudio(button)
-            button.tap()
-            XCTAssertTrue(app.buttons["content-confirm-import"].waitForExistence(timeout: 5))
-        }
-        openCards()
-        XCTAssertFalse(app.textFields["studio-title"].exists)
-        importDraft()
-        XCTAssertTrue(app.staticTexts["Imported cards"].exists)
-        attach(app, "content-import-review")
-        app.buttons["Cancel"].tap()
-        XCTAssertFalse(app.textFields["studio-title"].exists, "Cancel must keep the draft")
-        importDraft()
-        app.buttons["content-confirm-import"].tap()
-        let title = app.textFields["studio-title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 5))
-        XCTAssertEqual(title.value as? String, "Imported card")
-        XCTAssertFalse(app.buttons["studio-send"].isEnabled, "Nothing is sent without a reader")
-        let saved = app.staticTexts["Saved on this device"]
-        app.revealInStudio(saved)
-        XCTAssertTrue(saved.waitForExistence(timeout: 10))
-        app.terminate()
-        app.launch()
-        openCards()
-        XCTAssertEqual(app.textFields["studio-title"].value as? String, "Imported card")
-        XCTAssertFalse(springboard.alerts.firstMatch.exists)
-    }
-
-    /// Theme metrics live under Reader → Advanced.
-    private func openThemeEditor(_ app: XCUIApplication) -> XCUIElement {
-        app.open("Reader")
-        let advanced = app.buttons["Advanced"]
-        app.revealInReader(advanced)
-        XCTAssertTrue(advanced.waitForExistence(timeout: 5))
-        advanced.tap()
-        let editor = app.buttons["Edit theme metrics offline"]
-        app.revealInReader(editor)
-        XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        editor.tap()
-        return app.steppers["theme-header-height"]
-    }
-
-    func testThemeMetricsCanBeEditedOfflineWithoutDeviceActions() {
+    /// A QR code made from a link becomes the card's image.
+    func testQRCodeFromALinkBecomesTheCardImage() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        let header = openThemeEditor(app)
-        app.revealInReader(header)
-        XCTAssertTrue(header.waitForExistence(timeout: 5))
-        XCTAssertTrue(header.isEnabled)
-        // Query the actual button ID directly; scoped Stepper actions may
-        // re-resolve as the generic "Increment" ID on compact layouts.
-        let increment = app.buttons.matching(identifier: "theme-header-height-Increment").firstMatch
-        app.revealInReader(increment)
-        XCTAssertTrue(increment.waitForExistence(timeout: 5))
-        increment.tap()
-        XCTAssertEqual(header.value as? String, "45")
-        let apply = app.buttons["theme-apply"]
-        let revert = app.buttons["theme-revert"]
-        let save = app.buttons["theme-save"]
-        app.revealInReader(apply)
-        XCTAssertTrue(apply.waitForExistence(timeout: 5))
-        XCTAssertTrue(revert.waitForExistence(timeout: 5))
-        XCTAssertFalse(apply.isEnabled)
-        XCTAssertFalse(revert.isEnabled)
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
-        XCTAssertFalse(save.isEnabled)
-        XCTAssertTrue(app.buttons["theme-import"].exists)
-        XCTAssertTrue(app.buttons["theme-export"].exists)
-        XCTAssertFalse(app.buttons["theme-import"].isEnabled)
-        XCTAssertFalse(app.buttons["theme-export"].isEnabled)
-        XCTAssertFalse(app.buttons["theme-recover"].exists)
-        XCTAssertFalse(springboard.alerts.firstMatch.exists)
-    }
-
-    func testThemeRecoveryRequiresConfirmationAndSavedEditsSurviveRelaunch() {
-        let app = XCUIApplication()
-        let fixtureID = UUID().uuidString
-        app.launchEnvironment["POCKET_UI_TEST_THEME_DRAFT_ID"] = fixtureID
-        app.launchEnvironment["POCKET_UI_TEST_THEME_IMPORT_ID"] = fixtureID
-        app.launch()
-        app.open("Reader")
-        let advanced = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Advanced")).firstMatch
-        app.revealInReader(advanced)
-        advanced.tap()
-        let recover = app.buttons["theme-recover"]
-        app.revealInReader(recover)
-        XCTAssertTrue(recover.waitForExistence(timeout: 5))
-        recover.tap()
-        XCTAssertTrue(app.buttons["Preserve file and recover theme"].waitForExistence(timeout: 5))
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(recover.exists)
-        XCTAssertFalse(app.buttons["Export preserved theme draft"].exists)
-        recover.tap()
-        app.buttons["Preserve file and recover theme"].tap()
-        XCTAssertTrue(app.buttons["Export preserved theme draft"].waitForExistence(timeout: 5))
-        XCTAssertFalse(recover.exists)
-
-        let editor = app.buttons["Edit theme metrics offline"]
-        app.revealInReader(editor)
-        editor.tap()
-        let header = app.steppers["theme-header-height"]
-        XCTAssertTrue(header.waitForExistence(timeout: 5))
-        let increment = app.buttons.matching(identifier: "theme-header-height-Increment").firstMatch
-        app.revealInReader(increment)
-        increment.tap()
-        XCTAssertEqual(header.value as? String, "45")
-        let save = app.buttons["theme-save"]
-        app.revealInReader(save)
-        XCTAssertTrue(save.isEnabled)
-        save.tap()
-        XCTAssertTrue(app.staticTexts["No unsaved theme changes"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["theme-apply"].isEnabled)
-        app.terminate()
-        app.launch()
-        let reopened = openThemeEditor(app)
-        XCTAssertTrue(reopened.waitForExistence(timeout: 5))
-        XCTAssertEqual(reopened.value as? String, "45")
-        XCTAssertFalse(app.buttons["theme-recover"].exists)
-        let importButton = app.buttons["theme-import"]
-        app.revealInReader(importButton)
-        XCTAssertTrue(importButton.isEnabled)
-        XCTAssertTrue(app.buttons["theme-export"].isEnabled)
-        importButton.tap()
-        let confirmImport = app.buttons["theme-confirm-import"]
-        XCTAssertTrue(confirmImport.waitForExistence(timeout: 5))
-        attach(app, "theme-import-review")
-        app.buttons["Cancel"].tap()
-        XCTAssertEqual(reopened.value as? String, "45")
-        importButton.tap()
-        XCTAssertTrue(confirmImport.waitForExistence(timeout: 5))
-        confirmImport.tap()
-        XCTAssertTrue(app.staticTexts["Unsaved theme changes"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["theme-apply"].isEnabled)
-        // Import confirmation changes memory only; relaunch before Save must
-        // retain the last saved value, not silently persist imported values.
-        app.terminate()
-        app.launch()
-        let unchanged = openThemeEditor(app)
-        XCTAssertEqual(unchanged.value as? String, "45")
-        app.revealInReader(importButton)
-        importButton.tap()
-        XCTAssertTrue(confirmImport.waitForExistence(timeout: 5))
-        confirmImport.tap()
-        app.revealInReader(save)
-        save.tap()
-        XCTAssertTrue(app.staticTexts["No unsaved theme changes"].waitForExistence(timeout: 5))
-        app.terminate()
-        app.launch()
-        let imported = openThemeEditor(app)
-        XCTAssertEqual(imported.value as? String, "70")
-        XCTAssertFalse(springboard.alerts.firstMatch.exists)
+        XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
+        let menu = app.buttons["cards-image-menu"]
+        app.revealInStudio(menu)
+        XCTAssertTrue(menu.waitForExistence(timeout: 10))
+        menu.tap()
+        let qr = app.buttons["QR code from text or link…"]
+        XCTAssertTrue(qr.waitForExistence(timeout: 5))
+        qr.tap()
+        let input = app.descendants(matching: .any)["card-image-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("https://puritysb.github.io/pocket-daily/")
+        let add = app.buttons["card-image-add"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: add)
+        XCTAssertEqual(XCTWaiter().wait(for: [ready], timeout: 10), .completed, "The QR code was not generated")
+        attach(app, "qr-code-sheet")
+        add.tap()
+        XCTAssertTrue(app.buttons["Replace image"].waitForExistence(timeout: 5)
+                      || app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Replace image")).firstMatch.exists)
+        XCTAssertTrue(app.waitForLayoutPreview(caption: "Card page"))
+        attach(app, "qr-code-card")
     }
 
     /// Creating a `CBCentralManager` or probing the LAN is what raises the
@@ -330,14 +181,16 @@ final class PocketFlowTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Demo · nothing is sent"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Exit demo"].exists)
-        // Settings are populated so the interface is reviewable...
-        let startup = app.switches["Start on Pocket Daily"]
-        app.revealInReader(startup)
+        XCTAssertFalse(app.buttons["choose-file"].isEnabled, "Nothing may reach a device")
+        // Reader settings are populated in Home & Sleep so they are reviewable...
+        app.open("Home & Sleep")
+        let startup = app.switches["profile-startup"]
+        app.revealInStudio(startup)
         XCTAssertTrue(startup.exists)
-        // ...but nothing may reach a device.
-        XCTAssertFalse(app.buttons["choose-file"].isEnabled)
-        XCTAssertFalse(app.buttons["Demo · not saved"].isEnabled)
+        // ...but Send stays off.
+        XCTAssertFalse(app.buttons["profile-send"].isEnabled)
 
+        app.open("Reader")
         let exit = app.buttons["Exit demo"]
         app.revealInReader(exit, upward: true)
         exit.tap()
