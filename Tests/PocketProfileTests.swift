@@ -6,9 +6,10 @@ final class PocketProfileTests: XCTestCase {
     /// Captured from X3 firmware w15cb1e54 (GET /api/pocket/v1/profile after a save).
     private let readerResponse = #"{"schema":1,"deviceID":"5B09AF70","generation":1,"home":{"items":["study","reading","monitor"],"dailyWord":true,"weather":"top","nextEvent":false},"sleep":{"mode":"brief","sections":["weather","reading","study"]},"capabilities":{"homeItems":["reading","study","provider","monitor"],"maxHomeItems":4,"weather":["bottom","top","off"],"sleepModes":["brief","reader"],"sleepSections":["reading","study","weather","today"]}}"#
 
-    func testDefaultsMatchTheFirmwareDefaults() {
+    func testDefaultsShowWhatAReaderWithoutAProfileShows() {
         let d = PocketProfile.defaults
-        XCTAssertEqual(d.home.items, [.reading, .study, .provider])
+        // The firmware default also lists provider, which only the retired daemon fed.
+        XCTAssertEqual(d.home.items, [.reading, .study])
         XCTAssertTrue(d.home.dailyWord)
         XCTAssertEqual(d.home.weather, .bottom)
         XCTAssertTrue(d.home.nextEvent)
@@ -25,7 +26,7 @@ final class PocketProfileTests: XCTestCase {
         XCTAssertEqual(Set((json["home"] as? [String: Any])?.keys ?? [:].keys), ["items", "dailyWord", "weather", "nextEvent"])
         XCTAssertEqual(Set((json["sleep"] as? [String: Any])?.keys ?? [:].keys), ["mode", "sections"])
         XCTAssertEqual(String(decoding: body, as: UTF8.self),
-                       #"{"home":{"dailyWord":true,"items":["reading","study","provider"],"nextEvent":true,"weather":"bottom"},"schema":1,"sleep":{"mode":"brief","sections":["reading","study","weather","today"]}}"#)
+                       #"{"home":{"dailyWord":true,"items":["reading","study"],"nextEvent":true,"weather":"bottom"},"schema":1,"sleep":{"mode":"brief","sections":["reading","study","weather","today"]}}"#)
     }
 
     func testValidationMirrorsTheFirmwareRules() {
@@ -87,11 +88,23 @@ final class PocketProfileTests: XCTestCase {
     }
 
     @MainActor
+    func testRetiredDaemonItemsAreDroppedOnLoadWithoutMarkingEdits() throws {
+        let editor = ProfileEditorState()
+        // readerResponse stores [study, reading, monitor].
+        editor.sync(with: try ReaderProfileState.decode(Data(readerResponse.utf8), deviceID: device))
+        XCTAssertEqual(editor.draft.home.items, [.study, .reading])
+        XCTAssertFalse(editor.isDirty)
+        var onlyRetired = PocketProfile.defaults
+        onlyRetired.home.items = [.provider, .monitor]
+        XCTAssertEqual(onlyRetired.withoutRetiredItems.home.items, [.reading], "Never empty")
+    }
+
+    @MainActor
     func testEditorKeepsUnsentEditsAndAdoptsCleanUpdates() throws {
         let editor = ProfileEditorState()
         let first = try ReaderProfileState.decode(Data(readerResponse.utf8), deviceID: device)
         editor.sync(with: first)
-        XCTAssertEqual(editor.draft, first.profile)
+        XCTAssertEqual(editor.draft, first.profile.withoutRetiredItems)
         XCTAssertFalse(editor.isDirty)
 
         editor.draft.home.weather = .off

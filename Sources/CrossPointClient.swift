@@ -29,6 +29,8 @@ struct CrossPointStatus: Codable, Equatable {
     var pocketProfile: Int? = nil
     /// Read-only published content files (sibling docs/content-read-v1.md).
     var contentRead: Int? = nil
+    /// Weather and events from the app (sibling docs/pocket-glance-v1.md).
+    var pocketGlance: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -94,6 +96,8 @@ struct CrashDiagnostic: Equatable, Sendable {
 }
 
 struct ReaderPreferences: Equatable, Sendable {
+    /// The reader's "never" value (CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES).
+    static let neverSleepMinutes = 31
     var startupApp = 1
     var pocketDailySleepCover = true
     var sleepTimeoutMinutes = 10
@@ -702,6 +706,24 @@ actor CrossPointClient {
         try Task.checkCancellation()
         try Self.requireSuccess(response, body: body)
         return body
+    }
+
+    /// Stores the weather and events the reader shows; the reader validates
+    /// the whole document (sibling docs/pocket-glance-v1.md).
+    func saveGlance(_ glance: ReaderGlance, deviceID: String, host: String, port: Int) async throws {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/glance", query: ["deviceID": deviceID]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try glance.requestBody()
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        try Self.requireSuccess(response, body: body)
     }
 
     enum ProfileRequestError: LocalizedError, Equatable {

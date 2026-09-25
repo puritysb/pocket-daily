@@ -6,6 +6,19 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-25 Weather and events from the app (firmware 47a363f8, sibling
+  docs/pocket-glance-v1.md; verified on X3 2026-09-26): the firmware dropped the AgentDeck daemon; the app composes ReaderGlance
+  (WeatherKit forecast for a user-typed city geocoded with CLGeocoder — no
+  location permission — plus today's EventKit events when turned on) and POSTs
+  /api/pocket/v1/glance on connection (cache only, no internet needed), after
+  a weather refresh, and with each Send. Status flag pocketGlance: 1. Provider
+  and monitoring Home items are retired (dropped on load, never offered).
+  Needs the WeatherKit capability/App Service enabled on the App ID (account
+  holder) before WeatherKit returns data; Apple Weather mark and legal link
+  shown next to the city. Privacy policy and store copy updated. Home no
+  longer shows the "WI-FI OFF / SYNC" band; sleep timeout range is 1–31
+  (31 = never).
+
 - 2026-09-25 My cards and cleanup: the Cards tab became "My cards" inside Home
   & Sleep (QR codes from text/links via CoreImage, images from HTTPS links,
   Card preview surface, Load from reader); reader settings moved into Home &

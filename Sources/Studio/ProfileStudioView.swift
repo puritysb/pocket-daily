@@ -14,7 +14,8 @@ final class ProfileEditorState: ObservableObject {
     /// Adopt a newly loaded or saved reader profile unless it would discard
     /// unsent edits made against an older base.
     func sync(with reader: ReaderProfileState?) {
-        let incoming = reader?.profile ?? .defaults
+        // Daemon-fed items are dropped on load, so they never count as edits.
+        let incoming = (reader?.profile ?? .defaults).withoutRetiredItems
         guard reader?.generation != baseGeneration || incoming != base else { return }
         if !isDirty || draft == incoming { draft = incoming }
         base = incoming
@@ -317,7 +318,8 @@ struct ProfileStudioView: View {
     }
 
     private var homeItems: Set<PocketProfile.HomeItem> {
-        model.readerProfile?.homeItems ?? Set(PocketProfile.HomeItem.allCases)
+        (model.readerProfile?.homeItems ?? Set(PocketProfile.HomeItem.allCases))
+            .subtracting(PocketProfile.retiredHomeItems)
     }
     private var sleepSections: Set<PocketProfile.SleepSection> {
         model.readerProfile?.sleepSections ?? Set(PocketProfile.SleepSection.allCases)
@@ -347,7 +349,7 @@ struct ProfileStudioView: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            ControlGroup(title: "Weather") {
+            ControlGroup(title: "Weather and events") {
                 Picker("Weather", selection: edit(\.home.weather, on: .home)) {
                     ForEach(PocketProfile.WeatherPanel.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
@@ -357,8 +359,7 @@ struct ProfileStudioView: View {
                 Toggle("Next event", isOn: edit(\.home.nextEvent, on: .home))
                     .disabled(editor.draft.home.weather == .off)
                     .accessibilityIdentifier("profile-next-event")
-                Text("Weather and events come from an optional AgentDeck provider; without one the panel stays empty.")
-                    .font(.caption2).foregroundStyle(.secondary)
+                GlanceControls(settings: model.glanceSettings, model: model)
             }
             ControlGroup(title: "Sleep", note: editor.draft.sleep.mode == .brief ? "Top to bottom" : nil) {
                 Picker("Sleep screen", selection: edit(\.sleep.mode, on: .sleep)) {
@@ -380,7 +381,10 @@ struct ProfileStudioView: View {
                     }
                 }
                 if let timeout = setting({ $0.sleepTimeoutMinutes }, model.setSleepTimeout, on: .sleep) {
-                    Stepper("Sleep after \(timeout.wrappedValue) min", value: timeout, in: 1...120)
+                    // The reader accepts 1-30 minutes; 31 means it never sleeps on its own.
+                    Stepper(timeout.wrappedValue >= ReaderPreferences.neverSleepMinutes
+                                ? "Never sleep on its own" : "Sleep after \(timeout.wrappedValue) min",
+                            value: timeout, in: 1...ReaderPreferences.neverSleepMinutes)
                         .accessibilityIdentifier("profile-sleep-timeout")
                 }
             }

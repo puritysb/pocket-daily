@@ -14,6 +14,8 @@ This first vertical slice includes:
   Daily profile, reader settings and "My cards" (with QR codes), previewed
   with the firmware's own layout code and sent with a single explicit Send
 - books (EPUB, TXT, Markdown, XTC) and typed or pasted text sent to the reader
+- weather for a chosen city (Apple WeatherKit) and, optionally, today's calendar
+  events, sent to the reader on connection and with each Send
 - CoreBluetooth discovery, system passkey pairing, and encrypted control records
 - automatic private-hotspot joining on iOS and macOS, with a visible manual
   fallback when association is unavailable
@@ -29,8 +31,10 @@ This first vertical slice includes:
 - an original Pocket Daily icon set, App Store metadata, required-size actual UI
   screenshots, public privacy/support pages, and submission validation tooling
 
-It does not require Pocket Hub, a user account, AgentDeck, or infrastructure
-Wi-Fi. AgentDeck remains an optional device mode outside this app.
+It does not require Pocket Hub, a user account, or infrastructure Wi-Fi. The
+reader's weather (Apple Weather for a chosen city) and today's events (from the
+device's calendars, optional) come from this app; the former AgentDeck daemon
+path was removed from the firmware.
 
 Pocket Daily is an independent project. It is not affiliated with or endorsed by
 CrossPoint Reader, Xteink, or any device manufacturer. See

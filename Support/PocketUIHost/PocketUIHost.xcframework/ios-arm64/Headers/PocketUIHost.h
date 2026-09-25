@@ -64,8 +64,10 @@ int32_t pdui_copy_frame(const pdui_context* context, uint8_t* output, size_t cap
 // painters; the host supplies representative sample content, English strings,
 // a plain header and a hatched cover, so the preview shows the profile's
 // placement and order rather than the reader's own data.
+// * provider and monitor were retired with the AgentDeck daemon: a profile may
+//   still name them, and they never produce a Home page.
 typedef struct {
-  uint8_t home_items[4];      // 1 reading, 2 my cards, 3 provider, 4 monitor, 5 daily word
+  uint8_t home_items[4];      // 1 reading, 2 my cards, 3 provider*, 4 monitor*, 5 daily word
   uint8_t home_count;         // 1..4, distinct
   uint8_t daily_word;         // 0/1
   uint8_t weather;            // 0 bottom, 1 top, 2 off
@@ -77,10 +79,10 @@ typedef struct {
 enum {
   PDUI_SAMPLE_BOOK = 1u,
   PDUI_SAMPLE_STUDY = 2u,
-  PDUI_SAMPLE_PROVIDER = 4u,
+  PDUI_SAMPLE_PROVIDER = 4u,  // retired with the AgentDeck daemon: accepted, draws nothing
   PDUI_SAMPLE_WEATHER = 8u,
   PDUI_SAMPLE_EVENTS = 16u,
-  PDUI_SAMPLE_USAGE = 32u,
+  PDUI_SAMPLE_USAGE = 32u,  // retired with the AgentDeck daemon: accepted, draws nothing
   PDUI_SAMPLE_ALL = 63u
 };
 // Home face with the item at `selected` (clamped) in the main panel.

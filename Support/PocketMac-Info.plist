@@ -35,6 +35,8 @@
 	<array>
 		<string>_crosspoint._tcp</string>
 	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Pocket Daily reads today's events only when you turn on calendar events, to show them on your reader. They are sent only to your reader over your local connection.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Pocket Daily connects directly to your reader to sync books, study data, and firmware.</string>
 	<key>NSLocationUsageDescription</key>

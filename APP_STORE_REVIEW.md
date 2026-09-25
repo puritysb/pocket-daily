@@ -57,6 +57,16 @@ Before staging, Pocket Daily rejects an image unless its ESP32-C3 header,
 segments, checksum, SHA-256 trailer when present, and Pocket Nearby Sync product
 identity all validate locally.
 
+## Weather and calendar
+
+Weather is Apple WeatherKit data for a city the user types (geocoded with
+Apple's geocoder; the device's location is not used). The Apple Weather mark
+and legal link appear next to the city. Calendar access is requested only when
+the user turns on calendar events; today's event titles and times are sent to
+the user's reader over the local connection and are not stored or sent
+elsewhere. Both are optional, and the reader simply shows an empty panel
+without them.
+
 ## Privacy
 
 Bluetooth, local-network, and location purpose strings describe the direct

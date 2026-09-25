@@ -127,6 +127,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
         }
+        .task { model.refreshGlance() }
     }
 
     // MARK: Layouts

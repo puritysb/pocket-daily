@@ -55,10 +55,55 @@ final class ReaderLayoutSendTests: XCTestCase {
 
         // Revert returns to what the reader has.
         model.setSleepTimeout(90)
+        XCTAssertEqual(model.preferences?.sleepTimeoutMinutes, ReaderPreferences.neverSleepMinutes,
+                       "The reader accepts 1-30 minutes or 31 (never)")
         model.revertPreferences()
         XCTAssertEqual(model.preferences?.sleepTimeoutMinutes, 20)
         XCTAssertEqual(model.preferences?.fontSize, 3)
         XCTAssertFalse(model.preferencesDirty)
+    }
+
+    /// Weather and events go to a reader that stores them, from the cache,
+    /// and with Send; nothing is sent when no city or calendar is chosen.
+    func testGlanceIsSentToAReaderThatStoresIt() async throws {
+        LayoutSendURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LayoutSendURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let suite = "layout-glance-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let snapshot = WeatherSnapshot(fetched: Date(), place: "Seoul", currentCode: 0, currentTempC: 20,
+                                       currentSummary: "Clear", hours: [],
+                                       days: [.init(date: Calendar.current.startOfDay(for: Date()), code: 0,
+                                                    summary: "Clear", minC: 12, maxC: 22, precipitationChance: 0)])
+        let settings = GlanceSettings(defaults: defaults, fetch: { _ in snapshot })
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session),
+                                glanceSettings: settings)
+        defer { model.pauseForBackground() }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"t","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"pocketProfile":1,"pocketGlance":1}"#.utf8))
+        model.preferences = ReaderPreferences()
+
+        model.pushGlance()
+        XCTAssertFalse(model.isWorking, "Nothing configured, nothing sent")
+        settings.setPlace(.init(name: "Seoul", latitude: 37.57, longitude: 126.98))
+        await settings.refreshWeatherIfNeeded()
+        model.pushGlance()
+        try await waitIdle(model)
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/glance"])
+        XCTAssertNotNil(model.glanceSentAt)
+        let body = try XCTUnwrap(LayoutSendURLProtocol.lastBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual((json["weather"] as? [String: Any])?["place"] as? String, "Seoul")
+
+        // Send carries the glance with the settings it saves.
+        LayoutSendURLProtocol.reset()
+        model.setFontSize(2)
+        model.sendReaderLayout(profile: nil, cards: nil)
+        try await waitIdle(model)
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/preferences", "/api/pocket/v1/glance"])
     }
 
     func testDemoSendsNothing() throws {
@@ -73,28 +118,31 @@ final class ReaderLayoutSendTests: XCTestCase {
 private final class LayoutSendURLProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var recorded: [(method: String, path: String)] = []
+    nonisolated(unsafe) private static var body: Data?
     static var requests: [(method: String, path: String)] { lock.withLock { recorded } }
-    static func reset() { lock.withLock { recorded = [] } }
+    static var lastBody: Data? { lock.withLock { body } }
+    static func reset() { lock.withLock { recorded = []; body = nil } }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         guard let url = request.url else { return }
         Self.lock.withLock { Self.recorded.append((request.httpMethod ?? "GET", url.path)) }
         var body = Data("{}".utf8)
+        let sent = request.httpBodyStream.map { stream -> Data in
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                data.append(buffer, count: count)
+            }
+            return data
+        } ?? request.httpBody ?? Data()
+        Self.lock.withLock { Self.body = sent }
         if url.path == "/api/pocket/v1/profile" {
             // Echo the sent document as the reader's stored profile.
-            let sent = request.httpBodyStream.map { stream -> Data in
-                stream.open()
-                defer { stream.close() }
-                var data = Data()
-                var buffer = [UInt8](repeating: 0, count: 1024)
-                while stream.hasBytesAvailable {
-                    let count = stream.read(&buffer, maxLength: buffer.count)
-                    if count <= 0 { break }
-                    data.append(buffer, count: count)
-                }
-                return data
-            } ?? request.httpBody ?? Data()
             if var object = try? JSONSerialization.jsonObject(with: sent) as? [String: Any] {
                 object["deviceID"] = "5B09AF70"
                 object["generation"] = 1

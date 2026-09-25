@@ -21,8 +21,8 @@ struct PocketProfile: Equatable, Sendable, Codable {
             case .reading: "The open book, when there is one"
             case .study: "The cards you write below, with their images"
             case .word: "A new word each day from the reader or an SD learning pack"
-            case .provider: "Cards carried from an optional AgentDeck provider"
-            case .monitor: "Usage summary carried from an optional AgentDeck provider"
+            case .provider: "Retired: cards from the AgentDeck daemon"
+            case .monitor: "Retired: agent usage from the AgentDeck daemon"
             }
         }
     }
@@ -50,14 +50,17 @@ struct PocketProfile: Equatable, Sendable, Codable {
             case .reading: "The open book and its cover"
             case .card: "Always shown, with its image (for example, contact details)"
             case .study: "Shown only when no book is open"
-            case .weather: "From an optional AgentDeck provider"
-            case .today: "From an optional AgentDeck provider"
+            case .weather: "Apple Weather for your city, sent by this app"
+            case .today: "Today's events from your calendars, sent by this app"
             }
         }
     }
 
     /// IDs every profile-capable reader accepts (firmware before `word`/`card`).
     static let baseHomeItems: Set<HomeItem> = [.reading, .study, .provider, .monitor]
+    /// Items whose data came only from the retired AgentDeck daemon. Readers
+    /// still parse them; the app neither offers nor keeps them.
+    static let retiredHomeItems: Set<HomeItem> = [.provider, .monitor]
     static let baseSleepSections: Set<SleepSection> = [.reading, .study, .weather, .today]
     struct Home: Equatable, Sendable, Codable {
         var items: [HomeItem]
@@ -75,10 +78,19 @@ struct PocketProfile: Equatable, Sendable, Codable {
 
     static let maxHomeItems = 4
 
-    /// Exactly the reader's behaviour before profiles existed.
+    /// What a reader without a stored profile shows (its provider item, fed
+    /// only by the retired daemon, never appears).
     static let defaults = PocketProfile(
-        home: .init(items: [.reading, .study, .provider], dailyWord: true, weather: .bottom, nextEvent: true),
+        home: .init(items: [.reading, .study], dailyWord: true, weather: .bottom, nextEvent: true),
         sleep: .init(mode: .brief, sections: [.reading, .study, .weather, .today]))
+
+    /// Without the retired daemon items; never empty.
+    var withoutRetiredItems: PocketProfile {
+        var profile = self
+        profile.home.items.removeAll { Self.retiredHomeItems.contains($0) }
+        if profile.home.items.isEmpty { profile.home.items = [.reading] }
+        return profile
+    }
 
     /// Same rules the firmware enforces; nil when the document is sendable.
     var validationError: String? {

@@ -366,6 +366,9 @@ final class PocketModel: ObservableObject, DeviceSession {
                         preferencesBaseline = settings
                         preferencesDirty = preferences != settings
                     }
+                    if canSendGlance, glanceSettings.isConfigured, let identity {
+                        await saveGlance(deviceID: identity, host: host, port: port)
+                    }
                     outcome.succeeded = true
                     if cards == nil {
                         post("Saved on \(hardware.rawValue). Home and sleep changes show the next time Pocket Daily opens.",
@@ -388,6 +391,49 @@ final class PocketModel: ObservableObject, DeviceSession {
                 guard outcome.succeeded, attempt == connectionAttempt else { return }
             }
             applyContent(cards)
+        }
+    }
+
+    // MARK: Weather and events
+
+    /// A reader that stores weather and events from the app.
+    var canSendGlance: Bool {
+        !isDemoMode && !isInBackground && readerStatus?.pocketGlance == 1 && readerStatus?.deviceID != nil
+    }
+
+    /// Composes from the cached weather and today's calendar and stores it on
+    /// the reader. Called inside a reader lane.
+    private func saveGlance(deviceID: String, host: String, port: Int) async {
+        let glance = glanceSettings.glance(events: glanceSettings.includeEvents ? CalendarSource.today() : [])
+        do {
+            try await client.saveGlance(glance, deviceID: deviceID, host: host, port: port)
+            glanceSentAt = Date()
+            glanceError = nil
+        } catch {
+            glanceError = error.localizedDescription
+        }
+    }
+
+    /// Sends weather and events now, in the reader lane, when nothing else
+    /// holds it. Data sync, not an edit: it changes nothing the user authored.
+    func pushGlance() {
+        guard canSendGlance, glanceSettings.isConfigured, !isWorking, !hasReaderWork,
+              let identity = readerStatus?.deviceID else { return }
+        let host = activeHost
+        let port = activeHTTPPort
+        let attempt = connectionAttempt
+        startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+            guard ownsReaderWork(owner, attempt: attempt) else { return }
+            await saveGlance(deviceID: identity, host: host, port: port)
+        }
+    }
+
+    /// Refreshes Apple Weather when stale (never inside a reader lane: it
+    /// needs the internet), then sends the result to a connected reader.
+    func refreshGlance(force: Bool = false) {
+        Task { @MainActor [self] in
+            await glanceSettings.refreshWeatherIfNeeded(force: force)
+            pushGlance()
         }
     }
 
@@ -479,6 +525,11 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     private let client: CrossPointClient
+    /// Weather city, calendar choice and cached Apple Weather (this device only).
+    let glanceSettings: GlanceSettings
+    /// When the reader last accepted weather and events from this app.
+    @Published private(set) var glanceSentAt: Date?
+    @Published private(set) var glanceError: String?
     private let localFiles: LocalFileOperations
     // Bind each immutable revision to the selected session. Keeping this seam
     // at the I/O boundary lets the real Apply lifecycle run without a reader.
@@ -518,8 +569,10 @@ final class PocketModel: ObservableObject, DeviceSession {
          activationJournal: ContentActivationJournal? = nil,
          contentTransportFactory: ContentTransportFactory? = nil,
          localFiles: LocalFileOperations = .init(),
-         associationIO: (any ReaderAssociationIO)? = nil) {
+         associationIO: (any ReaderAssociationIO)? = nil,
+         glanceSettings: GlanceSettings? = nil) {
         self.client = client
+        self.glanceSettings = glanceSettings ?? GlanceSettings()
         self.localFiles = localFiles
         self.contentTransportFactory = contentTransportFactory ?? { revision, identity, host, port in
             ReaderContentTransport(target: revision, deviceID: identity, host: host, port: port, client: client)
@@ -955,6 +1008,11 @@ final class PocketModel: ObservableObject, DeviceSession {
             guard !Task.isCancelled, attempt == connectionAttempt else { return }
             loadedContentRevision = state.active?.revision ?? ""
         }
+        // Weather (cached, no internet needed here) and today's events.
+        if !isDemoMode, status.pocketGlance == 1, let identity = status.deviceID, glanceSettings.isConfigured {
+            await saveGlance(deviceID: identity, host: host, port: httpPort)
+            guard !Task.isCancelled, attempt == connectionAttempt else { return }
+        }
         let diagnosticsAffordable = nearbyLease == nil && ReaderDiagnosticsPolicy.canFetchDiagnostics(
             freeHeap: status.freeHeap,
             readerSaysAffordable: status.diagnosticsAffordable
@@ -1059,7 +1117,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func setSleepTimeout(_ minutes: Int) {
-        preferences?.sleepTimeoutMinutes = minutes
+        preferences?.sleepTimeoutMinutes = min(max(minutes, 1), ReaderPreferences.neverSleepMinutes)
         preferencesDirty = true
     }
 
@@ -1313,6 +1371,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     func resumeForForeground() {
         guard isInBackground else { return }
         isInBackground = false
+        refreshGlance()
         guard !isDemoMode, !hasDirectSession, readerStatus != nil else { return }
         startHeartbeat(host: activeHost, port: activeHTTPPort)
     }
