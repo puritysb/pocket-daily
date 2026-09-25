@@ -25,6 +25,8 @@ struct CrossPointStatus: Codable, Equatable {
     /// the contract (`docs/live-studio-v1.md` in the firmware repository).
     var liveStudio: LiveStudioAdvertisement? = nil
     var uploadStreamWindow: Int? = nil
+    /// Pocket Daily profile endpoints (sibling docs/pocket-profile-v1.md).
+    var pocketProfile: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -712,6 +714,59 @@ actor CrossPointClient {
         let body = try await contentResponse(action: "presentation", method: "GET", revision: active.revision,
                                              deviceID: deviceID, host: host, port: port)
         return try ContentPresentationReceipt.decode(body, deviceID: deviceID, active: active)
+    }
+
+    enum ProfileRequestError: LocalizedError, Equatable {
+        case conflict
+        case rejected(String)
+        var errorDescription: String? {
+            switch self {
+            case .conflict: "The reader's profile changed since it was loaded. The latest version was reloaded; review it and send again."
+            case let .rejected(reason): "The reader rejected the profile: \(reason)"
+            }
+        }
+    }
+
+    func readerProfile(deviceID: String, host: String, port: Int) async throws -> ReaderProfileState {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/profile", query: ["deviceID": deviceID]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        try Self.requireSuccess(response, body: body)
+        return try ReaderProfileState.decode(body, deviceID: deviceID)
+    }
+
+    /// Compare-and-swap on the generation the app loaded; the reader validates
+    /// the whole document before storing it (no partial application).
+    func saveReaderProfile(_ profile: PocketProfile, generation: UInt32, deviceID: String, host: String,
+                           port: Int) async throws -> ReaderProfileState {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/profile",
+                                 query: ["deviceID": deviceID, "generation": String(generation)]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try profile.requestBody()
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+        if status == 409, String(data: body, encoding: .utf8)?.contains("profile changed") == true {
+            throw ProfileRequestError.conflict
+        }
+        if status == 400 {
+            throw ProfileRequestError.rejected(String(data: body.prefix(160), encoding: .utf8) ?? "invalid profile")
+        }
+        try Self.requireSuccess(response, body: body)
+        return try ReaderProfileState.decode(body, deviceID: deviceID)
     }
 
     /// Resolved preview inputs. nil when the reader predates the endpoint (404).

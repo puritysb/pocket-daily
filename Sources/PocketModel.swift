@@ -289,11 +289,20 @@ final class PocketModel: ObservableObject, DeviceSession {
             if readerDisplay != nil, readerDisplay?.deviceID != readerStatus?.deviceID || isDemoMode {
                 readerDisplay = nil
             }
+            if readerProfile != nil, readerProfile?.deviceID != readerStatus?.deviceID || isDemoMode {
+                readerProfile = nil
+                profileSend = .idle
+            }
         }
     }
     /// Resolved content-page inputs of the connected reader; nil means previews
     /// use the labelled reference style (demo, offline or older firmware).
     @Published private(set) var readerDisplay: ReaderDisplayState?
+    /// The connected reader's stored Pocket Daily profile (nil: not loaded,
+    /// unsupported firmware, demo or offline).
+    @Published private(set) var readerProfile: ReaderProfileState?
+    enum ProfileSendState: Equatable { case idle, sending, saved(UInt32), failed(String), conflict }
+    @Published private(set) var profileSend: ProfileSendState = .idle
     @Published private(set) var message = PocketModel.initialMessage
     @Published private(set) var messageTone: StatusTone = .neutral
     @Published var isWorking = false
@@ -335,6 +344,44 @@ final class PocketModel: ObservableObject, DeviceSession {
         let editor = ThemeEditorModel(store: try ThemeDraftStore.applicationStore())
         savedThemeEditor = editor
         return editor
+    }
+
+    /// Profile-capable, identified, foreground, non-demo session.
+    var canEditReaderProfile: Bool {
+        !isDemoMode && !isInBackground && readerStatus?.pocketProfile == 1 && readerStatus?.deviceID != nil
+    }
+
+    /// Sends the whole profile once in the exclusive reader lane. A 409 means
+    /// the reader changed it meanwhile: reload, never retry blindly.
+    func sendProfile(_ profile: PocketProfile) {
+        guard canEditReaderProfile, !isWorking, !hasReaderWork, profile.validationError == nil,
+              let identity = readerStatus?.deviceID else { return }
+        let generation = readerProfile?.generation ?? 0
+        let host = activeHost
+        let port = activeHTTPPort
+        let attempt = connectionAttempt
+        profileSend = .sending
+        let started = startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+            do {
+                let saved = try await client.saveReaderProfile(profile, generation: generation, deviceID: identity,
+                                                               host: host, port: port)
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                readerProfile = saved
+                profileSend = .saved(saved.generation)
+                post("Home & Sleep settings saved on the reader. They apply the next time Pocket Daily opens.",
+                     tone: .success)
+            } catch CrossPointClient.ProfileRequestError.conflict {
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                readerProfile = try? await client.readerProfile(deviceID: identity, host: host, port: port)
+                profileSend = .conflict
+                post(CrossPointClient.ProfileRequestError.conflict)
+            } catch {
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                profileSend = .failed(error.localizedDescription)
+                post(error)
+            }
+        }
+        if started == nil { profileSend = .idle }
     }
 
     /// One read-only GET inside an existing sequential reader lane (the reader
@@ -858,6 +905,11 @@ final class PocketModel: ObservableObject, DeviceSession {
         let loadedDisplay = await loadReaderDisplay(status, host: host, port: httpPort)
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         readerDisplay = loadedDisplay
+        if status.pocketProfile == 1, let identity = status.deviceID {
+            let loadedProfile = try? await client.readerProfile(deviceID: identity, host: host, port: httpPort)
+            guard !Task.isCancelled, attempt == connectionAttempt else { return }
+            readerProfile = loadedProfile
+        }
         readerScreenImageData = nil
         let diagnosticsAffordable = nearbyLease == nil && ReaderDiagnosticsPolicy.canFetchDiagnostics(
             freeHeap: status.freeHeap,

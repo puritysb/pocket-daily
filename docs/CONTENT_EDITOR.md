@@ -87,6 +87,10 @@ iPad and iPhone keep ContentEditorSheet until the Mac workflow is validated.
   reader. Load/save conflicts keep the explicit preserve-and-recover path, and
   draft import keeps its side-by-side review because it replaces every card.
 - Demo shows one in-memory sample card; nothing is saved or sent.
+- Removing a card is autosaved, so it is always undoable (2026-09-25): an
+  inline Undo and ⌘Z put the card and the image only it used back at its old
+  position, keeping later edits; restoring is refused (with a message) once
+  the three-card limit is reached or the ID is in use.
 - Preview inputs come from the reader (2026-09-25): `ReaderDisplayState` reads
   `GET /api/pocket/v1/display` once per connection and after a UI pack
   apply/revert, inside the sequential reader lane, and the canvas renders with
@@ -97,6 +101,27 @@ iPad and iPhone keep ContentEditorSheet until the Mac workflow is validated.
   reader frame (hardware run only; see sibling docs/pocket-profile-v1.md).
 - Other "Apply" labels were renamed for what they send: reading settings use
   **Save reading settings**, the theme inspector uses **Send theme**.
+
+## Home & Sleep profile editor (P2, 2026-09-25)
+
+The Mac studio has two tabs: Cards (above) and Home & Sleep, which edits the
+reader's Pocket Daily profile (sibling docs/pocket-profile-v1.md).
+
+- On connection, when `/api/status` reports `pocketProfile: 1`, the app reads
+  `GET /api/pocket/v1/profile` once inside the sequential connection lane.
+  Readers without it show "cannot store Home & Sleep settings yet".
+- `PocketProfile` mirrors the firmware rules (1-4 distinct Home items, 1-4
+  distinct sleep sections) and sends exactly `schema`, `home` and `sleep`.
+  `ReaderProfileState` refuses unknown IDs from a newer reader instead of
+  dropping them, so the app never writes back a document that loses choices.
+- The editor keeps a draft against the loaded profile; reloads never discard
+  unsent edits. Send to reader posts the whole document once with the loaded
+  generation (compare-and-swap). A 409 reloads the reader's version and asks
+  for review; nothing is retried automatically.
+- The canvas is a labelled layout schematic (placement and order), not a
+  pixel render: Home and sleep pixel previews need the shared renderer (P1-3).
+- Changes apply the next time Pocket Daily opens on the reader, which the
+  status line states. Demo edits locally and sends nothing.
 
 ## Explicit live editing session
 

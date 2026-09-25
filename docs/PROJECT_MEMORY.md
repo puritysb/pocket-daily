@@ -6,6 +6,17 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-25 P2: Mac studio tabs Cards | Home & Sleep. The Home & Sleep editor
+  reads the reader profile once per connection (status pocketProfile: 1),
+  edits a draft (ordered toggles for Home items and sleep sections, daily
+  word, weather bottom/top/off, next event, sleep mode) on a labelled layout
+  schematic, and sends the whole document with generation CAS; 409 reloads.
+  PocketProfile/ReaderProfileState mirror the firmware rules and refuse
+  unknown IDs. 288 unit tests pass (6 new). The store set stays at three Mac
+  screenshots (validator/submission.json); a Home & Sleep screenshot would be
+  a separate release-package decision. Physical Send from the app not yet
+  exercised.
+
 - 2026-09-25 P1-1: the studio previews with the reader's resolved display state
   (ReaderDisplayState, one sequential GET per connection and after pack
   apply/revert; 404 = labelled Lyra reference). Hardware parity on X3: host

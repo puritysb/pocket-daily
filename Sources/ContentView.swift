@@ -23,6 +23,8 @@ struct ContentView: View {
     @State private var pendingFirmwareTransfer: PendingFirmwareTransfer?
     @State private var showingProjectInfo = false
     @State private var showingContentEditor = false
+    /// Mac studio tab to open first (store screenshots render Home & Sleep).
+    var initialStudioMode: StudioModeView.Mode = .cards
 
     var body: some View {
         GeometryReader { proxy in
@@ -107,7 +109,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     desktopHeader
                     readerLine
-                    ContentStudioView(model: model)
+                    StudioModeView(model: model, initialMode: initialStudioMode)
                 }
                 .padding(.horizontal, 34)
                 .padding(.vertical, 24)

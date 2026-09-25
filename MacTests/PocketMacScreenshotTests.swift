@@ -23,13 +23,14 @@ final class PocketMacScreenshotTests: XCTestCase {
     }
 
     @MainActor
-    private func render(name: String, hardware: PocketHardware, showingAbout: Bool) throws {
+    private func render(name: String, hardware: PocketHardware, showingAbout: Bool,
+                        studioMode: StudioModeView.Mode = .cards) throws {
         let model = PocketModel()
         model.preferredHardware = hardware
         model.enterDemoMode()
 
         let content = ZStack {
-            ContentView()
+            ContentView(initialStudioMode: studioMode)
                 .environmentObject(model)
             if showingAbout {
                 // Matches how the sheet presents over the studio.
