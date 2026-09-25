@@ -6,6 +6,15 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-25 P1-3 (firmware 8e6e75a4; no reader): the Home & Sleep canvas shows
+  the firmware Home/Daily Brief painter output via new host ABI calls
+  pdui_render_home/pdui_render_brief (ABI stays 1) with labelled sample data;
+  schematic fallback when the renderer is unavailable or sleep mode is the
+  reader's own screen. HostRendererBridge.nativeProfile maps PocketProfile to
+  the firmware record IDs; LayoutPreviewModel keeps the last frame. 294 unit
+  tests pass (3 new); the Mac canvas was checked in an offscreen capture.
+  Pixel tuning against a device capture and golden hashes remain.
+
 - 2026-09-25 P2: Mac studio tabs Cards | Home & Sleep. The Home & Sleep editor
   reads the reader profile once per connection (status pocketProfile: 1),
   edits a draft (ordered toggles for Home items and sleep sections, daily

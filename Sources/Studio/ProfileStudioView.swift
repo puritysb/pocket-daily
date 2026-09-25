@@ -24,13 +24,15 @@ final class ProfileEditorState: ObservableObject {
     func revert() { draft = base }
 }
 
-/// Home & Sleep editor: a schematic of the reader's Pocket Daily layout on the
-/// canvas, the profile controls beside it, and one explicit Send to reader.
+/// Home & Sleep editor: the Pocket Daily layout drawn by the firmware painter
+/// with sample content (a schematic when that renderer is unavailable), the
+/// profile controls beside it, and one explicit Send to reader.
 struct ProfileStudioView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var editor: ProfileEditorState
     @State private var preview: PreviewSurface = .home
     @State private var schematic: CGImage?
+    @StateObject private var layout = LayoutPreviewModel()
 
     enum PreviewSurface: String, CaseIterable { case home = "Home", sleep = "Sleep" }
 
@@ -46,15 +48,18 @@ struct ProfileStudioView: View {
                     .labelsHidden()
                     .accessibilityIdentifier("profile-preview-surface")
                     PocketDevicePreview(hardware: model.hardware, status: model.readerStatus,
-                                        screenImageData: nil, renderedScreen: schematic)
+                                        screenImageData: nil, renderedScreen: canvasImage)
                         .frame(maxWidth: 360)
                         .frame(height: 500)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Schematic of the Pocket Daily \(preview.rawValue.lowercased()) layout")
+                        .accessibilityLabel(showsRender
+                            ? "Pocket Daily \(preview.rawValue.lowercased()) layout with sample content"
+                            : "Schematic of the Pocket Daily \(preview.rawValue.lowercased()) layout")
                         .accessibilityIdentifier("profile-canvas")
-                    Label("Layout schematic. The reader draws the real content and fonts.", systemImage: "square.dashed")
+                    Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("profile-canvas-caption")
                 }
                 .frame(width: 380)
                 controls
@@ -63,7 +68,26 @@ struct ProfileStudioView: View {
         }
         .onAppear { editor.sync(with: model.readerProfile) }
         .onChange(of: model.readerProfile) { _, reader in editor.sync(with: reader) }
-        .task(id: SchematicKey(profile: editor.draft, surface: preview, hardware: model.hardware)) { renderSchematic() }
+        .task(id: SchematicKey(profile: editor.draft, surface: preview, hardware: model.hardware)) {
+            renderSchematic()
+            if let request = layoutRequest { await layout.update(request) }
+        }
+    }
+
+    /// The reader's own sleep screen is not drawn here; the schematic explains it.
+    private var layoutRequest: LayoutPreviewRequest? {
+        if preview == .sleep && editor.draft.sleep.mode == .reader { return nil }
+        guard editor.draft.validationError == nil else { return nil }
+        return LayoutPreviewRequest(profile: editor.draft, surface: preview == .home ? .home : .brief,
+                                    hardware: model.hardware)
+    }
+
+    private var showsRender: Bool { layoutRequest != nil && layout.image != nil }
+    private var canvasImage: CGImage? { showsRender ? layout.image : schematic }
+    private var canvasCaption: String {
+        if showsRender { return "Sample data drawn by the reader's layout code. Your reader shows its own content." }
+        if layoutRequest != nil, let error = layout.error { return "Layout schematic · \(error)" }
+        return "Layout schematic. The reader draws the real content and fonts."
     }
 
     // MARK: Send bar

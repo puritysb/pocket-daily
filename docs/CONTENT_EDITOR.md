@@ -118,8 +118,13 @@ reader's Pocket Daily profile (sibling docs/pocket-profile-v1.md).
   unsent edits. Send to reader posts the whole document once with the loaded
   generation (compare-and-swap). A 409 reloads the reader's version and asks
   for review; nothing is retried automatically.
-- The canvas is a labelled layout schematic (placement and order), not a
-  pixel render: Home and sleep pixel previews need the shared renderer (P1-3).
+- The canvas shows the Home or Daily Brief frame drawn by the firmware's own
+  painter through the host renderer (`renderHome`/`renderBrief`, P1-3) with
+  built-in sample content, captioned as sample data. The reader's real
+  content, header theme and book cover differ; pixel agreement with a device
+  capture is not yet measured. When the renderer or font is unavailable, or
+  the sleep mode is the reader's own sleep screen, the labelled layout
+  schematic is shown instead.
 - Changes apply the next time Pocket Daily opens on the reader, which the
   status line states. Demo edits locally and sends nothing.
 

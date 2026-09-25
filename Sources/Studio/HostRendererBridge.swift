@@ -188,6 +188,64 @@ actor HostRendererBridge {
             self.context = nil // Drop sticky font failures; next explicit request can recreate.
             throw Failure.render(status)
         }
+        return try copyFrame(context)
+    }
+
+    /// Sample content shown in Home / Daily Brief layout previews (PDUI_SAMPLE_*).
+    struct LayoutSamples: OptionSet, Sendable, Hashable {
+        let rawValue: UInt32
+        static let book = LayoutSamples(rawValue: 1)
+        static let study = LayoutSamples(rawValue: 2)
+        static let provider = LayoutSamples(rawValue: 4)
+        static let weather = LayoutSamples(rawValue: 8)
+        static let events = LayoutSamples(rawValue: 16)
+        static let usage = LayoutSamples(rawValue: 32)
+        static let all: LayoutSamples = [.book, .study, .provider, .weather, .events, .usage]
+    }
+
+    /// The Pocket Daily Home face drawn by the firmware's own painter with
+    /// representative sample content (sibling docs/pocket-profile-v1.md P1-3).
+    func renderHome(profile: PocketProfile, samples: LayoutSamples = .all, selected: Int = 0) throws -> Frame {
+        try Task.checkCancellation()
+        var native = try Self.nativeProfile(profile)
+        let context = try nativeContext()
+        let status = pdui_render_home(context.pointer, &native, samples.rawValue, UInt32(clamping: max(0, selected)))
+        guard status == PDUI_OK else { throw Failure.render(status) }
+        return try copyFrame(context)
+    }
+
+    /// The powered-off Daily Brief in the profile's section order.
+    func renderBrief(profile: PocketProfile, samples: LayoutSamples = .all) throws -> Frame {
+        try Task.checkCancellation()
+        var native = try Self.nativeProfile(profile)
+        let context = try nativeContext()
+        let status = pdui_render_brief(context.pointer, &native, samples.rawValue)
+        guard status == PDUI_OK else { throw Failure.render(status) }
+        return try copyFrame(context)
+    }
+
+    /// Same IDs as the firmware profile record (PocketProfile.h).
+    static func nativeProfile(_ profile: PocketProfile) throws -> pdui_profile {
+        guard profile.validationError == nil else { throw Failure.invalidOptions }
+        let home: [UInt8] = profile.home.items.map {
+            switch $0 { case .reading: 1; case .study: 2; case .provider: 3; case .monitor: 4 }
+        } + [0, 0, 0, 0]
+        let sleep: [UInt8] = profile.sleep.sections.map {
+            switch $0 { case .reading: 1; case .study: 2; case .weather: 3; case .today: 4 }
+        } + [0, 0, 0, 0]
+        var native = pdui_profile()
+        native.home_items = (home[0], home[1], home[2], home[3])
+        native.home_count = UInt8(profile.home.items.count)
+        native.daily_word = profile.home.dailyWord ? 1 : 0
+        native.weather = switch profile.home.weather { case .bottom: 0; case .top: 1; case .off: 2 }
+        native.next_event = profile.home.nextEvent ? 1 : 0
+        native.sleep_mode = profile.sleep.mode == .brief ? 0 : 1
+        native.sleep_sections = (sleep[0], sleep[1], sleep[2], sleep[3])
+        native.sleep_count = UInt8(profile.sleep.sections.count)
+        return native
+    }
+
+    private func copyFrame(_ context: Context) throws -> Frame {
         try Task.checkCancellation()
         var info = pdui_frame_info()
         let expectedWidth = hardware.screenHeight

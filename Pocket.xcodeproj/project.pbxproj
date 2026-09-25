@@ -87,6 +87,7 @@
 		92A64EA6EF3A5C85BEE23C02 /* ContentCardPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6BF4F0D64624DF2E9977A22 /* ContentCardPreview.swift */; };
 		99F8E48A3902BF0E3DE6D172 /* PocketScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */; };
 		9A45EFEC72AD5450556937E9 /* ContentActivationJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1921597C30EF1ECE33916E94 /* ContentActivationJournal.swift */; };
+		9BB3E65AD48ECBBD610A5840 /* LayoutPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14A64CE2771C9806D8D1109 /* LayoutPreviewModel.swift */; };
 		9C973EE036CE9FFE03CC6F30 /* ContentStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09AD8AE76A61E6B965746838 /* ContentStudioView.swift */; };
 		9D8C3DB52CCA40194D31DD88 /* ContentDraftFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40700F9050393C248572BB7 /* ContentDraftFile.swift */; };
 		A04A8E788D0D3BCB473D9EFD /* ContentDeployment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5CDB7619C59CB8CC6E9426 /* ContentDeployment.swift */; };
@@ -99,6 +100,7 @@
 		AA79057983FE52D7AAC2E7FB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		AAFC73CFBB31B0AA86943B30 /* PreviewFont in Resources */ = {isa = PBXBuildFile; fileRef = CAD4426AA02306BFAA855AEC /* PreviewFont */; };
 		ACDA25B7B239D475E78C8905 /* ContentLiveApply.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7213E026BC02D5F62CB392 /* ContentLiveApply.swift */; };
+		AD5E7C8D8C81FF0FE64FA616 /* LayoutPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14A64CE2771C9806D8D1109 /* LayoutPreviewModel.swift */; };
 		AE0834455F19D805D51A9AD3 /* PocketModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */; };
 		AE703BCFF23C93CEAB083CEF /* ProfileStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE5A510A17E41D4E44C7DC3C /* ProfileStudioView.swift */; };
 		AFCC025CE7AAFFD337020926 /* PocketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78DAF0568606DE01F034EB9F /* PocketApp.swift */; };
@@ -257,6 +259,7 @@
 		EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSendStatus.swift; sourceTree = "<group>"; };
 		EF248AD34F385ED9F2F09847 /* Pocket.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pocket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidance.swift; sourceTree = "<group>"; };
+		F14A64CE2771C9806D8D1109 /* LayoutPreviewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutPreviewModel.swift; sourceTree = "<group>"; };
 		F40700F9050393C248572BB7 /* ContentDraftFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftFile.swift; sourceTree = "<group>"; };
 		FA7213E026BC02D5F62CB392 /* ContentLiveApply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentLiveApply.swift; sourceTree = "<group>"; };
 		FB94FECF792B1A9BFF585E18 /* UiPackEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UiPackEncoder.swift; sourceTree = "<group>"; };
@@ -413,6 +416,7 @@
 				1AAC7D167DC4796E9883FA0B /* ContentStateReceipt.swift */,
 				09AD8AE76A61E6B965746838 /* ContentStudioView.swift */,
 				197D11D851B078BA98D06299 /* HostRendererBridge.swift */,
+				F14A64CE2771C9806D8D1109 /* LayoutPreviewModel.swift */,
 				160776C46D2E827AC2D35B97 /* PocketProfile.swift */,
 				5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */,
 				AE5A510A17E41D4E44C7DC3C /* ProfileStudioView.swift */,
@@ -749,6 +753,7 @@
 				24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */,
 				E8F40BB940A4873A273547F8 /* HostRendererBridge.swift in Sources */,
 				414190AE73C31EAC36A10175 /* HotspotJoiner.swift in Sources */,
+				AD5E7C8D8C81FF0FE64FA616 /* LayoutPreviewModel.swift in Sources */,
 				E094B0DDAD9A65C51E6D2562 /* LiveSyncClient.swift in Sources */,
 				BB1B2115ACA29E87C9F1A51A /* LocalReaderDiscovery.swift in Sources */,
 				374169613A2E5437B2A68A8E /* NearbySyncController.swift in Sources */,
@@ -802,6 +807,7 @@
 				84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */,
 				643A2CE7F639882AE77EC2F8 /* HostRendererBridge.swift in Sources */,
 				B24CAEF1B71AD9BD50DA9B1A /* HotspotJoiner.swift in Sources */,
+				9BB3E65AD48ECBBD610A5840 /* LayoutPreviewModel.swift in Sources */,
 				57D04674F495AE1D6321B9E8 /* LiveSyncClient.swift in Sources */,
 				FD2AC3093EE1E6638E02BFAE /* LocalReaderDiscovery.swift in Sources */,
 				86E634244B23C47205D8B382 /* NearbySyncController.swift in Sources */,

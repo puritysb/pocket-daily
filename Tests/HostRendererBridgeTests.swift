@@ -160,4 +160,77 @@ final class HostRendererBridgeTests: XCTestCase {
                                                orientation: .counterclockwise, pixels: Data())
         XCTAssertNil(invalid.image())
     }
+
+    func testProfileMapsToTheFirmwareRecordIds() throws {
+        var profile = PocketProfile.defaults
+        profile.home.items = [.monitor, .reading]
+        profile.home.weather = .top
+        profile.home.nextEvent = false
+        profile.sleep.mode = .reader
+        profile.sleep.sections = [.today, .weather, .study]
+        let native = try HostRendererBridge.nativeProfile(profile)
+        XCTAssertEqual([native.home_items.0, native.home_items.1, native.home_items.2, native.home_items.3], [4, 1, 0, 0])
+        XCTAssertEqual(native.home_count, 2)
+        XCTAssertEqual(native.daily_word, 1)
+        XCTAssertEqual(native.weather, 1)
+        XCTAssertEqual(native.next_event, 0)
+        XCTAssertEqual(native.sleep_mode, 1)
+        XCTAssertEqual([native.sleep_sections.0, native.sleep_sections.1, native.sleep_sections.2, native.sleep_sections.3],
+                       [4, 3, 2, 0])
+        XCTAssertEqual(native.sleep_count, 3)
+        profile.home.items = []
+        XCTAssertThrowsError(try HostRendererBridge.nativeProfile(profile)) {
+            XCTAssertEqual($0 as? HostRendererBridge.Failure, .invalidOptions)
+        }
+    }
+
+    func testHomeAndBriefAreDrawnByTheFirmwarePainterForEveryReader() async throws {
+        var weatherTop = PocketProfile.defaults
+        weatherTop.home.weather = .top
+        var briefReordered = PocketProfile.defaults
+        briefReordered.sleep.sections = [.weather, .reading]
+        for hardware in PocketHardware.allCases {
+            let renderer = try HostRendererBridge(font: font(), hardware: hardware)
+            let home = try await renderer.renderHome(profile: .defaults)
+            XCTAssertEqual(home.pixels.count, hardware.screenWidth * hardware.screenHeight / 8)
+            XCTAssertTrue(home.pixels.contains(where: { $0 != 0xFF }))
+            let image = try XCTUnwrap(home.image())
+            XCTAssertEqual(image.width, hardware.screenWidth)
+            XCTAssertEqual(image.height, hardware.screenHeight)
+            let again = try await renderer.renderHome(profile: .defaults)
+            XCTAssertEqual(home.pixels, again.pixels, "Deterministic")
+            let moved = try await renderer.renderHome(profile: weatherTop)
+            XCTAssertNotEqual(home.pixels, moved.pixels, "Weather placement changes the frame")
+            let empty = try await renderer.renderHome(profile: .defaults, samples: [])
+            XCTAssertNotEqual(home.pixels, empty.pixels, "Sample content is drawn")
+
+            let brief = try await renderer.renderBrief(profile: .defaults)
+            XCTAssertTrue(brief.pixels.contains(where: { $0 != 0xFF }))
+            XCTAssertNotEqual(brief.pixels, home.pixels)
+            let reordered = try await renderer.renderBrief(profile: briefReordered)
+            XCTAssertNotEqual(brief.pixels, reordered.pixels, "Section order changes the frame")
+            // A card render on the same context still works afterwards.
+            let card = try await renderer.render(card: nil, image: nil, options: options)
+            XCTAssertTrue(card.pixels.contains(where: { $0 != 0xFF }))
+        }
+    }
+
+    func testLayoutPreviewKeepsTheLastFrameAndReportsFailures() async {
+        struct Boom: LocalizedError { var errorDescription: String? { "boom" } }
+        let pixel = CGImage(width: 1, height: 1, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: 1,
+                            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: [],
+                            provider: CGDataProvider(data: Data([0]) as CFData)!, decode: nil,
+                            shouldInterpolate: false, intent: .defaultIntent)!
+        let request = LayoutPreviewRequest(profile: .defaults, surface: .home, hardware: .x4)
+        let model = LayoutPreviewModel(render: { request in
+            if request.surface == .brief { throw Boom() }
+            return pixel
+        })
+        await model.update(request)
+        XCTAssertNotNil(model.image)
+        XCTAssertNil(model.error)
+        await model.update(LayoutPreviewRequest(profile: .defaults, surface: .brief, hardware: .x4))
+        XCTAssertNil(model.image)
+        XCTAssertEqual(model.error, "boom")
+    }
 }

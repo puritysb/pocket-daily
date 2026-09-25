@@ -61,6 +61,20 @@ no frame. Callers must discard stale UI results using their editor generation
 and must not label an older frame as the current edit. A fresh explicit request
 can recover from native failure; there is no automatic upload or retry loop.
 
+## Home and Daily Brief layout previews (P1-3)
+
+The same artifact exports `pdui_render_home` and `pdui_render_brief` (additive
+to ABI 1). They take a `pdui_profile` with the firmware record IDs (Home items
+1 reading, 2 study, 3 provider, 4 monitor; weather 0 bottom, 1 top, 2 off;
+sleep mode 0 brief, 1 reader; sections 1 reading, 2 study, 3 weather, 4 today)
+and a `PDUI_SAMPLE_*` mask selecting built-in sample content. The device and
+host share `src/pocket_daily/home/HomeRenderer` in the sibling repository;
+only the header, book cover and fonts are host stand-ins. The bridge converts
+`PocketProfile` with `nativeProfile(_:)` and rejects invalid profiles before
+native code. `LayoutPreviewModel` renders off the main actor and keeps the
+previous frame until the new one is ready. These previews are not device
+receipts; pixel comparison with a reader capture is pending.
+
 ## Offline editor preview
 
 `ContentCardPreview` renders the selected draft card (or empty page), including
