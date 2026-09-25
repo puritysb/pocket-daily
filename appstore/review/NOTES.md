@@ -4,25 +4,25 @@ Pocket Daily is a local-first companion for separately obtained X3/X4-class e-pa
 
 ## Review without hardware
 
-1. Launch Pocket Daily.
-2. In the **DEVICE** card, choose **Explore without a reader**.
-3. Inspect the X3/X4 hardware profile. It is explicitly labeled as a profile because no reader frame is available in hardware-free mode.
-4. The settings card is populated in demo mode. Applying settings and sending files are intentionally disabled because no physical reader is connected.
-5. Choose **Exit demo** to return to normal discovery.
+1. Launch Pocket Daily. It opens on **Home & Sleep**.
+2. Open **Reader** (a tab on iPhone; the panel on the right on iPad and Mac) and choose **Try demo**.
+3. On **Home & Sleep**, change the Home items, weather panel or sleep sections. The preview is drawn by the reader's own layout code with built-in sample content and is captioned "Sample content"; nothing in it is read from a device. **Cards** shows a sample study card the same way.
+4. Reader settings are populated in demo mode. Send, applying settings and sending files are intentionally disabled because no physical reader is connected.
+5. Choose **Exit demo** under Reader to return to normal discovery.
 
 The submitted screenshot build can also be launched with `--demo` by the development team; reviewers do not need launch arguments because the same mode is visible in the interface.
 
 ## Live hardware flow
 
-1. Prepare a file with Choose file before switching networks. Firmware requires
+1. Prepare a file with Choose… under Files before switching networks. Firmware requires
    acknowledgement and is validated before entering the offline queue.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
-   choose Find & Connect. This requests local-network access without BLE or
+   choose Find on same Wi-Fi. This requests local-network access without BLE or
    automatic Wi-Fi switching.
 3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
    choose Connect directly in the app, and confirm the Wi-Fi transition. BLE
    pairing supplies the temporary credentials. No router or internet is required.
-4. Choose Send prepared files and keep the iPhone app open. Direct sessions defer
+4. Choose Send under Ready to send and keep the iPhone app open. Direct sessions defer
    preview/crash requests to preserve reader memory. Pending files survive an
    interruption; resume depends on firmware capability and retained session state.
 5. Successful direct batches release the temporary connection. New firmware also

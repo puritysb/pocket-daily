@@ -40,6 +40,8 @@ private actor LayoutPreviewWorker {
 final class LayoutPreviewModel: ObservableObject {
     @Published private(set) var image: CGImage?
     @Published private(set) var error: String?
+    /// The request `image` was drawn for; lags the editor while rendering.
+    @Published private(set) var renderedRequest: LayoutPreviewRequest?
     private var generation: UInt64 = 0
     private let render: @Sendable (LayoutPreviewRequest) async throws -> CGImage
 
@@ -61,10 +63,12 @@ final class LayoutPreviewModel: ObservableObject {
             let rendered = try await render(request)
             guard token == generation, !Task.isCancelled else { return }
             image = rendered
+            renderedRequest = request
             error = nil
         } catch {
             guard token == generation, !(error is CancellationError), !Task.isCancelled else { return }
             image = nil
+            renderedRequest = nil
             self.error = error.localizedDescription
         }
     }

@@ -1,19 +1,22 @@
 Pocket Daily is a private, local-first studio for a compatible pocket e-paper reader.
 
-See the reader you are connecting
-When you connect from Pocket Daily Nearby Sync, the app displays the exact e-paper frame captured immediately before Sync opened. Without hardware, it clearly shows an X3/X4 hardware profile instead of pretending that sample content is live.
+Shape your reader's Home and Sleep screens
+Choose which Home pages appear and in what order (continue reading, study cards, provider cards, a monitoring summary), place the weather panel, and compose the Daily Brief the reader shows while asleep. The preview is drawn by the reader's own layout code with sample content, and one Send saves the layout on the reader without reinstalling firmware.
+
+Write study cards that look right on e-paper
+Edit up to three cards with text and images and see each one at the reader's resolution before you send it. Drafts are saved on your device, and each Send refreshes the reader over the same connection.
 
 Move your own content directly
-Send supported books, Pocket Daily study packs, and compatible firmware over a direct local connection. On Mac, you can also stage files directly to an SD card. Transfers do not pass through a Pocket Daily cloud service.
+Send supported books, Pocket Daily study packs, and compatible firmware over a direct local connection. On Mac, you can also copy files to an SD card. Transfers do not pass through a Pocket Daily cloud service.
 
 Safer device management
-Review reader settings, preserve a Daily card while the reader sleeps, and stage firmware only after a clear compatibility warning. Firmware installation still requires confirmation on the reader.
+Adjust reader settings, and stage firmware only after a clear compatibility warning. Firmware installation still requires confirmation on the reader.
 
 Private by design
 No Pocket Daily account. No ads. No analytics. No cloud relay. Discovery and transfer use Bluetooth and the local network. Files stay between your Apple device, your reader, and storage you choose.
 
 Try before connecting
-Built-in demo mode lets you inspect the companion interface without reader hardware. Demo mode never sends files or changes a device.
+Built-in demo mode shows the editors with labeled sample content and no reader hardware. Demo mode never sends files or changes a device.
 
 Compatibility notice
-A separately obtained X3/X4-class reader running Pocket Daily or compatible CrossPoint-based firmware is required for live transfer and settings. Factory firmware and manufacturer cloud services are not supported. Pocket Daily is an independent open-source project and is not affiliated with, sponsored by, or endorsed by any reader manufacturer or the CrossPoint Reader project.
+A separately obtained X3/X4-class reader running Pocket Daily or compatible CrossPoint-based firmware is required for live transfer and settings; Home and Sleep editing needs Pocket Daily firmware that stores these settings. Factory firmware and manufacturer cloud services are not supported. Pocket Daily is an independent open-source project and is not affiliated with, sponsored by, or endorsed by any reader manufacturer or the CrossPoint Reader project.

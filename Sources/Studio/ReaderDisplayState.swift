@@ -100,9 +100,9 @@ struct PreviewStyle: Equatable, Sendable {
 
     var caption: String {
         switch source {
-        case let .reader(theme, true): "Uses this reader's \(theme) theme, language and buttons"
-        case let .reader(theme, false): "Uses this reader's \(theme) theme; its installed font size differs, so line breaks may not match"
-        case .reference: "Reference layout: default theme, English. Connect a reader to match it exactly."
+        case let .reader(theme, true): "Matches this reader · \(theme) theme"
+        case let .reader(theme, false): "\(theme) theme · reader font size differs, line breaks may shift"
+        case .reference: "Default theme · connect a reader to match it"
         }
     }
 }

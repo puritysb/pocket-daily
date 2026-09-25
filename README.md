@@ -2,7 +2,7 @@
 
 Pocket Daily is the account-free companion for X3/X4 hardware running Pocket
 Daily or compatible CrossPoint-based firmware. It does not connect to the
-manufacturer's factory firmware or cloud service. Find & Connect searches the current network without changing Wi-Fi. Connect
+manufacturer's factory firmware or cloud service. Find on same Wi-Fi searches the current network without changing Wi-Fi. Connect
 directly uses Bluetooth pairing and a temporary reader Wi-Fi network when away,
 without requiring a router or internet. Prepare files locally before connecting,
 then send the prepared batch with verified HTTP staging.
@@ -10,6 +10,9 @@ then send the prepared batch with verified HTTP staging.
 This first vertical slice includes:
 
 - iPhone/iPad and macOS SwiftUI targets under one App Store bundle identifier
+- one studio on every platform: a Home & Sleep editor for the reader's Pocket
+  Daily profile, previewed with the firmware's own layout code, and a card
+  studio, each with a single explicit Send
 - CoreBluetooth discovery, system passkey pairing, and encrypted control records
 - automatic private-hotspot joining on iOS and macOS, with a visible manual
   fallback when association is unavailable
@@ -106,13 +109,13 @@ before every App Store Connect upload.
 1. Choose a book, study pack, or firmware while internet is available. The app
    copies it into its local prepared list; firmware requires acknowledgement and
    image validation. Add files one at a time; only one firmware image may be pending.
-2. At home, open File Transfer → Join a Network on the reader and Find & Connect
-   in the app. New firmware also offers Join a Network in the Pocket Sync menu
-   and reuses saved reader Wi-Fi credentials.
+2. At home, open File Transfer → Join a Network on the reader and choose Find
+   on same Wi-Fi under Reader in the app. New firmware also offers Join a Network
+   in the Pocket Sync menu and reuses saved reader Wi-Fi credentials.
 3. Away, open Nearby Sync on the reader (select Nearby Sync again in the new
    transport chooser), then choose Connect directly in the app and approve the
    temporary Wi-Fi switch. No internet is required for prepared files.
-4. Send prepared files. Keep the iPhone app in the foreground. A paused or failed
+4. Choose Send under Ready to send. Keep the iPhone app in the foreground. A paused or failed
    file remains local across app relaunch; reconnect and send again. Identified
    readers reuse the staging ID. Resume requires the reader to retain its session;
    a reader restart safely restarts the file at zero.

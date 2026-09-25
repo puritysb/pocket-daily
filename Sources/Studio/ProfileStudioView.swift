@@ -26,10 +26,12 @@ final class ProfileEditorState: ObservableObject {
 
 /// Home & Sleep editor: the Pocket Daily layout drawn by the firmware painter
 /// with sample content (a schematic when that renderer is unavailable), the
-/// profile controls beside it, and one explicit Send to reader.
+/// profile controls beside it (below it when `stacked`), and one explicit
+/// Send to reader. Editing a control shows the surface it changes.
 struct ProfileStudioView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var editor: ProfileEditorState
+    var stacked = false
     @State private var preview: PreviewSurface = .home
     @State private var schematic: CGImage?
     @StateObject private var layout = LayoutPreviewModel()
@@ -39,31 +41,12 @@ struct ProfileStudioView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             sendBar
-            HStack(alignment: .top, spacing: 26) {
-                VStack(spacing: 12) {
-                    Picker("Preview", selection: $preview) {
-                        ForEach(PreviewSurface.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .accessibilityIdentifier("profile-preview-surface")
-                    PocketDevicePreview(hardware: model.hardware, status: model.readerStatus,
-                                        screenImageData: nil, renderedScreen: canvasImage)
-                        .frame(maxWidth: 360)
-                        .frame(height: 500)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(showsRender
-                            ? "Pocket Daily \(preview.rawValue.lowercased()) layout with sample content"
-                            : "Schematic of the Pocket Daily \(preview.rawValue.lowercased()) layout")
-                        .accessibilityIdentifier("profile-canvas")
-                    Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .accessibilityIdentifier("profile-canvas-caption")
-                }
-                .frame(width: 380)
+            let columns = stacked ? AnyLayout(VStackLayout(alignment: .center, spacing: 20))
+                                  : AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+            columns {
+                canvas
                 controls
-                    .frame(maxWidth: 360, alignment: .topLeading)
+                    .frame(maxWidth: stacked ? .infinity : 340, alignment: .topLeading)
             }
         }
         .onAppear { editor.sync(with: model.readerProfile) }
@@ -84,30 +67,61 @@ struct ProfileStudioView: View {
 
     private var showsRender: Bool { layoutRequest != nil && layout.image != nil }
     private var canvasImage: CGImage? { showsRender ? layout.image : schematic }
+
+    // MARK: Canvas
+
+    private var canvas: some View {
+        VStack(spacing: 10) {
+            Picker("Preview", selection: $preview) {
+                ForEach(PreviewSurface.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 220)
+            .accessibilityIdentifier("profile-preview-surface")
+            PocketDevicePreview(hardware: model.hardware, status: model.readerStatus,
+                                screenImageData: nil, renderedScreen: canvasImage)
+                .frame(maxWidth: 340)
+                .frame(height: 470)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(showsRender
+                    ? "Pocket Daily \(preview.rawValue.lowercased()) with sample content"
+                    : "Schematic of the Pocket Daily \(preview.rawValue.lowercased()) layout")
+                .accessibilityValue(layoutRequest == nil || layout.renderedRequest == layoutRequest ? "Current" : "Updating")
+                .accessibilityIdentifier("profile-canvas")
+            Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .help(showsRender ? "Drawn by the reader's own layout code with sample content. Your reader shows its own books, weather and cards." : "")
+                .accessibilityIdentifier("profile-canvas-caption")
+        }
+        .frame(width: stacked ? nil : 340)
+    }
+
     private var canvasCaption: String {
-        if showsRender { return "Sample data drawn by the reader's layout code. Your reader shows its own content." }
-        if layoutRequest != nil, let error = layout.error { return "Layout schematic · \(error)" }
-        return "Layout schematic. The reader draws the real content and fonts."
+        if showsRender { return "Sample content" }
+        if layoutRequest != nil, layout.error != nil { return "Layout outline · preview unavailable" }
+        return "Layout outline"
     }
 
     // MARK: Send bar
 
     private var status: (text: String, symbol: String, color: Color) {
-        if model.isDemoMode { return ("Demo · nothing is sent to a reader", "info.circle", .secondary) }
+        if model.isDemoMode { return ("Demo · nothing is sent", "info.circle", .secondary) }
         if model.readerStatus == nil { return ("Connect a reader to send", "info.circle", .secondary) }
         if !model.canEditReaderProfile {
-            return ("This reader's firmware cannot store Home & Sleep settings yet", "exclamationmark.triangle", .orange)
+            return ("This reader's firmware can't store Home & Sleep yet", "exclamationmark.triangle", .orange)
         }
         if let error = editor.draft.validationError { return (error, "exclamationmark.triangle", .red) }
         switch model.profileSend {
         case .sending: return ("Saving on the reader…", "arrow.triangle.2.circlepath", .secondary)
-        case .conflict: return ("The reader changed these settings; its latest version was loaded", "exclamationmark.triangle", .orange)
+        case .conflict: return ("Changed on the reader · its version was loaded", "exclamationmark.triangle", .orange)
         case let .failed(message) where editor.isDirty: return ("Not saved · \(message)", "xmark.octagon", .red)
         default: break
         }
         if model.readerProfile == nil { return ("Loading the reader's settings…", "arrow.triangle.2.circlepath", .secondary) }
         if editor.isDirty { return ("Changes not sent", "circle.dashed", .orange) }
-        return ("Saved on reader · applies when Pocket Daily opens", "checkmark.circle.fill", .green)
+        return ("Saved on reader · shows next time Pocket Daily opens", "checkmark.circle.fill", .green)
     }
 
     private var canSend: Bool {
@@ -115,85 +129,99 @@ struct ProfileStudioView: View {
             editor.draft.validationError == nil && !model.isWorking
     }
 
+    /// One line when it fits; otherwise the status above the buttons.
     private var sendBar: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Home & Sleep").font(.title2.weight(.semibold))
-                Label(status.text, systemImage: status.symbol)
-                    .font(.callout)
-                    .foregroundStyle(status.color)
-                    .accessibilityIdentifier("profile-status")
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                statusLabel.lineLimit(1)
+                Spacer(minLength: 8)
+                sendControls
             }
-            Spacer()
-            Button("Revert") { editor.revert() }
-                .disabled(!editor.isDirty || model.isWorking)
-                .accessibilityIdentifier("profile-revert")
-            Button {
-                model.sendProfile(editor.draft)
-            } label: {
-                Label("Send to reader", systemImage: "paperplane.fill")
+            VStack(alignment: .leading, spacing: 8) {
+                statusLabel
+                HStack(spacing: 12) {
+                    Spacer()
+                    sendControls
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(!canSend)
-            .accessibilityIdentifier("profile-send")
         }
-        .padding(16)
-        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var statusLabel: some View {
+        Label(status.text, systemImage: status.symbol)
+            .font(.callout)
+            .foregroundStyle(status.color)
+            .accessibilityIdentifier("profile-status")
+    }
+
+    @ViewBuilder private var sendControls: some View {
+        Button("Revert") { editor.revert() }
+            .disabled(!editor.isDirty || model.isWorking)
+            .accessibilityIdentifier("profile-revert")
+        Button {
+            model.sendProfile(editor.draft)
+        } label: {
+            Label("Send", systemImage: "paperplane.fill")
+        }
+        .buttonStyle(.borderedProminent)
+        .keyboardShortcut(.return, modifiers: .command)
+        .disabled(!canSend)
+        .help("Send to reader (⌘↩)")
+        .accessibilityIdentifier("profile-send")
     }
 
     // MARK: Controls
 
+    /// Writes one part of the draft and shows the surface it changes.
+    private func edit<Value>(_ key: WritableKeyPath<PocketProfile, Value>, on surface: PreviewSurface) -> Binding<Value> {
+        Binding(get: { editor.draft[keyPath: key] },
+                set: { editor.draft[keyPath: key] = $0; preview = surface })
+    }
+
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Home items").font(.headline)
-                Text("Order sets how the side buttons page through Home. Up to \(PocketProfile.maxHomeItems) appear.")
-                    .font(.caption).foregroundStyle(.secondary)
-                OrderedToggleList(selection: $editor.draft.home.items, identifier: "profile-home",
+        VStack(alignment: .leading, spacing: 18) {
+            ControlGroup(title: "Home", note: "Up to \(PocketProfile.maxHomeItems), in page order") {
+                OrderedToggleList(selection: edit(\.home.items, on: .home), identifier: "profile-home",
                                   title: { $0.title }, detail: { $0.detail })
-                Toggle("Show the daily word when there are no app cards", isOn: $editor.draft.home.dailyWord)
-                    .font(.callout)
+                Toggle("Daily word when there are no cards", isOn: edit(\.home.dailyWord, on: .home))
                     .accessibilityIdentifier("profile-daily-word")
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Weather panel").font(.headline)
-                Picker("Weather panel", selection: $editor.draft.home.weather) {
+            ControlGroup(title: "Weather") {
+                Picker("Weather", selection: edit(\.home.weather, on: .home)) {
                     ForEach(PocketProfile.WeatherPanel.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .accessibilityIdentifier("profile-weather")
-                Toggle("Show the next event line", isOn: $editor.draft.home.nextEvent)
-                    .font(.callout)
+                Toggle("Next event", isOn: edit(\.home.nextEvent, on: .home))
                     .disabled(editor.draft.home.weather == .off)
                     .accessibilityIdentifier("profile-next-event")
             }
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Sleep screen").font(.headline)
-                Picker("Sleep screen", selection: $editor.draft.sleep.mode) {
+            ControlGroup(title: "Sleep", note: editor.draft.sleep.mode == .brief ? "Top to bottom" : nil) {
+                Picker("Sleep screen", selection: edit(\.sleep.mode, on: .sleep)) {
                     ForEach(PocketProfile.SleepMode.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .accessibilityIdentifier("profile-sleep-mode")
                 if editor.draft.sleep.mode == .reader {
-                    Text("Uses the Sleep Screen chosen in the reader's own settings instead of the Daily Brief.")
+                    Text("Uses the Sleep Screen set on the reader.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    Text("Daily Brief sections, top to bottom. Study shows only when no book is open.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    OrderedToggleList(selection: $editor.draft.sleep.sections, identifier: "profile-sleep",
+                    OrderedToggleList(selection: edit(\.sleep.sections, on: .sleep), identifier: "profile-sleep",
                                       title: { $0.title }, detail: { _ in nil })
                 }
             }
-            Button("Use the original layout") { editor.draft = .defaults }
+            Button("Reset to default layout") { editor.draft = .defaults }
                 .buttonStyle(.borderless)
                 .font(.caption)
                 .disabled(editor.draft == .defaults)
+                .accessibilityIdentifier("profile-reset")
         }
+        .font(.callout)
         .disabled(model.isWorking)
     }
 
@@ -211,6 +239,23 @@ struct ProfileStudioView: View {
             .frame(width: size.width, height: size.height))
         renderer.scale = 1
         schematic = renderer.cgImage
+    }
+}
+
+/// A titled block of editor controls with an optional one-line note.
+private struct ControlGroup<Content: View>: View {
+    let title: String
+    var note: String? = nil
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.headline)
+                if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
+            }
+            content
+        }
     }
 }
 
@@ -236,32 +281,49 @@ struct OrderedToggleList<Item: Hashable & CaseIterable & RawRepresentable>: View
                             if !on, let index, selection.count > 1 { selection.remove(at: index) }
                         }))
                         .labelsHidden()
-#if os(macOS)
-                        .toggleStyle(.checkbox)
-#endif
+                        .toggleStyle(CheckToggleStyle())
                         .disabled(index != nil && selection.count == 1)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(index.map { "\($0 + 1). " } ?? "").font(.callout.monospacedDigit()) +
-                            Text(title(item)).font(.callout)
-                        if let text = detail(item) { Text(text).font(.caption2).foregroundStyle(.secondary) }
-                    }
-                    .foregroundStyle(index == nil ? .secondary : .primary)
+                        .accessibilityLabel(title(item))
+                    (Text(index.map { "\($0 + 1). " } ?? "").monospacedDigit() + Text(title(item)))
+                        .foregroundStyle(index == nil ? .secondary : .primary)
                     Spacer()
                     if let index {
                         Button { selection.swapAt(index, index - 1) } label: { Image(systemName: "chevron.up") }
                             .disabled(index == 0)
+                            .accessibilityLabel("Move \(title(item)) up")
                         Button { selection.swapAt(index, index + 1) } label: { Image(systemName: "chevron.down") }
                             .disabled(index + 1 >= selection.count)
+                            .accessibilityLabel("Move \(title(item)) down")
                     }
                 }
+                .help(detail(item) ?? "")
                 .buttonStyle(.borderless)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
+                .padding(.vertical, 7)
+                .padding(.horizontal, 10)
                 .accessibilityIdentifier("\(identifier)-\(item.rawValue)")
                 Divider()
             }
         }
         .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+/// A native checkbox on macOS; a check circle elsewhere, which reads better
+/// than a switch inside a reorderable list.
+private struct CheckToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+#if os(macOS)
+        Toggle(configuration).toggleStyle(.checkbox)
+#else
+        Button { configuration.isOn.toggle() } label: {
+            Image(systemName: configuration.isOn ? "checkmark.circle.fill" : "circle")
+                .font(.title3)
+                .foregroundStyle(configuration.isOn ? Color.accentColor : Color.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(configuration.isOn ? "On" : "Off")
+        .accessibilityAddTraits(.isToggle)
+#endif
     }
 }
 

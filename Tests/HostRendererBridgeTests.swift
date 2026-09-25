@@ -228,9 +228,11 @@ final class HostRendererBridgeTests: XCTestCase {
         })
         await model.update(request)
         XCTAssertNotNil(model.image)
+        XCTAssertEqual(model.renderedRequest, request)
         XCTAssertNil(model.error)
         await model.update(LayoutPreviewRequest(profile: .defaults, surface: .brief, hardware: .x4))
         XCTAssertNil(model.image)
+        XCTAssertNil(model.renderedRequest)
         XCTAssertEqual(model.error, "boom")
     }
 }

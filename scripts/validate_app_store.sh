@@ -45,13 +45,16 @@ for locale in en-US ko-KR; do
   check_limit "appstore/metadata/$locale/keywords.txt" 100
 done
 
-# The compact layout earns a separate inspector shot; the wide layouts already show the
-# inspector beside the reader preview, so they use the shorter list.
-for section in 01-profile-x3 02-inspector 03-about 04-profile-x4; do
+# Every set opens on Home & Sleep. The compact layout keeps the reader controls in their own
+# tab and earns a Reader shot; iPad shows them beside the studio and shows X4 instead. The Mac
+# set is rendered offscreen and carries three.
+for section in 01-home-x3 02-sleep-x3 03-cards 04-reader; do
   check_image "appstore/screenshots/en-US/iphone-6.9/$section.png" 1320 2868
 done
-for section in 01-profile-x3 02-about 03-profile-x4; do
+for section in 01-home-x3 02-sleep-x3 03-cards 04-home-x4; do
   check_image "appstore/screenshots/en-US/ipad-13/$section.png" 2064 2752
+done
+for section in 01-home-x3 02-cards 03-home-x4; do
   check_image "appstore/screenshots/en-US/mac-16x10/$section.png" 2880 1800
 done
 
@@ -61,7 +64,7 @@ for dir in appstore/screenshots/en-US/*/; do
   duplicates="$(md5 -q "$dir"*.png | sort | uniq -d)"
   [[ -z "$duplicates" ]] || fail "$dir contains identical screenshots; recapture with scripts/capture_screenshots.sh."
   expected=4
-  [[ "$(basename "$dir")" == "iphone-6.9" ]] || expected=3
+  if [[ "$(basename "$dir")" == "mac-16x10" ]]; then expected=3; fi
   actual="$(ls "$dir"*.png | wc -l | tr -d ' ')"
   (( actual == expected )) || fail "$dir has $actual screenshots; expected $expected."
 done

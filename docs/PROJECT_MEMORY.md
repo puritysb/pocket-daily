@@ -6,6 +6,18 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-25 U4 studio on every platform (firmware e81427dc renderer): Home & Sleep
+  first, then Cards, with the Reader inspector (connection, files, reader
+  settings, folded Advanced = theme metrics + diagnostics, About & Privacy
+  last). Wide (>= 920 pt): header tabs + 320 pt inspector; canvas/controls
+  stack below 720 pt of studio width. Compact: three tabs (Home & Sleep,
+  Cards, Reader). iOS ContentEditorSheet retired (card studio everywhere,
+  autosave + single Send + Auto-send); preview font notices moved to About.
+  Screenshot sets: iPhone 01-home-x3/02-sleep-x3/03-cards/04-reader, iPad
+  01-home-x3/02-sleep-x3/03-cards/04-home-x4, Mac 01-home-x3/02-cards/
+  03-home-x4. Store copy (en-US, ko-KR), review notes and TestFlight plan
+  describe the Home & Sleep editor and "Try demo".
+
 - 2026-09-25 P1-3 (firmware 8e6e75a4; no reader): the Home & Sleep canvas shows
   the firmware Home/Daily Brief painter output via new host ABI calls
   pdui_render_home/pdui_render_brief (ABI stays 1) with labelled sample data;

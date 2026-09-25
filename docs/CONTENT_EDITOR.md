@@ -54,22 +54,29 @@ This is a same-version, shared-actor conflict guard, not a cross-process lock or
 protection against an older app which ignores the additional field. Backup
 comparison/import and persistent backup browsing are not yet implemented.
 
-The studio now opens ContentEditorSheet from “Edit content cards…”. Shared local
-editor state survives closing the sheet during the app session; Save draft
-persists it across launches. Text cards can be added, edited, reordered and
-removed. UTF-8 byte counts and publish validation are shown without truncating
-input. Apply requires explicit confirmation (including the empty-set meaning)
-and calls PocketModel's exclusive deployment lane; it never saves implicitly.
-Deployment labels distinguish stored activation from actual screen confirmation.
+## Studio layout (all platforms, 2026-09-25)
 
-## Mac content studio (2026-09-24)
+One studio serves Mac, iPad and iPhone (`ContentView`, `StudioSection`):
+**Home & Sleep** opens first, **Cards** second, and the reader controls
+(connection, files, reader settings, then a folded **Advanced** group with
+theme metrics and diagnostics, and About & Privacy last) form the Reader
+inspector. Wide windows (at least 920 pt) show a header with the two studio
+tabs and the reader state beside a 320 pt inspector; the canvas and its
+controls sit side by side when the studio is at least 720 pt wide and stack
+otherwise. Narrower windows (iPhone, iPad split view) use three tabs, with the
+reader state in the toolbar. Explanations live in help tooltips or the
+"How to connect" disclosure rather than on screen. The iOS content sheet
+(`ContentEditorSheet`) and its separate Save/Apply/live-apply buttons were
+retired; all platforms use the card studio below. The bundled preview-font
+notices moved to About & Privacy.
 
-On macOS the card editor is the main window instead of a sheet
-(`ContentStudioView`). The left canvas is the connected hardware chassis
-showing the exact host-rendered reader frame for the selected card
-(`PocketDevicePreview.renderedScreen`); layout and preview orientation sit
-above it, card chips and Add below, and the selected card's fields beside it.
-iPad and iPhone keep ContentEditorSheet until the Mac workflow is validated.
+## Card studio (2026-09-24, all platforms since 2026-09-25)
+
+The card editor is a studio surface (`ContentStudioView`). The canvas is the
+connected hardware chassis showing the exact host-rendered reader frame for
+the selected card (`PocketDevicePreview.renderedScreen`); layout and preview
+orientation sit above it, card chips and Add below, and the selected card's
+fields beside it (below it when stacked).
 
 - One content action: **Send to reader** (Command-Return). It calls the same
   exclusive `applyContent` lane with no confirmation dialog. Every send
@@ -100,12 +107,14 @@ iPad and iPhone keep ContentEditorSheet until the Mac workflow is validated.
   `MacTests/PocketParityTests.swift` compares a host render with a captured
   reader frame (hardware run only; see sibling docs/pocket-profile-v1.md).
 - Other "Apply" labels were renamed for what they send: reading settings use
-  **Save reading settings**, the theme inspector uses **Send theme**.
+  **Save settings**, the theme inspector uses **Send theme**.
 
 ## Home & Sleep profile editor (P2, 2026-09-25)
 
-The Mac studio has two tabs: Cards (above) and Home & Sleep, which edits the
-reader's Pocket Daily profile (sibling docs/pocket-profile-v1.md).
+Home & Sleep is the first studio tab on every platform and edits the reader's
+Pocket Daily profile (sibling docs/pocket-profile-v1.md). Changing a Home
+control shows the Home preview and changing a sleep control shows the Sleep
+preview.
 
 - On connection, when `/api/status` reports `pocketProfile: 1`, the app reads
   `GET /api/pocket/v1/profile` once inside the sequential connection lane.
@@ -128,9 +137,12 @@ reader's Pocket Daily profile (sibling docs/pocket-profile-v1.md).
 - Changes apply the next time Pocket Daily opens on the reader, which the
   status line states. Demo edits locally and sends nothing.
 
-## Explicit live editing session
+## Explicit live editing session (superseded)
 
-Start live apply is a separate confirmation for the currently identified reader
+The studio's Auto-send toggle replaced this confirmation-gated flow on every
+platform in 2026-09-25; the coalescing rules below still describe Auto-send.
+
+Start live apply was a separate confirmation for the currently identified reader
 and connection generation. It applies the current valid draft, then coalesces
 subsequent edits after an800ms quiet interval. Only the newest draft is retained
 while the existing Apply runs; an invalid edit clears the queued valid draft.

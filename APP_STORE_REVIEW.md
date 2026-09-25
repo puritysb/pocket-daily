@@ -14,25 +14,27 @@ sponsorship, or endorsement.
 
 ## Review setup
 
-The app has an explicit, local demo mode for review without an account or
-reader. In the DEVICE card, choose **Explore without a reader**. Without a
-reader the central rendering is explicitly labeled as a hardware profile. A
-live connection made from Pocket Daily Nearby Sync loads the exact e-paper
-frame captured immediately before the reader opens Sync. Demo settings are
-populated, but file transfer and applying settings are disabled so review data
-can never be mistaken for a connected device.
+The app opens on **Home & Sleep**. It has an explicit, local demo mode for
+review without an account or reader: open **Reader** (a tab on iPhone, the
+panel on the right on iPad and Mac) and choose **Try demo**. Home & Sleep and
+Cards then show previews drawn by the reader's own layout code with built-in
+sample content, captioned "Sample content"; nothing in them is read from a
+device. Demo settings are populated, but Send, file transfer and applying
+settings are disabled so review data can never be mistaken for a connected
+device. When a connected reader offers it, **Show reader screen** loads the
+e-paper frame the reader captured before Sync opened.
 
 Live hardware actions require a compatible reader:
 
-1. Prepare a file with Choose file before switching networks. Firmware requires
+1. Prepare a file with Choose… under Files before switching networks. Firmware requires
    acknowledgement and is validated before entering the offline queue.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
-   choose Find & Connect. This requests local-network access without BLE or
+   choose Find on same Wi-Fi. This requests local-network access without BLE or
    automatic Wi-Fi switching.
 3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
    choose Connect directly in the app, and confirm the Wi-Fi transition. BLE
    pairing supplies the temporary credentials. No router or internet is required.
-4. Choose Send prepared files and keep the iPhone app open. Direct sessions defer
+4. Choose Send under Ready to send and keep the iPhone app open. Direct sessions defer
    preview/crash requests to preserve reader memory. Pending files survive an
    interruption; resume depends on firmware capability and retained session state.
 5. Successful direct batches release the temporary connection. New firmware also

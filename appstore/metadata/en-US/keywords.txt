@@ -1,1 +1,1 @@
-e-reader,epub,e-paper,file transfer,offline,local,sd card,firmware,bluetooth,companion
+e-reader,epub,e-paper,home screen,layout,study cards,file transfer,sd card,firmware,companion

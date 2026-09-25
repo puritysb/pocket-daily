@@ -17,34 +17,20 @@ final class PocketMacScreenshotTests: XCTestCase {
 
     @MainActor
     func testRendersStoreScreenshots() throws {
-        try render(name: "01-profile-x3", hardware: .x3, showingAbout: false)
-        try render(name: "02-about", hardware: .x3, showingAbout: true)
-        try render(name: "03-profile-x4", hardware: .x4, showingAbout: false)
+        try render(name: "01-home-x3", hardware: .x3)
+        try render(name: "02-cards", hardware: .x3, section: .cards)
+        try render(name: "03-home-x4", hardware: .x4)
     }
 
     @MainActor
-    private func render(name: String, hardware: PocketHardware, showingAbout: Bool,
-                        studioMode: StudioModeView.Mode = .cards) throws {
+    private func render(name: String, hardware: PocketHardware, section: StudioSection = .layout) throws {
         let model = PocketModel()
         model.preferredHardware = hardware
         model.enterDemoMode()
 
-        let content = ZStack {
-            ContentView(initialStudioMode: studioMode)
-                .environmentObject(model)
-            if showingAbout {
-                // Matches how the sheet presents over the studio.
-                Color.black.opacity(0.22)
-                ProjectInformationSheet()
-                    .frame(width: 560, height: 560)
-                    // Presented normally the sheet sits on its own window background;
-                    // hosted directly it needs one, or the studio shows through.
-                    .background(Color(nsColor: .windowBackgroundColor))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .shadow(color: .black.opacity(0.28), radius: 28, y: 12)
-            }
-        }
-        .preferredColorScheme(.light)
+        let content = ContentView(initialSection: section)
+            .environmentObject(model)
+            .preferredColorScheme(.light)
 
         let hosting = NSHostingView(rootView: content)
         hosting.frame = NSRect(origin: .zero, size: Self.pointSize)
@@ -63,7 +49,9 @@ final class PocketMacScreenshotTests: XCTestCase {
         window.displayIfNeeded()
         // Let SwiftUI settle: the studio measures itself with GeometryReader, so its
         // contents appear one layout pass after the window is sized.
-        RunLoop.current.run(until: Date().addingTimeInterval(1.0))
+        // The canvases render the reader frame off the main actor (font load and
+        // native drawing), so give them time to replace the outline.
+        RunLoop.current.run(until: Date().addingTimeInterval(4.0))
         window.displayIfNeeded()
 
         guard let view = window.contentView,

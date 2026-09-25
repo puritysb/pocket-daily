@@ -159,10 +159,10 @@ unchanged. Physical pixels and host/device parity remain unverified.
 
 ## Studio UX
 
-Mac content studio (2026-09-24): content editing moved from a sheet to the
-main Mac window with one explicit Send to reader and an opt-in Auto-send
-toggle; see CONTENT_EDITOR.md. Direct on-canvas text editing, undo last send
-and the iPad/iPhone layouts are the next UX steps (NEXT_STEPS.md).
+Studio (2026-09-25): Home & Sleep and Cards are studio tabs on Mac, iPad and
+iPhone, each with one explicit Send and (Cards) an opt-in Auto-send toggle;
+see CONTENT_EDITOR.md. Direct on-canvas text editing and undo last send remain
+open UX steps (NEXT_STEPS.md).
 
 Content live editing update (2026-09-22): the card editor has an explicit,
 non-persistent Start live apply authorization for one reader/connection session.

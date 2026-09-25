@@ -1,12 +1,14 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Mac content studio: the reader-sized canvas is the editing surface. One
-/// explicit Send to reader (each send refreshes e-ink), optional auto-send for
-/// the current reader session, and automatic local draft saving. Storage
-/// activation and the redraw receipt remain separate facts (ContentSendStatus).
+/// Card studio on every platform: the reader-sized canvas is the editing
+/// surface. One explicit Send to reader (each send refreshes e-ink), optional
+/// auto-send for the current reader session, and automatic local draft
+/// saving. Storage activation and the redraw receipt remain separate facts
+/// (ContentSendStatus). `stacked` puts the fields below the canvas.
 struct ContentStudioView: View {
     @ObservedObject var model: PocketModel
+    var stacked = false
     @State private var editor: ContentEditorModel?
     @State private var loadError: String?
     @State private var confirmingRecovery = false
@@ -15,7 +17,7 @@ struct ContentStudioView: View {
     var body: some View {
         Group {
             if let editor {
-                ContentStudioWorkspace(editor: editor, model: model)
+                ContentStudioWorkspace(editor: editor, model: model, stacked: stacked)
             } else if let loadError {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("The local card draft could not be loaded.", systemImage: "exclamationmark.triangle")
@@ -59,7 +61,7 @@ struct ContentStudioView: View {
     static let demoDraft = ContentDraft(cards: [
         ContentCard(id: "demo-card-1", title: "Today's question",
                     question: "What is one thing from yesterday's reading you want to remember?",
-                    context: "Edit this card on the right. Demo cards are never saved or sent."),
+                    context: "Demo cards are never saved or sent."),
     ])
 
     @MainActor private func recover() async {
@@ -78,6 +80,7 @@ struct ContentStudioView: View {
 private struct ContentStudioWorkspace: View {
     @ObservedObject var editor: ContentEditorModel
     @ObservedObject var model: PocketModel
+    let stacked: Bool
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var preview = ContentPreviewModel()
     @StateObject private var autoSend = ContentLiveApply()
@@ -130,13 +133,15 @@ private struct ContentStudioWorkspace: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             sendBar
-            HStack(alignment: .top, spacing: 26) {
-                VStack(spacing: 12) {
+            let columns = stacked ? AnyLayout(VStackLayout(alignment: .center, spacing: 20))
+                                  : AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+            columns {
+                VStack(spacing: 10) {
                     canvasToolbar
                     PocketDevicePreview(hardware: model.hardware, status: model.readerStatus,
                                         screenImageData: nil, renderedScreen: preview.image)
-                        .frame(maxWidth: 360)
-                        .frame(height: 500)
+                        .frame(maxWidth: 340)
+                        .frame(height: 470)
                         .overlay { canvasOverlay }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(preview.image == nil ? "Reader preview is rendering" : "Reader preview of the selected card")
@@ -148,9 +153,9 @@ private struct ContentStudioWorkspace: View {
                         .accessibilityIdentifier("studio-preview-source")
                     cardStrip
                 }
-                .frame(width: 380)
+                .frame(width: stacked ? nil : 340)
                 cardFields
-                    .frame(maxWidth: 360, alignment: .topLeading)
+                    .frame(maxWidth: stacked ? .infinity : 340, alignment: .topLeading)
             }
         }
         .task(id: previewRequest) { await preview.update(previewRequest) }
@@ -232,31 +237,20 @@ private struct ContentStudioWorkspace: View {
 
     private var sendBar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Cards").font(.title2.weight(.semibold))
-                    Label(status.label, systemImage: status.symbol)
-                        .font(.callout)
-                        .foregroundStyle(statusColor)
-                        .accessibilityIdentifier("studio-status")
+            // One line when it fits; otherwise the status above the controls.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    statusLabel.lineLimit(1)
+                    Spacer(minLength: 8)
+                    sendControls
                 }
-                Spacer()
-                Toggle("Auto-send", isOn: Binding(get: { autoSend.isEnabled }, set: setAutoSend))
-                    .toggleStyle(.switch)
-                    .disabled(!autoSend.isEnabled && (model.contentEditingSession == nil || revision == nil || model.isWorking))
-                    .help("Sends each change after you pause typing. Every send refreshes the e-ink screen.")
-                    .accessibilityIdentifier("studio-auto-send")
-                Button {
-                    send()
-                } label: {
-                    Label("Send to reader", systemImage: "paperplane.fill")
+                VStack(alignment: .leading, spacing: 8) {
+                    statusLabel
+                    HStack(spacing: 12) {
+                        Spacer()
+                        sendControls
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .keyboardShortcut(.return, modifiers: .command)
-                .disabled(!ContentSendStatus.canSend(status, busy: model.isWorking || editor.isBusy,
-                                                    autoSend: autoSend.isEnabled) || revision == nil)
-                .accessibilityIdentifier("studio-send")
             }
             if autoSend.isEnabled {
                 Text(autoSend.message).font(.caption).foregroundStyle(.secondary)
@@ -279,8 +273,37 @@ private struct ContentStudioWorkspace: View {
             }
             ContentJournalRecovery(model: model)
         }
-        .padding(16)
-        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var statusLabel: some View {
+        Label(status.label, systemImage: status.symbol)
+            .font(.callout)
+            .foregroundStyle(statusColor)
+            .accessibilityIdentifier("studio-status")
+    }
+
+    @ViewBuilder private var sendControls: some View {
+        Toggle("Auto", isOn: Binding(get: { autoSend.isEnabled }, set: setAutoSend))
+            .toggleStyle(.switch)
+            .fixedSize()
+            .disabled(!autoSend.isEnabled && (model.contentEditingSession == nil || revision == nil || model.isWorking))
+            .help("Auto-send: sends each change after you pause typing. Every send refreshes the e-ink screen.")
+            .accessibilityLabel("Auto-send")
+            .accessibilityIdentifier("studio-auto-send")
+        Button {
+            send()
+        } label: {
+            Label("Send", systemImage: "paperplane.fill")
+        }
+        .buttonStyle(.borderedProminent)
+        .keyboardShortcut(.return, modifiers: .command)
+        .help("Send to reader (⌘↩)")
+        .disabled(!ContentSendStatus.canSend(status, busy: model.isWorking || editor.isBusy,
+                                            autoSend: autoSend.isEnabled) || revision == nil)
+        .accessibilityIdentifier("studio-send")
     }
 
     private var statusColor: Color {
@@ -377,8 +400,9 @@ private struct ContentStudioWorkspace: View {
                     .lineLimit(1...4)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("studio-context")
-                Text("Title \(cards[index].title.utf8.count)/24 bytes · Text \(cards[index].question.utf8.count)/160 bytes")
+                Text("Title \(cards[index].title.utf8.count)/24 · Text \(cards[index].question.utf8.count)/160 bytes")
                     .font(.caption2).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("studio-byte-count")
                 imageControls(cards[index])
                 HStack {
                     Button("Move earlier") { move(index, by: -1) }.disabled(index == 0)
@@ -390,8 +414,6 @@ private struct ContentStudioWorkspace: View {
                 .font(.caption)
             } else {
                 Text("No cards yet").font(.headline)
-                Text("Add a card to start. The reader-sized preview shows exactly what the reader draws.")
-                    .font(.caption).foregroundStyle(.secondary)
                 Button("Add card") { addCard() }
                     .buttonStyle(.bordered)
                     .disabled(editor.isBusy)
@@ -423,12 +445,25 @@ private struct ContentStudioWorkspace: View {
                 Button("Import cards…") {
                     guard !locked, !model.isWorking else { return }
                     importError = nil
+                    #if DEBUG
+                    if let raw = ProcessInfo.processInfo.environment["POCKET_UI_TEST_CONTENT_FILES_ID"],
+                       let id = UUID(uuidString: raw) {
+                        importTask = Task {
+                            do { try await editor.prepareImport(from: ContentDraftUITestFiles.importFixture(id)); operationError = nil }
+                            catch is CancellationError { }
+                            catch { operationError = error.localizedDescription }
+                        }
+                        return
+                    }
+                    #endif
                     choosingDraft = true
                 }
+                .accessibilityIdentifier("studio-import")
                 Button("Export cards…") {
                     do { exportDocument = try editor.exportDocument(); exportingDraft = true; operationError = nil }
                     catch { operationError = error.localizedDescription }
                 }
+                .accessibilityIdentifier("studio-export")
             }
             .buttonStyle(.borderless)
             .font(.caption)
@@ -441,9 +476,9 @@ private struct ContentStudioWorkspace: View {
     }
 
     private var draftStateLabel: String {
-        if locked { return "Demo · edits stay in this window and are not saved" }
-        if editor.isBusy { return "Saving on this Mac…" }
-        return editor.hasUnsavedChanges ? "Unsaved edits · saving shortly" : "Saved on this Mac"
+        if locked { return "Demo · edits are not saved" }
+        if editor.isBusy { return "Saving…" }
+        return editor.hasUnsavedChanges ? "Unsaved edits · saving shortly" : "Saved on this device"
     }
 
     @ViewBuilder private func imageControls(_ card: ContentCard) -> some View {

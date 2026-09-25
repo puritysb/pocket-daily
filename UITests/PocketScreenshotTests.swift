@@ -4,11 +4,9 @@ import XCTest
 /// the real interface as test attachments. `scripts/capture_screenshots.sh`
 /// exports them from the result bundle and flattens them to opaque PNGs.
 ///
-/// The app has two layouts and they need different shot lists. The compact
-/// (iPhone) layout stacks the inspector below the reader preview, so it earns
-/// its own screenshot. The wide (iPad/Mac) layout already shows the inspector
-/// beside the preview, so a separate "inspector" shot would be byte-identical
-/// to the first one.
+/// Both layouts open on Home & Sleep. The compact (iPhone) layout keeps the
+/// reader controls in their own tab, so it earns a Reader shot; the wide
+/// (iPad) layout already shows them beside the studio and shows X4 instead.
 final class PocketScreenshotTests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -16,29 +14,30 @@ final class PocketScreenshotTests: XCTestCase {
 
     func testCaptureDemoScreens() throws {
         let app = launch(hardware: "X3")
-        XCTAssertTrue(app.staticTexts["Reader profile"].waitForExistence(timeout: 10))
-        let isCompact = app.buttons["About"].exists
+        XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
+        try save(name: "01-home-x3")
 
-        try save(name: "01-profile-x3")
+        app.buttons["Sleep"].tap()
+        XCTAssertTrue(app.waitForLayoutPreview(), "The Daily Brief never rendered")
+        try save(name: "02-sleep-x3")
 
-        if isCompact {
-            app.swipeUp()
-            app.swipeUp()
-            XCTAssertTrue(app.staticTexts["DEVICE SETTINGS"].waitForExistence(timeout: 5))
-            try save(name: "02-inspector")
-            app.buttons["About"].tap()
-            XCTAssertTrue(app.staticTexts["Independent project"].waitForExistence(timeout: 5))
-            try save(name: "03-about")
+        app.open("Cards")
+        let canvas = app.descendants(matching: .any)["studio-canvas"]
+        let rendered = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Reader preview of the selected card"), object: canvas)
+        XCTAssertEqual(XCTWaiter().wait(for: [rendered], timeout: 15), .completed, "The card preview never rendered")
+        try save(name: "03-cards")
+
+        if app.isCompact {
+            app.open("Reader")
+            XCTAssertTrue(app.buttons["Exit demo"].waitForExistence(timeout: 5))
+            try save(name: "04-reader")
         } else {
-            app.buttons["About & Privacy"].tap()
-            XCTAssertTrue(app.staticTexts["Independent project"].waitForExistence(timeout: 5))
-            try save(name: "02-about")
+            app.terminate()
+            let x4 = launch(hardware: "X4")
+            XCTAssertTrue(x4.waitForLayoutPreview(), "The X4 Home preview never rendered")
+            try save(name: "04-home-x4")
         }
-        app.terminate()
-
-        let x4 = launch(hardware: "X4")
-        XCTAssertTrue(x4.staticTexts["Reader profile"].waitForExistence(timeout: 10))
-        try save(name: isCompact ? "04-profile-x4" : "03-profile-x4")
     }
 
     private func launch(hardware: String) -> XCUIApplication {

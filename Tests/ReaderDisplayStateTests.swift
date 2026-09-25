@@ -77,7 +77,7 @@ final class ReaderDisplayStateTests: XCTestCase {
         XCTAssertEqual(reference.options.topPadding, 5)
         XCTAssertEqual(reference.options.spacing, 16, "Lyra is the firmware default (LyraTheme.h)")
         XCTAssertNil(reference.orientation)
-        XCTAssertTrue(reference.caption.hasPrefix("Reference layout"))
+        XCTAssertTrue(reference.caption.hasPrefix("Default theme"))
         let request = ContentPreviewRequest(card: nil, image: nil, hardware: .x4, orientation: .clockwise)
         XCTAssertEqual(request.effectiveOrientation, .clockwise)
         XCTAssertEqual(request.style, .reference)

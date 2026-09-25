@@ -41,7 +41,7 @@
 | U1 수용 | 새 Mac 빌드에서 카드 수정 → Send → "Shown on reader" 및 e-ink 갱신 확인 (사용자, X3) | 완료 |
 | U2 | 카드 텍스트 인라인 편집 | 중단: 카드만 다듬는 좁은 기능이라 프로필 방향으로 전환 |
 | U3 | 전송 상태 통합, 마지막 전송 되돌리기, 실제 기기 프레임 비교 | 프로필 이후 재평가 |
-| U4 | iPad/iPhone 적용, UI 시험·스크린샷 갱신 | Mac 검증 후 |
+| U4 | iPad/iPhone 적용, UI 시험·스크린샷 갱신 | 구현·로컬 검증(2026-09-25): 전 플랫폼 단일 스튜디오(Home & Sleep 우선·Cards·Reader), iOS 시트 폐지, UI 시험·스크린샷 재작성. 실기기 수용 대기 |
 
 ## Pocket Daily 프로필 (방향 전환, 2026-09-24)
 
@@ -55,7 +55,7 @@
   X3 캡처와 앱 렌더 0픽셀 차이. 다음은 P1-2 프로필 저장·적용·모니터링 카드.
 - P1-2 완료(펌웨어 8dd436d1): 프로필 저장·적용, 슬립 화면, 깨어남 띠. P2 Mac
   Home & Sleep 편집기 구현(배치 구조 미리보기, 순서/켜기, 날씨, 슬립, Send).
-  남은 것: iPad/iPhone 확장.
+  iPad/iPhone 확장은 U4에서 완료.
 - P1-3 파이프라인 완료(리더 없이, 2026-09-25): 펌웨어 Home/Daily Brief 그리기를
   기기·호스트 공용 렌더러(`src/pocket_daily/home/`)로 분리하고 호스트 ABI
   `pdui_render_home`/`pdui_render_brief`(ABI 1, 추가만)로 내보냈다. Mac Home & Sleep

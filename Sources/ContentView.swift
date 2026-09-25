@@ -1,6 +1,20 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// One studio on every platform: Home & Sleep first, then Cards; the reader
+/// connection, files and settings sit in the inspector (a Reader tab on iPhone).
+enum StudioSection: String, CaseIterable, Hashable {
+    case layout = "Home & Sleep", cards = "Cards", reader = "Reader"
+
+    var symbol: String {
+        switch self {
+        case .layout: "rectangle.3.group"
+        case .cards: "rectangle.stack"
+        case .reader: "dot.radiowaves.left.and.right"
+        }
+    }
+}
+
 struct ContentView: View {
     private enum FileImportAction {
         case wirelessUpload
@@ -14,21 +28,36 @@ struct ContentView: View {
         let action: FileImportAction
     }
 
+    /// Wide layouts show the inspector beside the studio; below this the
+    /// iPhone-style tabs take over.
+    private static let wideWidth: CGFloat = 920
+    private static let inspectorWidth: CGFloat = 320
+    /// Main-area width below which the canvas and its controls stack.
+    private static let sideBySideWidth: CGFloat = 720
+
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController()
+    @StateObject private var profileEditor = ProfileEditorState()
+    @State private var section: StudioSection
     @State private var importing = false
     @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
     @State private var pendingFirmwareTransfer: PendingFirmwareTransfer?
     @State private var showingProjectInfo = false
-    @State private var showingContentEditor = false
-    /// Mac studio tab to open first (store screenshots render Home & Sleep).
-    var initialStudioMode: StudioModeView.Mode = .cards
+
+    /// `initialSection` lets the store screenshots open a given studio tab.
+    init(initialSection: StudioSection = .layout) {
+        _section = State(initialValue: initialSection)
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            if proxy.size.width >= 920 { desktopStudio } else { compactStudio }
+            if proxy.size.width >= Self.wideWidth {
+                desktopStudio(stacked: proxy.size.width - Self.inspectorWidth < Self.sideBySideWidth)
+            } else {
+                compactStudio
+            }
         }
         .background(PocketPalette.workspace)
         .modifier(TransferFilePicker(
@@ -95,252 +124,147 @@ struct ContentView: View {
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
         }
-        .sheet(isPresented: $showingContentEditor) {
-            ContentEditorSheet(model: model)
-        }
     }
 
-    private var desktopStudio: some View {
+    // MARK: Layouts
+
+    private func desktopStudio(stacked: Bool) -> some View {
         HStack(spacing: 0) {
-            ScrollView {
-#if os(macOS)
-                // Mac content studio: the reader canvas is the editing surface
-                // and Send to reader is the single content action.
-                VStack(alignment: .leading, spacing: 18) {
-                    desktopHeader
-                    readerLine
-                    StudioModeView(model: model, initialMode: initialStudioMode)
+            VStack(spacing: 0) {
+                studioTopBar
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 14)
+                Divider()
+                ScrollView {
+                    studio(section == .reader ? .layout : section, stacked: stacked)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 20)
+                        .frame(maxWidth: 900, alignment: .leading)
+                        .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 34)
-                .padding(.vertical, 24)
-                .frame(maxWidth: 820)
-                .frame(maxWidth: .infinity)
-#else
-                VStack(spacing: 18) {
-                    desktopHeader
-                    previewHeader
-                    PocketDevicePreview(
-                        hardware: model.hardware,
-                        status: model.readerStatus,
-                        screenImageData: model.readerScreenImageData
-                    )
-                        .frame(maxWidth: 430)
-                        .frame(height: 590)
-                }
-                .padding(.horizontal, 34)
-                .padding(.vertical, 24)
-                .frame(maxWidth: .infinity)
-#endif
             }
             .background(PocketPalette.stage)
             Divider()
-            ScrollView { inspector.padding(18) }
-                .frame(width: 356)
+            ScrollView { inspector.padding(16) }
+                .accessibilityIdentifier("inspector")
+                .frame(width: Self.inspectorWidth)
                 .background(PocketPalette.panel)
         }
     }
 
     private var compactStudio: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    previewHeader
-                    PocketDevicePreview(
-                        hardware: model.hardware,
-                        status: model.readerStatus,
-                        screenImageData: model.readerScreenImageData
-                    )
-                        .frame(maxWidth: 390)
-                    inspector
-                }
-                .padding()
-            }
-            .navigationTitle("Pocket Daily")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("About", systemImage: "info.circle") { showingProjectInfo = true }
-                }
-            }
-        }
-    }
-
-    private var desktopHeader: some View {
-        HStack(spacing: 12) {
-            PocketMark()
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Pocket Daily").font(.title2.weight(.semibold))
-                Text("LOCAL READER COMPANION")
-                    .font(.caption2.weight(.semibold))
-                    .tracking(1.0)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("About & Privacy", systemImage: "info.circle") { showingProjectInfo = true }
-                .buttonStyle(.bordered)
-        }
-#if os(macOS)
-        .frame(maxWidth: .infinity)
-#else
-        .frame(maxWidth: 560)
+        TabView(selection: $section) {
+            ForEach(StudioSection.allCases, id: \.self) { tab in
+                NavigationStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            if tab != .reader { firmwareAdvice }
+                            studio(tab, stacked: true)
+                        }
+                        .padding()
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .background(PocketPalette.workspace)
+                    .navigationTitle(tab.rawValue)
+#if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
 #endif
-    }
-
-    /// Mac studio: which reader the cards go to, in one line.
-    private var readerLine: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                if let status = model.readerStatus, !model.isDemoMode {
-                    Label("\(status.device) · \(model.hasDirectSession ? "Direct connection" : "Same Wi-Fi")",
-                          systemImage: "dot.radiowaves.left.and.right")
-                        .font(.callout.weight(.semibold))
-                    syncModeBadge
-                } else {
-                    Label(model.isDemoMode ? "Demo · no reader" : "No reader connected", systemImage: "rectangle.portrait.slash")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Picker("Preview device", selection: $model.preferredHardware) {
-                        ForEach(PocketHardware.allCases) { hardware in
-                            Text(hardware.rawValue).tag(hardware)
+                    .toolbar {
+                        if tab != .reader {
+                            ToolbarItem(placement: .primaryAction) {
+                                CompactReaderMenu(model: model) { section = .reader }
+                            }
                         }
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 112)
                 }
-                Spacer()
-                Text("\(model.hardware.screenWidth) × \(model.hardware.screenHeight)")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            if case let .updateAvailable(current, minimum) = firmwareAdvice {
-                Label(
-                    "Reader firmware \(current) is behind \(minimum). On the reader: Settings → System → Update.",
-                    systemImage: "arrow.down.circle"
-                )
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                .tabItem { Label(tab.rawValue, systemImage: tab.symbol) }
+                .tag(tab)
             }
         }
     }
 
-    private var previewHeader: some View {
+    @ViewBuilder private func studio(_ section: StudioSection, stacked: Bool) -> some View {
+        switch section {
+        case .layout: ProfileStudioView(model: model, editor: profileEditor, stacked: stacked)
+        case .cards: ContentStudioView(model: model, stacked: stacked)
+        case .reader: inspector
+        }
+    }
+
+    /// Wide header: the product, the two studio tabs and the reader in one line.
+    private var studioTopBar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Reader profile").font(.title2.weight(.semibold))
-                    Text("\(model.hardware.screenWidth) × \(model.hardware.screenHeight) · \(model.hardware.controlSummary)")
-                        .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 14) {
+                PocketMark()
+                Text("Pocket Daily").font(.title3.weight(.semibold))
+                Picker("Studio", selection: Binding(
+                    get: { section == .reader ? .layout : section }, set: { section = $0 })) {
+                    Text(StudioSection.layout.rawValue).tag(StudioSection.layout)
+                    Text(StudioSection.cards.rawValue).tag(StudioSection.cards)
                 }
-                Spacer()
-                if let status = model.readerStatus {
-                    syncModeBadge
-                    Text(status.device)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Color.green.opacity(0.12), in: Capsule())
-                } else {
-                    Picker("Device", selection: $model.preferredHardware) {
-                        ForEach(PocketHardware.allCases) { hardware in
-                            Text(hardware.rawValue).tag(hardware)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .frame(width: 112)
-                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .padding(.leading, 12)
+                .accessibilityIdentifier("studio-mode")
+                Spacer(minLength: 12)
+                ReaderChip(model: model)
             }
-            Label(
-                model.readerScreenImageData == nil
-                    ? "Reader preview is optional. Content can be applied without a screen stream."
-                    : "Captured reader frame; it may not show the latest content.",
-                systemImage: model.readerScreenImageData == nil ? "rectangle.dashed" : "checkmark.rectangle"
-            )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if case let .updateAvailable(current, minimum) = firmwareAdvice {
-                Label(
-                    "Reader firmware \(current) is behind \(minimum). On the reader: Settings → System → Update.",
-                    systemImage: "arrow.down.circle"
-                )
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
+            firmwareAdvice
         }
-        .frame(maxWidth: 520)
     }
 
-    private var firmwareAdvice: FirmwareGuidance.Advice {
-        guard let status = model.readerStatus else { return .unknownFormat }
-        return FirmwareGuidance.advise(readerVersion: status.version)
+    @ViewBuilder private var firmwareAdvice: some View {
+        if let status = model.readerStatus,
+           case let .updateAvailable(current, minimum) = FirmwareGuidance.advise(readerVersion: status.version) {
+            Label("Reader firmware \(current) is older than \(minimum). Update on the reader: Settings → System → Update.",
+                  systemImage: "arrow.down.circle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
     }
 
-    /// Live-studio sync mode, surfaced: push means real-time events and the
-    /// frame stream; poll means the reader's radio budget kept the listener
-    /// off and the app rides the heartbeat.
-    private var syncModeBadge: some View {
-        let (text, color): (String, Color) = {
-            switch model.syncMode {
-            case .push: return ("LIVE", .green)
-            case .poll: return ("POLL", .orange)
-            case .offline: return ("OFFLINE", .gray)
-            }
-        }()
-        return Text(text)
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 7).padding(.vertical, 4)
-            .background(color.opacity(0.14), in: Capsule())
-            .foregroundStyle(color)
-            .help("LIVE: real-time events over WebSocket. POLL: heartbeat polling (reader memory is tight).")
-    }
+    // MARK: Inspector
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 14) {
             ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
-            TransferDropZone(isEnabled: model.canPrepareFiles) { urls in
-                if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
-            } choose: {
-                importAction = .wirelessUpload
-                importing = true
-            }
-            if model.hasDirectSession {
-                Text("You can prepare files already downloaded to this device. For cloud files, choose End session, download them, then reconnect.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            if !model.preparedTransfers.isEmpty, !model.isDemoMode {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Ready offline · \(model.preparedTransfers.count) file(s)").font(.headline)
-                    ForEach(model.preparedTransfers) { item in
-                        Text(item.filename).font(.caption).lineLimit(1)
-                    }
-                    Button("Send prepared files") { model.sendPreparedFiles() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.readerStatus == nil || model.isWorking)
-                    Button("Remove prepared files") { model.removePreparedFiles() }
-                        .disabled(model.isWorking)
-                }
+            if showsStatus {
+                StatusCallout(message: model.message, tone: model.messageTone)
             }
             if model.isTransferring {
                 Button("Pause transfer") { model.pauseTransfer() }
             }
             if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
-            StatusCallout(message: model.message, tone: model.messageTone)
-#if os(macOS)
-            Button("Copy directly to SD card…") {
+            FilesInspector(model: model) { urls in
+                if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
+            } choose: {
+                importAction = .wirelessUpload
+                importing = true
+            } copyToSD: {
                 importAction = .sdSource
                 importing = true
             }
-                .buttonStyle(.borderless).disabled(model.isWorking || model.isDemoMode)
-#endif
             DeviceSettingsInspector(model: model)
-#if !os(macOS)
-            Button("Edit content cards…") { showingContentEditor = true }
-                .accessibilityIdentifier("open-content-editor")
-                .buttonStyle(.bordered)
-#endif
-            ThemePackInspector(model: model)
-            if !model.isDemoMode {
-                TroubleshootingInspector(model: model, nearby: nearby)
+            AdvancedInspector(model: model, nearby: nearby)
+            Button {
+                showingProjectInfo = true
+            } label: {
+                Label("About & Privacy", systemImage: "info.circle")
             }
+            .buttonStyle(.borderless)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .padding(.top, 6)
+            .accessibilityIdentifier("about-privacy")
         }
+    }
+
+    /// The reader card already says how to connect and that demo sends
+    /// nothing; the callout carries only news beyond that.
+    private var showsStatus: Bool {
+        if model.messageTone != .neutral { return true }
+        return !model.isDemoMode && model.message != PocketModel.initialMessage
     }
 
     private func connect() {
@@ -375,6 +299,89 @@ struct ContentView: View {
         case .sdRoot:
             break
         }
+    }
+}
+
+/// Wide header reader state: the connected reader and how it is reached, or
+/// the preview hardware choice when there is none.
+private struct ReaderChip: View {
+    @ObservedObject var model: PocketModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let status = model.readerStatus, !model.isDemoMode {
+                Circle().fill(Color.green).frame(width: 8, height: 8)
+                Text(status.device).font(.callout.weight(.semibold))
+                Text(model.hasDirectSession ? "Direct" : "Same Wi-Fi")
+                    .font(.caption).foregroundStyle(.secondary)
+                SyncModeBadge(mode: model.syncMode)
+            } else {
+                Text(model.isDemoMode ? "Demo" : "No reader")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Picker("Preview device", selection: $model.preferredHardware) {
+                    ForEach(PocketHardware.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 100)
+                .help("Preview size when no reader is connected")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("reader-chip")
+    }
+}
+
+/// Compact toolbar reader state; opens the Reader tab, or picks the preview
+/// hardware when no reader is connected.
+private struct CompactReaderMenu: View {
+    @ObservedObject var model: PocketModel
+    let openReader: () -> Void
+
+    var body: some View {
+        if let status = model.readerStatus, !model.isDemoMode {
+            Button(action: openReader) {
+                Label(status.device, systemImage: "circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.green)
+            }
+            .accessibilityLabel("\(status.device) connected")
+        } else {
+            Menu {
+                Picker("Preview device", selection: $model.preferredHardware) {
+                    ForEach(PocketHardware.allCases) { Text($0.rawValue).tag($0) }
+                }
+                Button("Connect a reader", systemImage: "dot.radiowaves.left.and.right", action: openReader)
+            } label: {
+                Text("\(model.hardware.rawValue) · \(model.isDemoMode ? "Demo" : "No reader")")
+                    .font(.callout)
+            }
+            .accessibilityIdentifier("reader-menu")
+        }
+    }
+}
+
+/// Live-studio sync mode, surfaced: push means real-time events and the
+/// frame stream; poll means the reader's radio budget kept the listener
+/// off and the app rides the heartbeat.
+private struct SyncModeBadge: View {
+    let mode: DeviceSyncMode
+
+    var body: some View {
+        let (text, color): (String, Color) = {
+            switch mode {
+            case .push: return ("LIVE", .green)
+            case .poll: return ("POLL", .orange)
+            case .offline: return ("OFFLINE", .gray)
+            }
+        }()
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background(color.opacity(0.14), in: Capsule())
+            .foregroundStyle(color)
+            .help("LIVE: real-time events over WebSocket. POLL: heartbeat polling (reader memory is tight).")
     }
 }
 
@@ -513,7 +520,25 @@ struct ProjectInformationSheet: View {
     private var projectLinks: some View {
         Link("Privacy policy", destination: PocketLinks.privacy)
         Link("Open-source notices", destination: PocketLinks.notices)
+        NavigationLink("Preview font notices") { PreviewFontNotices() }
         Link("Support", destination: PocketLinks.support)
+    }
+}
+
+/// OFL notices for the bundled preview font, read from the app bundle.
+private struct PreviewFontNotices: View {
+    @State private var notices = "Loading font notices…"
+
+    var body: some View {
+        ScrollView {
+            Text(notices).font(.caption).textSelection(.enabled).padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Preview font notices")
+        .task {
+            do { notices = try await PreviewFontStore.shared.notices() }
+            catch { notices = "Font notices are unavailable: \(error.localizedDescription)" }
+        }
     }
 }
 
@@ -608,9 +633,10 @@ private struct ConnectionInspector: View {
     @ObservedObject var nearby: NearbySyncController
     let onConnect: () -> Void
     @State private var confirmingDirectConnection = false
+    @State private var showingHelp = false
 
     var body: some View {
-        InspectorCard(title: "DEVICE", symbol: "dot.radiowaves.left.and.right") {
+        InspectorCard(title: "READER", symbol: "dot.radiowaves.left.and.right") {
             HStack {
                 Circle().fill(model.readerStatus == nil ? Color.secondary : Color.green).frame(width: 9, height: 9)
                 VStack(alignment: .leading, spacing: 2) {
@@ -625,25 +651,23 @@ private struct ConnectionInspector: View {
             }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
                 .disabled(model.isWorking || model.hasDirectSession)
-            if model.readerStatus == nil, !model.isDemoMode {
-                Button("Explore without a reader") { nearby.disconnect(); model.enterDemoMode() }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
-            }
             if !model.isDemoMode {
-                if model.readerStatus == nil {
-                    Text("Same Wi-Fi · On the reader, choose Pocket Daily → Sync → Same Wi-Fi. Your phone or Mac stays on its current network.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("No router · Choose Direct connection on the reader, then Connect directly below. Bluetooth pairing starts a temporary reader Wi-Fi connection.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("Keep Pocket Daily Sync open on the reader while applying content and theme changes. You do not need to reconnect for each edit.")
-                        .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button(model.hasDirectSession ? "Reconnect directly" : "Connect directly") {
+                        confirmingDirectConnection = true
+                    }
+                    .disabled(model.isWorking || model.readerStatus != nil)
+                    Spacer()
+                    if model.readerStatus != nil || model.hasDirectSession {
+                        Button("End session") { nearby.disconnect(); model.endConnection() }
+                            .disabled(model.isWorking)
+                    } else {
+                        Button("Try demo") { nearby.disconnect(); model.enterDemoMode() }
+                            .accessibilityIdentifier("try-demo")
+                    }
                 }
-                Button(model.hasDirectSession ? "Reconnect directly" : "Connect directly") {
-                    confirmingDirectConnection = true
-                }
-                .disabled(model.isWorking || model.readerStatus != nil)
+                .buttonStyle(.borderless)
+                .font(.callout)
                 .alert("Connect to the reader’s temporary Wi-Fi?", isPresented: $confirmingDirectConnection) {
                     Button("Cancel", role: .cancel) {}
                     Button("Connect directly") {
@@ -660,17 +684,30 @@ private struct ConnectionInspector: View {
                 } message: {
                     Text("Your Wi-Fi will switch to the reader. Prepare cloud files first; internet may be unavailable. Keep Pocket Daily open during transfer.")
                 }
-                if model.readerStatus == nil {
-                    Text("Older firmware: Same Wi-Fi was called Join a Network; Direct connection was Nearby Sync. Use File Transfer only as a compatibility fallback.")
-                        .font(.caption2).foregroundStyle(.secondary)
+                DisclosureGroup("How to connect", isExpanded: $showingHelp) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("**Same Wi-Fi** · On the reader: Pocket Daily → Sync → Same Wi-Fi. This device stays on its network.")
+                        Text("**Direct** · On the reader choose Direct connection, then Connect directly here. Works without a router.")
+                        Text("Keep Sync open on the reader while you send. Older firmware calls these Join a Network and Nearby Sync.")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
                 }
+                .font(.caption)
                 if model.readerStatus?.screenPreviewAvailable == true {
-                    Button("Load reader preview") { model.loadReaderPreview() }
+                    Button("Show reader screen") { model.loadReaderPreview() }
+                        .buttonStyle(.borderless)
+                        .font(.callout)
                         .disabled(model.isWorking)
                 }
-                if model.readerStatus != nil || model.hasDirectSession {
-                    Button("End session") { nearby.disconnect(); model.endConnection() }
-                        .disabled(model.isWorking)
+                if let frame = model.readerScreenImageData {
+                    PocketDevicePreview(hardware: model.hardware, status: model.readerStatus, screenImageData: frame)
+                        .frame(height: 260)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("reader-screen")
                 }
             }
             if let lease = nearby.hotspotLease, model.manualHotspotFallback {
@@ -698,11 +735,11 @@ private struct ConnectionInspector: View {
     }
 
     private var detail: String {
-        if model.isDemoMode { return "Local demo · transfers disabled" }
+        if model.isDemoMode { return "Demo · nothing is sent" }
         if let status = model.readerStatus { return "\(status.version) · \(status.mode) · \(status.ip)" }
         if model.manualHotspotFallback { return "Private Wi-Fi needs a manual join" }
         switch nearby.state {
-        case .idle: return "Wake the reader to connect"
+        case .idle: return "Not connected"
         case .bluetoothUnavailable: return "Bluetooth unavailable — use the same Wi-Fi"
         case .scanning: return "Finding a reader for direct connection…"
         case let .connecting(name): return "Pairing securely with \(name)…"
@@ -713,23 +750,53 @@ private struct ConnectionInspector: View {
     }
 }
 
-private struct TransferDropZone: View {
-    let isEnabled: Bool
+/// Books, study packs and firmware for the reader; prepared files wait here
+/// until a reader is connected.
+private struct FilesInspector: View {
+    @ObservedObject var model: PocketModel
     let receive: ([URL]) -> Void
     let choose: () -> Void
+    let copyToSD: () -> Void
     @State private var targeted = false
 
-    var body: some View {
-        InspectorCard(title: "SEND TO POCKET", symbol: "arrow.up.doc") {
-            VStack(spacing: 10) {
-                Image(systemName: targeted ? "arrow.down.doc.fill" : "doc.badge.plus").font(.title2)
-                Text(targeted ? "Drop to prepare" : "Prepare a book, study pack, or firmware")
-                    .font(.callout.weight(.medium)).multilineTextAlignment(.center)
+    private var isEnabled: Bool { model.canPrepareFiles }
+
+    private var dropLabel: some View {
+        HStack(spacing: 12) {
+            Image(systemName: targeted ? "arrow.down.doc.fill" : "doc.badge.plus")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(targeted ? "Drop to prepare" : "Book, study pack or firmware")
+                    .font(.callout.weight(.medium))
                 Text("EPUB · PDL · BIN").font(.caption2.monospaced()).foregroundStyle(.secondary)
-                Button("Choose file…", action: choose).buttonStyle(.bordered).disabled(!isEnabled)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
+        }
+    }
+
+    private var chooseButton: some View {
+        Button("Choose…", action: choose)
+            .buttonStyle(.bordered)
+            .disabled(!isEnabled)
+            .accessibilityIdentifier("choose-file")
+    }
+
+    var body: some View {
+        InspectorCard(title: "FILES", symbol: "arrow.up.doc") {
+            // The button moves under the label when the inspector is narrow.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    dropLabel.fixedSize()
+                    Spacer(minLength: 0)
+                    chooseButton
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    dropLabel
+                    chooseButton
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill(targeted ? PocketPalette.selection : .clear)
@@ -741,6 +808,31 @@ private struct TransferDropZone: View {
                 return true
             } isTargeted: { targeted = $0 }
             .opacity(isEnabled ? 1 : 0.55)
+            if model.hasDirectSession {
+                Text("Only files already on this device can be prepared while connected directly.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if !model.preparedTransfers.isEmpty, !model.isDemoMode {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Ready to send · \(model.preparedTransfers.count)").font(.subheadline.weight(.semibold))
+                    ForEach(model.preparedTransfers) { item in
+                        Text(item.filename).font(.caption).lineLimit(1)
+                    }
+                    HStack {
+                        Button("Send") { model.sendPreparedFiles() }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(model.readerStatus == nil || model.isWorking)
+                        Button("Remove") { model.removePreparedFiles() }
+                            .disabled(model.isWorking)
+                    }
+                }
+            }
+#if os(macOS)
+            Button("Copy to an SD card…", action: copyToSD)
+                .buttonStyle(.borderless)
+                .font(.callout)
+                .disabled(model.isWorking || model.isDemoMode)
+#endif
         }
     }
 }
@@ -749,7 +841,7 @@ private struct DeviceSettingsInspector: View {
     @ObservedObject var model: PocketModel
 
     var body: some View {
-        InspectorCard(title: "DEVICE SETTINGS", symbol: "slider.horizontal.3") {
+        InspectorCard(title: "READER SETTINGS", symbol: "slider.horizontal.3") {
             if let preferences = model.preferences {
                 Toggle("Start on Pocket Daily", isOn: Binding(
                     get: { preferences.startupApp == 1 }, set: { model.setStartupPocketDaily($0) }
@@ -760,18 +852,44 @@ private struct DeviceSettingsInspector: View {
                 Stepper("Sleep after \(preferences.sleepTimeoutMinutes) min", value: Binding(
                     get: { preferences.sleepTimeoutMinutes }, set: { model.setSleepTimeout($0) }
                 ), in: 1 ... 120)
-                Picker("Reading size", selection: Binding(
-                    get: { preferences.fontSize }, set: { model.setFontSize($0) }
-                )) {
-                    Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
+                LabeledContent("Reading size") {
+                    Picker("Reading size", selection: Binding(
+                        get: { preferences.fontSize }, set: { model.setFontSize($0) }
+                    )) {
+                        Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
-                Button(model.isDemoMode ? "Demo preview only" : "Save reading settings") { model.savePreferences() }
+                Button(model.isDemoMode ? "Demo · not saved" : "Save settings") { model.savePreferences() }
                     .buttonStyle(.bordered).disabled(model.isDemoMode || !model.preferencesDirty || model.isWorking)
             } else {
-                Text("Connect to load settings from the reader.")
+                Text("Connect a reader to change its settings.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+/// Rarely needed tools, folded away: theme metrics and connection diagnostics.
+private struct AdvancedInspector: View {
+    @ObservedObject var model: PocketModel
+    @ObservedObject var nearby: NearbySyncController
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 14) {
+                ThemePackInspector(model: model)
+                if !model.isDemoMode {
+                    TroubleshootingInspector(model: model, nearby: nearby)
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            Label(model.crashDiagnostic == nil ? "Advanced" : "Advanced · crash report saved",
+                  systemImage: "gearshape.2")
+                .font(.callout.weight(.medium))
         }
     }
 }
@@ -779,34 +897,13 @@ private struct DeviceSettingsInspector: View {
 private struct TroubleshootingInspector: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
-    @State private var expanded = false
 
     var body: some View {
         InspectorCard(title: "TROUBLESHOOTING", symbol: "wrench.and.screwdriver") {
-            Button {
-                expanded.toggle()
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Diagnostics & connection log").font(.callout.weight(.medium))
-                        Text(model.crashDiagnostic == nil ? "Open only when a connection needs attention." : "A saved device crash report is available.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
+            if let diagnostic = model.crashDiagnostic {
+                DiagnosticsInspector(diagnostic: diagnostic)
             }
-            .buttonStyle(.plain)
-
-            if expanded {
-                if let diagnostic = model.crashDiagnostic {
-                    DiagnosticsInspector(diagnostic: diagnostic)
-                }
-                ConnectionTraceInspector(nearby: nearby)
-            }
+            ConnectionTraceInspector(nearby: nearby)
         }
     }
 }
