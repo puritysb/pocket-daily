@@ -166,7 +166,8 @@ private struct ContentEditorForm: View {
             }
             .disabled(model.isDemoMode || editor.isDemo || editor.isBusy || model.isWorking)
 
-            ContentCardPreview(draft: editor.draft, hardware: model.hardware)
+            ContentCardPreview(draft: editor.draft, hardware: model.hardware,
+                               style: model.readerDisplay.map(PreviewStyle.init(reader:)) ?? .reference)
 
             Section("Save and apply") {
                 ContentJournalRecovery(model: model)

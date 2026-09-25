@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentCardPreview: View {
     let draft: ContentDraft
     let hardware: PocketHardware
+    var style: PreviewStyle = .reference
     @StateObject private var preview = ContentPreviewModel()
     @State private var selectedID = ""
     @State private var orientation = HostRendererBridge.Orientation.portrait
@@ -11,7 +12,8 @@ struct ContentCardPreview: View {
 
     private var card: ContentCard? { draft.cards.first { $0.id == selectedID } ?? draft.cards.first }
     private var request: ContentPreviewRequest {
-        .init(card: card, image: card.flatMap { draft.images[$0.imagePath] }, hardware: hardware, orientation: orientation)
+        .init(card: card, image: card.flatMap { draft.images[$0.imagePath] }, hardware: hardware, orientation: orientation,
+              style: style)
     }
 
     var body: some View {
@@ -43,7 +45,7 @@ struct ContentCardPreview: View {
             } else if preview.isRendering {
                 ProgressView("Rendering reader preview…")
             }
-            Text("\(hardware.rawValue) · Base layout · PocketSansWorld 12 px · English controls. Local rendering, not the connected reader’s screen or settings.")
+            Text("\(hardware.rawValue) · PocketSansWorld 12 px · \(style.caption)")
                 .font(.caption2).foregroundStyle(.secondary)
             Button("Preview font notices") { showingNotices = true }
                 .font(.caption)

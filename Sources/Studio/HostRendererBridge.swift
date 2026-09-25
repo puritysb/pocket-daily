@@ -9,7 +9,7 @@ actor HostRendererBridge {
         case portrait, clockwise, inverted, counterclockwise
     }
 
-    struct Options: Sendable {
+    struct Options: Sendable, Equatable {
         var sidePadding: Int32
         var topPadding: Int32
         var spacing: Int32

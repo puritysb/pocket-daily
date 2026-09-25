@@ -116,9 +116,13 @@ private struct ContentStudioWorkspace: View {
             busy: model.isWorking))
     }
 
+    private var previewStyle: PreviewStyle {
+        model.readerDisplay.map(PreviewStyle.init(reader:)) ?? .reference
+    }
+
     private var previewRequest: ContentPreviewRequest {
         .init(card: selectedCard, image: selectedCard.flatMap { editor.draft.images[$0.imagePath] },
-              hardware: model.hardware, orientation: orientation)
+              hardware: model.hardware, orientation: orientation, style: previewStyle)
     }
 
     var body: some View {
@@ -135,6 +139,11 @@ private struct ContentStudioWorkspace: View {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(preview.image == nil ? "Reader preview is rendering" : "Reader preview of the selected card")
                         .accessibilityIdentifier("studio-canvas")
+                    Label(previewStyle.caption, systemImage: previewStyle.source == .reference ? "info.circle" : "checkmark.seal")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("studio-preview-source")
                     cardStrip
                 }
                 .frame(width: 380)
@@ -307,7 +316,8 @@ private struct ContentStudioWorkspace: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Preview orientation")
+            .disabled(previewStyle.orientation != nil)
+            .help(previewStyle.orientation != nil ? "Using the reader's orientation" : "Preview orientation")
         }
     }
 

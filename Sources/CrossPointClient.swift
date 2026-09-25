@@ -714,6 +714,22 @@ actor CrossPointClient {
         return try ContentPresentationReceipt.decode(body, deviceID: deviceID, active: active)
     }
 
+    /// Resolved preview inputs. nil when the reader predates the endpoint (404).
+    func readerDisplay(deviceID: String, host: String, port: Int) async throws -> ReaderDisplayState? {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/display", query: ["deviceID": deviceID]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        if (response as? HTTPURLResponse)?.statusCode == 404 { return nil }
+        try Self.requireSuccess(response, body: body)
+        return try ReaderDisplayState.decode(body, deviceID: deviceID)
+    }
+
     /// This request can commit even when its response is lost. The deployment
     /// coordinator must read contentState afterward and must not blindly retry.
     func activateContent(_ revision: ContentRevision, deviceID: String, host: String, port: Int) async throws {

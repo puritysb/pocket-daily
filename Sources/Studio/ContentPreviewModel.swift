@@ -7,6 +7,11 @@ struct ContentPreviewRequest: Equatable, Sendable {
     let image: Data?
     let hardware: PocketHardware
     let orientation: HostRendererBridge.Orientation
+    /// Reader-resolved inputs when connected, otherwise the labelled reference.
+    var style: PreviewStyle = .reference
+
+    /// A reader's own orientation wins over the local preview choice.
+    var effectiveOrientation: HostRendererBridge.Orientation { style.orientation ?? orientation }
 }
 
 private actor ContentPreviewWorker {
@@ -16,20 +21,18 @@ private actor ContentPreviewWorker {
 
     func render(_ request: ContentPreviewRequest) async throws -> CGImage {
         try Task.checkCancellation()
-        if renderer == nil || hardware != request.hardware || orientation != request.orientation {
+        let wanted = request.effectiveOrientation
+        if renderer == nil || hardware != request.hardware || orientation != wanted {
             let font = try await PreviewFontStore.shared.font()
             try Task.checkCancellation()
-            renderer = try HostRendererBridge(font: font, hardware: request.hardware, orientation: request.orientation)
+            renderer = try HostRendererBridge(font: font, hardware: request.hardware, orientation: wanted)
             hardware = request.hardware
-            orientation = request.orientation
+            orientation = wanted
         }
         guard let renderer else { throw HostRendererBridge.Failure.unavailable }
-        // Explicit Base-theme/English/unremapped reference configuration, not a
-        // claim about connected-reader preferences. Values match BaseTheme.h.
-        let options = HostRendererBridge.Options(sidePadding: 20, topPadding: 5, spacing: 10,
-            emptyTitle: "Pocket", emptyMessage: "Pocket is ready. Connect briefly to refresh.",
-            labels: ["Back", "", "Prev", "Next"])
-        let frame = try await renderer.render(card: request.card, image: request.image, options: options)
+        // The connected reader's resolved inputs (GET display), or the labelled
+        // default-theme reference; never an unlabelled assumption.
+        let frame = try await renderer.render(card: request.card, image: request.image, options: request.style.options)
         try Task.checkCancellation()
         guard let image = frame.image() else { throw HostRendererBridge.Failure.invalidFrame }
         return image

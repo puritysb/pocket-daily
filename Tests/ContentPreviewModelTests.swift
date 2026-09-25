@@ -90,9 +90,7 @@ final class ContentPreviewModelTests: XCTestCase {
         let renderer = try HostRendererBridge(font: font, hardware: .x3)
         let expected = try await renderer.render(
             card: .init(id: "korean", title: "오늘 한 줄", question: "무엇을 배웠나요?"),
-            options: .init(sidePadding: 20, topPadding: 5, spacing: 10,
-                           emptyTitle: "Pocket", emptyMessage: "Pocket is ready. Connect briefly to refresh.",
-                           labels: ["Back", "", "Prev", "Next"]))
+            options: PreviewStyle.reference.options)
         let actualImage = try XCTUnwrap(model.image)
         let expectedImage = try XCTUnwrap(expected.image())
         XCTAssertEqual(actualImage.dataProvider?.data as Data?, expectedImage.dataProvider?.data as Data?,

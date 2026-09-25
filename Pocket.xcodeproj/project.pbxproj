@@ -15,6 +15,7 @@
 		07C2801BF9C5C8FEE95B882B /* HostRendererBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */; };
 		09DD2182BEFDE3ADE4D1BD7D /* PreviewFontStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */; };
 		0BBC0567D7ADE7BA48A4C12E /* ContentRevisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9D87C009E70F5E9A8868771 /* ContentRevisionTests.swift */; };
+		0C0EDE732303CD3786BC50C7 /* PocketParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */; };
 		0EB919B8DC0F8B261A198D50 /* ContentPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ECD37D9F915D53A73EDFF92 /* ContentPreviewModel.swift */; };
 		122D68C2A2FCE4CD9B9229AF /* ContentPreparationReceiptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFA45A839623104E41E721EB /* ContentPreparationReceiptTests.swift */; };
 		12DBEC7C61B30692C13BE93A /* ThemeDraftUITestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE15BB729CB36D826770B602 /* ThemeDraftUITestStore.swift */; };
@@ -24,6 +25,7 @@
 		1E97B607E7232858CBBA4EEF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		230CD450C1CF6929F8CC87D0 /* ContentRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FA699FD202B240470E8A0C /* ContentRevision.swift */; };
 		24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
+		2A65FE14096BB207F1B70269 /* ReaderDisplayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A93787E7C9BB188E081ABBF /* ReaderDisplayState.swift */; };
 		2BBF5EABD8D905AC3E8CEE59 /* ContentActivationJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15F6370CE0221DE9161710BC /* ContentActivationJournalTests.swift */; };
 		2BCD25F75B0F3037FA119A46 /* FirmwareGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */; };
 		329FE3A9A5DA0A0D8C8FA2CE /* ContentDeployment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5CDB7619C59CB8CC6E9426 /* ContentDeployment.swift */; };
@@ -64,6 +66,7 @@
 		6AA3BF4285EDB6D7C903B973 /* ContentPreparationReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF7E367BC18C33F44932329A /* ContentPreparationReceipt.swift */; };
 		6D83E7AC8B7407AAADF0A8BF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9C7C8282C265F6B6B6EADC4 /* Assets.xcassets */; };
 		70C1388C6930C40CA2BFE011 /* PocketHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C61AC1FD88CD54C5818106 /* PocketHardware.swift */; };
+		7114DD3B8C1CE6D7396959FB /* ReaderDisplayStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E79D36C5515C97C20FE566EF /* ReaderDisplayStateTests.swift */; };
 		719D681093345D163F816123 /* ThemeEditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EAD9474E08B205ADB3FA6A0 /* ThemeEditorModel.swift */; };
 		71A8E7C92B39B1F48C5E90C2 /* ContentCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11D0FF030626566E51FE773 /* ContentCardTests.swift */; };
 		75A887C214F159872F87B60B /* ContentStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09AD8AE76A61E6B965746838 /* ContentStudioView.swift */; };
@@ -105,6 +108,7 @@
 		B6D4497CDDCA5038487735DE /* ThemePackInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C6FF83A2E149B0E54B1B4AD /* ThemePackInspector.swift */; };
 		B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5893AB01049A60E87A4353F /* LiveSyncTests.swift */; };
 		B98659838FB4DA55E8CBC8C1 /* ContentSendStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */; };
+		B99B6DE759C5021C9D87C17F /* ReaderDisplayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A93787E7C9BB188E081ABBF /* ReaderDisplayState.swift */; };
 		BAC8BE97D29D857629A19653 /* ReaderContentTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0276250491E92462800CC7CB /* ReaderContentTransportTests.swift */; };
 		BAD05CC44C8FCA99CC9F8E73 /* ThemeDraftFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B64A30B895C94C2C55F8828E /* ThemeDraftFileTests.swift */; };
 		BB1B2115ACA29E87C9F1A51A /* LocalReaderDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C5706F004643C8427F5DEF /* LocalReaderDiscovery.swift */; };
@@ -186,6 +190,7 @@
 		4F62688E6F4BE92EE2AAC710 /* UiPackEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UiPackEncoderTests.swift; sourceTree = "<group>"; };
 		508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidanceTests.swift; sourceTree = "<group>"; };
 		5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMacScreenshotTests.swift; sourceTree = "<group>"; };
+		5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketParityTests.swift; sourceTree = "<group>"; };
 		5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostRendererBridgeTests.swift; sourceTree = "<group>"; };
 		5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSendStatusTests.swift; sourceTree = "<group>"; };
 		5D46C68C6D1477B48D78B01C /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
@@ -206,6 +211,7 @@
 		9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossPointClient.swift; sourceTree = "<group>"; };
 		98C5706F004643C8427F5DEF /* LocalReaderDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalReaderDiscovery.swift; sourceTree = "<group>"; };
 		9A6C8C77637FD2F3CC5061DD /* PROVENANCE.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PROVENANCE.json; sourceTree = "<group>"; };
+		9A93787E7C9BB188E081ABBF /* ReaderDisplayState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderDisplayState.swift; sourceTree = "<group>"; };
 		A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotspotJoiner.swift; sourceTree = "<group>"; };
 		AB57FA3D554E7B96A58509E9 /* ContentPreparationHTTPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreparationHTTPTests.swift; sourceTree = "<group>"; };
 		AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketFlowTests.swift; sourceTree = "<group>"; };
@@ -230,6 +236,7 @@
 		DFBB95171F41E6DC038D0170 /* ContentEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentEditorSheet.swift; sourceTree = "<group>"; };
 		E1988366ACAAA3D45E411A30 /* ContentPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPresentation.swift; sourceTree = "<group>"; };
 		E35E5C23903D153A5C1161EE /* ContentCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentCard.swift; sourceTree = "<group>"; };
+		E79D36C5515C97C20FE566EF /* ReaderDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderDisplayStateTests.swift; sourceTree = "<group>"; };
 		E973586E1694A7601665230C /* ContentImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentImage.swift; sourceTree = "<group>"; };
 		E9D87C009E70F5E9A8868771 /* ContentRevisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRevisionTests.swift; sourceTree = "<group>"; };
 		EAE0C268F1C01D32A9B6CCF7 /* ContentPreviewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewModelTests.swift; sourceTree = "<group>"; };
@@ -338,6 +345,7 @@
 				C5893AB01049A60E87A4353F /* LiveSyncTests.swift */,
 				16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */,
 				0276250491E92462800CC7CB /* ReaderContentTransportTests.swift */,
+				E79D36C5515C97C20FE566EF /* ReaderDisplayStateTests.swift */,
 				B64A30B895C94C2C55F8828E /* ThemeDraftFileTests.swift */,
 				0AE6405CB650DB45FCE162A5 /* ThemeDraftTests.swift */,
 				4F62688E6F4BE92EE2AAC710 /* UiPackEncoderTests.swift */,
@@ -392,6 +400,7 @@
 				197D11D851B078BA98D06299 /* HostRendererBridge.swift */,
 				5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */,
 				B0E3DC4EBC78C9155C40A9D4 /* ReaderContentTransport.swift */,
+				9A93787E7C9BB188E081ABBF /* ReaderDisplayState.swift */,
 				245811EA9DF6CE839310434C /* ThemeDraftFile.swift */,
 				1C5CFDD35C33D3FF10500488 /* ThemeDraftStore.swift */,
 				EE15BB729CB36D826770B602 /* ThemeDraftUITestStore.swift */,
@@ -406,6 +415,7 @@
 			isa = PBXGroup;
 			children = (
 				5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */,
+				5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */,
 			);
 			path = MacTests;
 			sourceTree = "<group>";
@@ -682,6 +692,7 @@
 				B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */,
 				894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */,
 				BAC8BE97D29D857629A19653 /* ReaderContentTransportTests.swift in Sources */,
+				7114DD3B8C1CE6D7396959FB /* ReaderDisplayStateTests.swift in Sources */,
 				BAD05CC44C8FCA99CC9F8E73 /* ThemeDraftFileTests.swift in Sources */,
 				EB44BB080EC7C1853323BAAA /* ThemeDraftTests.swift in Sources */,
 				022C14B62619032EAEE5B0C1 /* UiPackEncoderTests.swift in Sources */,
@@ -728,6 +739,7 @@
 				B2B491FBBAE92655BD2B6DA0 /* PocketModel.swift in Sources */,
 				A0B124B096476FF24801D135 /* PreviewFontStore.swift in Sources */,
 				7AE55A6545ECA400149410BD /* ReaderContentTransport.swift in Sources */,
+				2A65FE14096BB207F1B70269 /* ReaderDisplayState.swift in Sources */,
 				FB85F4494355597EBC9F77F4 /* ThemeDraftFile.swift in Sources */,
 				EA3B92764472FAAD49379E58 /* ThemeDraftStore.swift in Sources */,
 				3B70563BC2CA125A305A20F3 /* ThemeDraftUITestStore.swift in Sources */,
@@ -777,6 +789,7 @@
 				AE0834455F19D805D51A9AD3 /* PocketModel.swift in Sources */,
 				09DD2182BEFDE3ADE4D1BD7D /* PreviewFontStore.swift in Sources */,
 				7D563CC8AD5E93038D3F37B9 /* ReaderContentTransport.swift in Sources */,
+				B99B6DE759C5021C9D87C17F /* ReaderDisplayState.swift in Sources */,
 				A77480C42D709756B02DD592 /* ThemeDraftFile.swift in Sources */,
 				504BBEF11EF6CDE43404E567 /* ThemeDraftStore.swift in Sources */,
 				12DBEC7C61B30692C13BE93A /* ThemeDraftUITestStore.swift in Sources */,
@@ -791,6 +804,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */,
+				0C0EDE732303CD3786BC50C7 /* PocketParityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

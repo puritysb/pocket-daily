@@ -282,7 +282,18 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
-    @Published var readerStatus: CrossPointStatus?
+    @Published var readerStatus: CrossPointStatus? {
+        didSet {
+            // Never show another reader's (or a disconnected reader's) inputs.
+            // Fetching happens inside the sequential reader lanes, not here.
+            if readerDisplay != nil, readerDisplay?.deviceID != readerStatus?.deviceID || isDemoMode {
+                readerDisplay = nil
+            }
+        }
+    }
+    /// Resolved content-page inputs of the connected reader; nil means previews
+    /// use the labelled reference style (demo, offline or older firmware).
+    @Published private(set) var readerDisplay: ReaderDisplayState?
     @Published private(set) var message = PocketModel.initialMessage
     @Published private(set) var messageTone: StatusTone = .neutral
     @Published var isWorking = false
@@ -324,6 +335,13 @@ final class PocketModel: ObservableObject, DeviceSession {
         let editor = ThemeEditorModel(store: try ThemeDraftStore.applicationStore())
         savedThemeEditor = editor
         return editor
+    }
+
+    /// One read-only GET inside an existing sequential reader lane (the reader
+    /// serves one HTTP client at a time). nil = labelled reference preview.
+    private func loadReaderDisplay(_ status: CrossPointStatus, host: String, port: Int) async -> ReaderDisplayState? {
+        guard !isDemoMode, status.contentPresentation == true, let identity = status.deviceID else { return nil }
+        return try? await client.readerDisplay(deviceID: identity, host: host, port: port)
     }
 
     func contentEditorModel() throws -> ContentEditorModel {
@@ -837,6 +855,9 @@ final class PocketModel: ObservableObject, DeviceSession {
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         preferences = loadedPreferences
         mirror.apply(.preferences(preferences))
+        let loadedDisplay = await loadReaderDisplay(status, host: host, port: httpPort)
+        guard !Task.isCancelled, attempt == connectionAttempt else { return }
+        readerDisplay = loadedDisplay
         readerScreenImageData = nil
         let diagnosticsAffordable = nearbyLease == nil && ReaderDiagnosticsPolicy.canFetchDiagnostics(
             freeHeap: status.freeHeap,
@@ -1547,6 +1568,10 @@ final class PocketModel: ObservableObject, DeviceSession {
                 mirror.apply(.status(refreshed))
                 mirror.apply(.packStateChanged(activePack: refreshed.liveStudio?.activePack,
                                                version: refreshed.liveStudio?.activePackVersion))
+                // Pack metrics change the content page; re-read resolved inputs.
+                let display = await loadReaderDisplay(refreshed, host: host, port: port)
+                guard attempt == connectionAttempt else { return }
+                readerDisplay = display
                 post("Theme pack activation confirmed by the reader.", tone: .success)
             } catch {
                 guard attempt == connectionAttempt else { return }
@@ -1576,6 +1601,9 @@ final class PocketModel: ObservableObject, DeviceSession {
                 readerStatus = refreshed
                 mirror.apply(.status(refreshed))
                 mirror.apply(.packStateChanged(activePack: nil, version: nil))
+                let display = await loadReaderDisplay(refreshed, host: host, port: port)
+                guard attempt == connectionAttempt else { return }
+                readerDisplay = display
                 post("Reader reverted to its theme's own metrics.", tone: .success)
             } catch {
                 guard attempt == connectionAttempt else { return }

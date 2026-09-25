@@ -491,13 +491,29 @@ final class NearbySyncProtocolTests: XCTestCase {
         ]))
         let prefs = try await heldRequest(1)
         prefs.succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#.utf8))
+        // A presentation-capable reader's resolved preview inputs are read in the
+        // same sequential connection lane, never overlapping another request.
+        var next = 2
+        if presentationPhase != nil {
+            let display = try await heldRequest(next)
+            next += 1
+            XCTAssertEqual(display.request.httpMethod, "GET")
+            XCTAssertEqual(display.request.url?.path, "/api/pocket/v1/display")
+            XCTAssertEqual(display.olderActiveRequests, 0)
+            if presentationPhase == "rendered" {
+                display.succeed(Data(#"{"schema":1,"deviceID":"1234ABCD","theme":"lyra","orientation":0,"font":{"family":"PocketSansWorld","pointSize":12},"contentPage":{"sidePadding":20,"topPadding":5,"spacing":16,"title":"Pocket","empty":"Empty","labels":["Back","","Prev","Next"]}}"#.utf8))
+            } else {
+                display.respond(status: 404)  // older firmware: labelled reference preview
+            }
+        }
         await connecting.value
+        XCTAssertEqual(model.readerDisplay?.theme, presentationPhase == "rendered" ? "lyra" : nil)
 
         let target = try ContentRevision(cards: [.init(id: "a", title: "A", question: "Text")])
         model.applyContent(target)
         XCTAssertTrue(model.isWorking)
         XCTAssertTrue(model.isTransferring)
-        let state = try await heldRequest(2)
+        let state = try await heldRequest(next)
         XCTAssertEqual(state.request.url?.path, "/api/pocket/v1/content/state")
         XCTAssertEqual(state.olderActiveRequests, 0)
         state.succeed(try JSONSerialization.data(withJSONObject: [
@@ -505,7 +521,7 @@ final class NearbySyncProtocolTests: XCTestCase {
             "active": ["revision": target.revision, "generation": 1]
         ]))
         if let presentationPhase {
-            let present = try await heldRequest(3)
+            let present = try await heldRequest(next + 1)
             XCTAssertEqual(present.request.httpMethod, "POST")
             XCTAssertEqual(present.request.url?.path, "/api/pocket/v1/content/present")
             XCTAssertEqual(present.olderActiveRequests, 0)
@@ -515,7 +531,7 @@ final class NearbySyncProtocolTests: XCTestCase {
                 "generation": 1, "phase": "queued"
             ]))
             // Production presentation polling is deliberately paced at 2s.
-            let paintState = try await heldRequest(4, attempts: 350)
+            let paintState = try await heldRequest(next + 2, attempts: 350)
             XCTAssertEqual(paintState.request.httpMethod, "GET")
             XCTAssertEqual(paintState.request.url?.path, "/api/pocket/v1/content/presentation")
             XCTAssertEqual(paintState.olderActiveRequests, 0)
@@ -538,7 +554,7 @@ final class NearbySyncProtocolTests: XCTestCase {
             XCTAssertTrue(model.message.contains("screen display is not yet confirmed"))
         }
         XCTAssertNotNil(model.readerStatus)
-        XCTAssertEqual(HeldReaderURLProtocol.requests.count, presentationPhase == nil ? 3 : 5,
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, presentationPhase == nil ? 3 : 6,
                        "No staging, upload, reactivation or session termination is permitted")
     }
 
@@ -1899,9 +1915,10 @@ private final class HeldReaderURLProtocol: URLProtocol, @unchecked Sendable {
         }
     }
     override func stopLoading() { Self.lock.withLock { stopped = true } }
-    func succeed(_ data: Data = Data()) {
+    func succeed(_ data: Data = Data()) { respond(status: 200, data) }
+    func respond(status: Int, _ data: Data = Data()) {
         guard !wasStopped, let url = request.url,
-              let response = HTTPURLResponse(url: url, statusCode: 200,
+              let response = HTTPURLResponse(url: url, statusCode: status,
                                              httpVersion: "HTTP/1.1", headerFields: nil) else { return }
         Self.lock.withLock { completed = true }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)

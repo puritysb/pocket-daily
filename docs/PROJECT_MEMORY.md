@@ -6,6 +6,16 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-25 P1-1: the studio previews with the reader's resolved display state
+  (ReaderDisplayState, one sequential GET per connection and after pack
+  apply/revert; 404 = labelled Lyra reference). Hardware parity on X3: host
+  render of the gen7 card equals the captured reader frame (0 of 418,176
+  pixels; a "Back" label control differs by 600). The tested reader uses the
+  classic theme and "« Back", so the previous Base/English preview was wrong
+  there too. 282 unit tests pass. Found while testing: deleting the last card
+  is autosaved with no undo, and cards on the reader cannot be pulled back
+  into the app (tracked in NEXT_STEPS).
+
 - 2026-09-24 repeated Apply unblocked by sibling firmware (TIME_WAIT purge in
   Sync; see its PROJECT_MEMORY and sync-route-memory.md). Actual Mac app edits
   on X3 w0482f45b: gen4 rendered 17,524B/8,180B, same-session gen5 rendered

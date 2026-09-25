@@ -87,6 +87,14 @@ iPad and iPhone keep ContentEditorSheet until the Mac workflow is validated.
   reader. Load/save conflicts keep the explicit preserve-and-recover path, and
   draft import keeps its side-by-side review because it replaces every card.
 - Demo shows one in-memory sample card; nothing is saved or sent.
+- Preview inputs come from the reader (2026-09-25): `ReaderDisplayState` reads
+  `GET /api/pocket/v1/display` once per connection and after a UI pack
+  apply/revert, inside the sequential reader lane, and the canvas renders with
+  its theme spacing, language, button labels and orientation. Without it
+  (demo, offline, older firmware) the canvas uses a labelled default-theme
+  reference (Lyra 20/5/16). A caption under the canvas names the source.
+  `MacTests/PocketParityTests.swift` compares a host render with a captured
+  reader frame (hardware run only; see sibling docs/pocket-profile-v1.md).
 - Other "Apply" labels were renamed for what they send: reading settings use
   **Save reading settings**, the theme inspector uses **Send theme**.
 
