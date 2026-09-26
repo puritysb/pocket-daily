@@ -431,7 +431,9 @@ private struct FirmwareTransferSheet: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(officialVersion.map { "Update reader to \($0)?" } ?? "Stage custom firmware?")
                         .font(.title2.weight(.semibold))
-                    Text(officialVersion == nil ? filename : "Official Pocket Daily release · firmware.bin")
+                    Text(officialVersion == nil ? filename
+                         : officialVersion?.contains("-") == true ? "Official Pocket Daily pre-release · firmware.bin"
+                         : "Official Pocket Daily release · firmware.bin")
                         .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(2)
                 }
             }

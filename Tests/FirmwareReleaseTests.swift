@@ -50,6 +50,75 @@ final class FirmwareReleaseTests: XCTestCase {
         XCTAssertFalse(FirmwareReleaseSource.isNewer("1.7.0", than: "weird"))
     }
 
+    private func list(_ entries: [(tag: String, prerelease: Bool, draft: Bool)]) -> Data {
+        let items = entries.map { entry in
+            """
+            {"tag_name":"\(entry.tag)","draft":\(entry.draft),"prerelease":\(entry.prerelease),"assets":[
+              {"name":"firmware.bin","size":5999200,
+               "browser_download_url":"https://github.com/puritysb/pocket-daily-firmware/releases/download/\(entry.tag)/firmware.bin"}]}
+            """
+        }
+        return Data("[\(items.joined(separator: ","))]".utf8)
+    }
+
+    func testStableChannelRefusesPrereleasesButBetaAcceptsThem() throws {
+        XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(tag: "v1.7.0-beta.1", prerelease: true)))
+        let beta = try FirmwareReleaseSource.parse(document(tag: "v1.7.0-beta.1", prerelease: true),
+                                                   allowingPrerelease: true)
+        XCTAssertEqual(beta.version, "1.7.0-beta.1")
+        XCTAssertTrue(beta.isPrerelease)
+    }
+
+    /// The beta channel takes the newest published release, skipping drafts
+    /// and entries without an official image.
+    func testBetaChannelPicksTheNewestUsableRelease() throws {
+        let newest = try FirmwareReleaseSource.parseNewest(list([
+            (tag: "v1.7.0-beta.2", prerelease: true, draft: true),
+            (tag: "nightly", prerelease: true, draft: false),
+            (tag: "v1.7.0-beta.1", prerelease: true, draft: false),
+            (tag: "v1.6.6", prerelease: false, draft: false),
+        ]))
+        XCTAssertEqual(newest.version, "1.7.0-beta.1")
+        XCTAssertTrue(newest.isPrerelease)
+        XCTAssertEqual(try FirmwareReleaseSource.parseNewest(list([(tag: "v1.6.6", prerelease: false, draft: false)])).version,
+                       "1.6.6")
+        XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(list([(tag: "nightly", prerelease: true, draft: false)])))
+        XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(Data("[]".utf8)))
+        XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(document()))
+    }
+
+    func testBetaChannelOffersOtherBuildsOfTheSameSeries() {
+        let dev = "1.7.0-dev-main-3de13206-wafd75b32"
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.7.0-beta.1", to: dev, channel: .beta))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.7.0", to: "1.7.0-beta.1", channel: .beta))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.7.1-beta.1", to: "1.7.0", channel: .beta))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.7.0-beta.1", to: "1.7.0-beta.1", channel: .beta))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.6.6", to: dev, channel: .beta))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.7.0-beta.1", to: "weird", channel: .beta))
+        // Stable keeps the strict rule.
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.7.0-beta.1", to: dev, channel: .stable))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.7.0", to: "1.6.6", channel: .stable))
+    }
+
+    @MainActor func testBetaReleaseIsDownloadedForADevelopmentReader() async throws {
+        let release = FirmwareRelease(version: "1.7.0-beta.1", downloadURL: URL(string: "https://example.invalid")!,
+                                      byteCount: 1, isPrerelease: true)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("beta-firmware.bin")
+        let operations = PocketModel.ReleaseOperations(latest: { release }, download: { _, _ in file }, channel: .beta)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), releaseSource: operations)
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.7.0-dev-main-3de13206-wafd75b32","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
+        let result = await model.downloadLatestFirmware()
+        XCTAssertEqual(result?.version, "1.7.0-beta.1")
+        XCTAssertEqual(result?.file, file)
+
+        let stable = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(),
+                                 releaseSource: .init(latest: { release }, download: { _, _ in file }, channel: .stable))
+        stable.readerStatus = model.readerStatus
+        let refused = await stable.downloadLatestFirmware()
+        XCTAssertNil(refused)
+    }
+
     @MainActor func testDemoAndUpToDateReadersDownloadNothing() async throws {
         let calls = Counter()
         let release = FirmwareRelease(version: "1.7.0", downloadURL: URL(string: "https://example.invalid")!,

@@ -8,6 +8,9 @@ struct FirmwareRelease: Equatable, Sendable {
     let version: String
     let downloadURL: URL
     let byteCount: Int
+    /// A GitHub pre-release (for example `v1.7.0-beta.1`); only the beta
+    /// channel of development builds ever sees one.
+    var isPrerelease = false
 }
 
 enum FirmwareReleaseError: LocalizedError, Equatable {
@@ -34,7 +37,22 @@ enum FirmwareReleaseError: LocalizedError, Equatable {
 }
 
 enum FirmwareReleaseSource {
+    /// Which releases Update reader may offer. Store builds use `stable`, the
+    /// release GitHub marks latest. Development builds use `beta`: the newest
+    /// published release including pre-releases, so a firmware beta can be
+    /// installed from the app without choosing a file.
+    enum Channel: Sendable {
+        case stable, beta
+#if DEBUG
+        static let current = Channel.beta
+#else
+        static let current = Channel.stable
+#endif
+    }
+
     static let latestURL = URL(string: "https://api.github.com/repos/puritysb/pocket-daily-firmware/releases/latest")!
+    /// Newest first; drafts are only visible to the repository owner.
+    static let releasesURL = URL(string: "https://api.github.com/repos/puritysb/pocket-daily-firmware/releases?per_page=10")!
     /// Release assets must come from this repository's own download path.
     static let downloadPrefix = "https://github.com/puritysb/pocket-daily-firmware/releases/download/"
     /// The reader's OTA partition is 6.25 MiB; anything larger cannot install.
@@ -53,9 +71,31 @@ enum FirmwareReleaseSource {
     }
 
     /// Parses GitHub's latest-release JSON. Deterministic, for tests.
-    static func parse(_ data: Data) throws -> FirmwareRelease {
-        guard let document = try? JSONDecoder().decode(ReleaseDocument.self, from: data),
-              document.draft != true, document.prerelease != true else { throw FirmwareReleaseError.malformed }
+    static func parse(_ data: Data, allowingPrerelease: Bool = false) throws -> FirmwareRelease {
+        guard let document = try? JSONDecoder().decode(ReleaseDocument.self, from: data) else {
+            throw FirmwareReleaseError.malformed
+        }
+        return try release(from: document, allowingPrerelease: allowingPrerelease)
+    }
+
+    /// Parses GitHub's release list (newest first) and returns the newest
+    /// usable release, pre-releases included. Entries without a valid official
+    /// image are skipped; with none usable, the newest entry's error is thrown.
+    static func parseNewest(_ data: Data) throws -> FirmwareRelease {
+        guard let documents = try? JSONDecoder().decode([ReleaseDocument].self, from: data) else {
+            throw FirmwareReleaseError.malformed
+        }
+        var firstError: Error?
+        for document in documents where document.draft != true {
+            do { return try release(from: document, allowingPrerelease: true) }
+            catch { firstError = firstError ?? error }
+        }
+        throw firstError ?? FirmwareReleaseError.malformed
+    }
+
+    private static func release(from document: ReleaseDocument, allowingPrerelease: Bool) throws -> FirmwareRelease {
+        let prerelease = document.prerelease == true
+        guard document.draft != true, allowingPrerelease || !prerelease else { throw FirmwareReleaseError.malformed }
         var version = document.tag_name.trimmingCharacters(in: .whitespaces)
         if version.hasPrefix("v") || version.hasPrefix("V") { version.removeFirst() }
         guard FirmwareGuidance.parse(version) != nil,
@@ -68,18 +108,19 @@ enum FirmwareReleaseSource {
         }
         guard asset.size > 0 else { throw FirmwareReleaseError.malformed }
         guard asset.size <= maximumBytes else { throw FirmwareReleaseError.tooLarge(asset.size) }
-        return FirmwareRelease(version: version, downloadURL: url, byteCount: asset.size)
+        return FirmwareRelease(version: version, downloadURL: url, byteCount: asset.size, isPrerelease: prerelease)
     }
 
-    static func latest(session: URLSession = .shared) async throws -> FirmwareRelease {
-        var request = URLRequest(url: latestURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+    static func latest(channel: Channel = .current, session: URLSession = .shared) async throws -> FirmwareRelease {
+        let url = channel == .beta ? releasesURL : latestURL
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         let data: Data
         let response: URLResponse
         do { (data, response) = try await session.data(for: request) }
         catch { throw FirmwareReleaseError.unavailable }
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw FirmwareReleaseError.unavailable }
-        return try parse(data)
+        return channel == .beta ? try parseNewest(data) : try parse(data)
     }
 
     /// Downloads the image into its own folder as `firmware.bin` (the name the
@@ -117,5 +158,19 @@ enum FirmwareReleaseSource {
     static func isNewer(_ latest: String, than running: String) -> Bool {
         guard let new = FirmwareGuidance.parse(latest), let old = FirmwareGuidance.parse(running) else { return false }
         return new > old
+    }
+
+    /// Whether Update reader offers `release` to a reader running `running`.
+    /// Stable offers only a newer x.y.z. Beta also offers any other build of
+    /// the same x.y.z (a beta over a dev build, the final release over its
+    /// beta) but never the exact version the reader runs or an older series.
+    static func shouldOffer(_ release: String, to running: String, channel: Channel) -> Bool {
+        switch channel {
+        case .stable:
+            return isNewer(release, than: running)
+        case .beta:
+            guard let new = FirmwareGuidance.parse(release), let old = FirmwareGuidance.parse(running) else { return false }
+            return new > old || (new == old && release != running)
+        }
     }
 }

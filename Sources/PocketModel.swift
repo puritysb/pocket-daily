@@ -129,6 +129,8 @@ final class PocketModel: ObservableObject, DeviceSession {
         var download: @Sendable (FirmwareRelease, URL) async throws -> URL = { release, directory in
             try await FirmwareReleaseSource.download(release, into: directory)
         }
+        /// Must match what `latest` looks up.
+        var channel: FirmwareReleaseSource.Channel = .current
     }
     static let initialMessage = "Prepare files, then find the reader on your Wi-Fi or connect directly when away."
 
@@ -1205,12 +1207,12 @@ final class PocketModel: ObservableObject, DeviceSession {
         post("Checking the latest Pocket Daily firmware…")
         do {
             let release = try await releaseSource.latest()
-            guard FirmwareReleaseSource.isNewer(release.version, than: running) else {
+            guard FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel) else {
                 post("The reader is up to date: it runs \(running) and the latest release is \(release.version).", tone: .success)
                 return nil
             }
             readerUpdateState = .downloading(release.version)
-            post("Downloading Pocket Daily firmware \(release.version)…")
+            post("Downloading Pocket Daily firmware \(release.version)\(release.isPrerelease ? " (pre-release)" : "")…")
             let file = try await releaseSource.download(release, Self.firmwareDownloads)
             post("Firmware \(release.version) was downloaded and verified.")
             return (file, release.version)

@@ -6,6 +6,13 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-26 Firmware beta channel: DEBUG builds use
+  `FirmwareReleaseSource.Channel.beta` (GitHub `/releases?per_page=10`,
+  newest non-draft usable release, pre-releases included) and offer any other
+  build of the same or a newer x.y.z; store builds keep `/releases/latest`
+  and the strict newer-only rule. Pre-releases come from `v<version>-beta.<n>`
+  tags (sibling docs/release-checklist.md). Same repository path check and
+  image/version validation as stable.
 - 2026-09-26 UI/UX redesign (local build and simulator tests only): the studio
   is organized around the reader's two screens. A Home | Sleep switch above the
   canvas picks the screen; its modules (Home pages, sleep sections) are switched
