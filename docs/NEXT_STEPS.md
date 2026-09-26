@@ -9,7 +9,29 @@
 앱·펌웨어 경계, 완료 기준과 보류 조건을 정리한 공동 백로그이며,
 이 문서의 진행 중인 수용 작업이나 출시 기준을 대체하지 않는다.
 
-## 확보한 기준선
+## 다음 세션: 앱 UI/UX 재설계 (2026-09-26 사용자 요구)
+
+별도 세션에서 진행한다. 사용자 의견:
+
+- 구조: Home/Sleep은 전체 구성, Card는 부가 기능이다. 현재의 Home · Card ·
+  Sleep 나란한 탭 대신 이 위계가 드러나게 설계한다. 어떤 아이템을 켜고 어떤
+  순서로 둘지도 간결하게.
+- 미리보기와 적용: 오른쪽에서 수정하면 미리보기에 즉시 반영하고, Apply를
+  누르면 실제 리더에 반영되어 리더 화면에도 바로 보이게 한다. 리더는 Sync
+  (같은 Wi-Fi) 모드를 유지해야 하므로, 연결을 유지한 채 반영 결과를 어떻게
+  보여줄지 자연스럽게 설계한다(현재는 저장만 하고 "Pocket Daily를 열면
+  표시"). 펌웨어 쪽 변경이 필요하면 계약을 먼저 정한다. 과거 live apply
+  기록(아래 기준선)과 docs/LIVE_STUDIO_DESIGN.md의 메모리 한계를 참고한다.
+- 버튼 동작: 앱에서 리더 버튼 동작을 바꾸는 기능을 검토한다. 펌웨어에는
+  이미 sideButtonLayout, frontButtonFollowOrientation 등 설정이 있다
+  (SettingsList.h). 노출 범위와 preferences 계약을 확인한다.
+- 순서 변경은 드래그로. 정리하면서 불필요한 군더더기는 제거한다.
+- 스크린샷 기준 후보: Reader 패널의 동작 과다(Reconnect, Connect directly,
+  End session, Update reader, How to connect), Files 패널의 입구 혼재
+  (Choose, Write text, Copy to SD), 긴 한 줄 편집기.
+- 현재 상태: 앱 6ebf228, 펌웨어 af70853c(1.7.0) 커밋, 푸시 전. 사용자 UI
+  변경 후 ./scripts/capture_screenshots.sh로 스크린샷 갱신.
+
 
 - 앱: 콘텐츠·이미지·지원 배치·테마 편집, 로컬 미리보기, 변경분 배포,
   저장 활성화와 화면 완료의 분리, 세션 한정 live apply 구현.
