@@ -10,10 +10,10 @@ Send what you want to read
 Send books (EPUB, TXT, Markdown, XTC), Pocket Daily study packs, or text you type or paste, over a direct local connection. On Mac, you can also copy files to an SD card. Transfers do not pass through a Pocket Daily cloud service.
 
 Safer device management
-Stage firmware only after a clear compatibility warning. Firmware installation still requires confirmation on the reader.
+Update reader downloads the latest official Pocket Daily firmware when you tap it, checks the image, and sends it after a clear compatibility warning. The reader asks before it installs anything.
 
 Private by design
-No Pocket Daily account. No ads. No analytics. No cloud relay. Discovery and transfer use Bluetooth and the local network. Files and calendar events stay between your Apple device, your reader, and storage you choose; weather requests send only the chosen city to Apple Weather.
+No Pocket Daily account. No ads. No analytics. No cloud relay. Discovery and transfer use Bluetooth and the local network. Files and calendar events stay between your Apple device, your reader, and storage you choose; weather requests send only the chosen city to Apple Weather, and a firmware update you start downloads the official release from GitHub.
 
 Try before connecting
 Built-in demo mode shows the editors with labeled sample content and no reader hardware. Demo mode never sends files or changes a device.

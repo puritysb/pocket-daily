@@ -53,7 +53,7 @@ struct GlanceControls: View {
     /// a refresh, with Send); this says what happened and offers a resend.
     @ViewBuilder private var deliveryStatus: some View {
         if model.readerStatus != nil, !model.isDemoMode, !model.canSendGlance {
-            Label("Update the reader's firmware to receive weather and events.", systemImage: "exclamationmark.triangle")
+            Label("Weather and events need reader firmware \(FirmwareGuidance.minimumRecommended) or later. Use Update reader in the Reader panel.", systemImage: "exclamationmark.triangle")
                 .font(.caption2).foregroundStyle(.orange)
                 .accessibilityIdentifier("glance-unsupported")
         } else if model.canSendGlance, settings.isConfigured {

@@ -1,12 +1,14 @@
 import Foundation
 
-/// Reader firmware guidance aligned with the reader's built-in OTA path
-/// (Settings → System → Update pulls the latest GitHub release). Dev builds
+/// Reader firmware guidance. An older reader gets a note with Update reader,
+/// which downloads the latest official release only when tapped
+/// (FirmwareReleaseSource); the bundled minimum needs no network. Dev builds
 /// (`-dev-` version strings) never trigger the hint: they are ahead of or
 /// beside the release lineage by design.
 enum FirmwareGuidance {
     /// Bump when a reader release matters for the companion experience.
-    static let minimumRecommended = "1.6.6"
+    static let minimumRecommended = "1.7.0"
+    static let releasesPage = URL(string: "https://github.com/puritysb/pocket-daily-firmware/releases/latest")!
 
     enum Advice: Equatable {
         case upToDate

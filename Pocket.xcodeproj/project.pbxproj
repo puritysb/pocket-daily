@@ -10,6 +10,7 @@
 		01350DEC54E38B1639531575 /* libc++.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D46C68C6D1477B48D78B01C /* libc++.tbd */; };
 		0368E20577EA2F31604B9D73 /* DeviceCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94228C0DAE5C814F046A408A /* DeviceCore.swift */; };
 		0462505E5B0B2BA933F5F86A /* UITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F754005EB0757A58C712E1A2 /* UITestSupport.swift */; };
+		0486779CEBCC91832FDE97F1 /* FirmwareReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDD2BBCA86C499E96F9D5A0 /* FirmwareReleaseTests.swift */; };
 		050C13EBEB9CB6DC62B44254 /* ContentPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C659337A9E03491E0F4C3172 /* ContentPresentationTests.swift */; };
 		050D7D9B7A9351EB05D2A227 /* TextDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = B548CA94B31B2E2454CC13CA /* TextDocument.swift */; };
 		05131232F9D265BE1E4AAC5C /* ContentActivationJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1921597C30EF1ECE33916E94 /* ContentActivationJournal.swift */; };
@@ -83,6 +84,7 @@
 		84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
 		86E634244B23C47205D8B382 /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
 		894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */; };
+		8D365D814692850006B54B71 /* FirmwareRelease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B29D1A2197296E83A22AB67 /* FirmwareRelease.swift */; };
 		8E07EDCCBFEC67AA47E8535A /* GlanceSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B0CF837DBD209DE07EED763 /* GlanceSettings.swift */; };
 		8E11736F7C7F820EBA854F76 /* ContentSendStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */; };
 		99F8E48A3902BF0E3DE6D172 /* PocketScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */; };
@@ -135,6 +137,7 @@
 		E1D2B5D2BB5D7B75954534AD /* ContentPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ECD37D9F915D53A73EDFF92 /* ContentPreviewModel.swift */; };
 		E5EA5AA7C23D7870A10C8A8E /* ReaderContentPullTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA5D4636B2C951D33693CD2 /* ReaderContentPullTests.swift */; };
 		E72A0BD7BB8E36855DA96247 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF86CD3C8490B57EB11E8071 /* ContentView.swift */; };
+		E7AD0FEEE90910C9F6155577 /* FirmwareRelease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B29D1A2197296E83A22AB67 /* FirmwareRelease.swift */; };
 		E8A07538A8CC64A0A6E1D041 /* WeatherSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB205ED7484E5711C0DC7E /* WeatherSnapshot.swift */; };
 		E8B4CDE7F30ADFA9BF210DBA /* ContentPreviewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAE0C268F1C01D32A9B6CCF7 /* ContentPreviewModelTests.swift */; };
 		E8F40BB940A4873A273547F8 /* HostRendererBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 197D11D851B078BA98D06299 /* HostRendererBridge.swift */; };
@@ -202,6 +205,7 @@
 		5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketParityTests.swift; sourceTree = "<group>"; };
 		5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostRendererBridgeTests.swift; sourceTree = "<group>"; };
 		5B2746840614F4AE42957C88 /* ReaderContentPull.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentPull.swift; sourceTree = "<group>"; };
+		5B29D1A2197296E83A22AB67 /* FirmwareRelease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareRelease.swift; sourceTree = "<group>"; };
 		5BFBE3FDE61584947D95A326 /* ContentQRCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentQRCode.swift; sourceTree = "<group>"; };
 		5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSendStatusTests.swift; sourceTree = "<group>"; };
 		5D46C68C6D1477B48D78B01C /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
@@ -263,6 +267,7 @@
 		F14A64CE2771C9806D8D1109 /* LayoutPreviewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutPreviewModel.swift; sourceTree = "<group>"; };
 		F40700F9050393C248572BB7 /* ContentDraftFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftFile.swift; sourceTree = "<group>"; };
 		F754005EB0757A58C712E1A2 /* UITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestSupport.swift; sourceTree = "<group>"; };
+		FCDD2BBCA86C499E96F9D5A0 /* FirmwareReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareReleaseTests.swift; sourceTree = "<group>"; };
 		FD5CDB7619C59CB8CC6E9426 /* ContentDeployment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDeployment.swift; sourceTree = "<group>"; };
 		FD7417C245B01C67AD37DDFB /* PocketTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PocketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -372,6 +377,7 @@
 				5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */,
 				8D65074F70247BF2542F483F /* DeviceCoreTests.swift */,
 				508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */,
+				FCDD2BBCA86C499E96F9D5A0 /* FirmwareReleaseTests.swift */,
 				5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */,
 				C5893AB01049A60E87A4353F /* LiveSyncTests.swift */,
 				16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */,
@@ -464,6 +470,7 @@
 			children = (
 				94228C0DAE5C814F046A408A /* DeviceCore.swift */,
 				F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */,
+				5B29D1A2197296E83A22AB67 /* FirmwareRelease.swift */,
 				B6A3EFDC948E33F6D7D82B42 /* LiveSyncClient.swift */,
 			);
 			path = Core;
@@ -718,6 +725,7 @@
 				B98659838FB4DA55E8CBC8C1 /* ContentSendStatusTests.swift in Sources */,
 				E90B3D0617FFE6C249E40D24 /* DeviceCoreTests.swift in Sources */,
 				C4C665425569754870E021C7 /* FirmwareGuidanceTests.swift in Sources */,
+				0486779CEBCC91832FDE97F1 /* FirmwareReleaseTests.swift in Sources */,
 				07C2801BF9C5C8FEE95B882B /* HostRendererBridgeTests.swift in Sources */,
 				B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */,
 				894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */,
@@ -757,6 +765,7 @@
 				0368E20577EA2F31604B9D73 /* DeviceCore.swift in Sources */,
 				B185D72799F4CDB6A052877E /* FirmwareGuidance.swift in Sources */,
 				24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */,
+				E7AD0FEEE90910C9F6155577 /* FirmwareRelease.swift in Sources */,
 				799A3D8607DB4B5BBC1CFA16 /* GlanceControls.swift in Sources */,
 				8E07EDCCBFEC67AA47E8535A /* GlanceSettings.swift in Sources */,
 				E8F40BB940A4873A273547F8 /* HostRendererBridge.swift in Sources */,
@@ -810,6 +819,7 @@
 				6A1BD5C811438399B452357D /* DeviceCore.swift in Sources */,
 				2BCD25F75B0F3037FA119A46 /* FirmwareGuidance.swift in Sources */,
 				84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */,
+				8D365D814692850006B54B71 /* FirmwareRelease.swift in Sources */,
 				D3EB139E4713FCDF6D15C7B7 /* GlanceControls.swift in Sources */,
 				654F5F25CAE6B7B217850523 /* GlanceSettings.swift in Sources */,
 				643A2CE7F639882AE77EC2F8 /* HostRendererBridge.swift in Sources */,

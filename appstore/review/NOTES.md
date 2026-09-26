@@ -28,6 +28,11 @@ The submitted screenshot build can also be launched with `--demo` by the develop
 5. Successful direct batches release the temporary connection. New firmware also
    exits the private session. Firmware still requires reader-side confirmation;
    reconnect to verify the version for an identified reader.
+6. Update reader (Reader panel, only while a real reader is connected on the
+   same Wi-Fi; hidden in demo mode) downloads the latest official firmware from
+   the developer's public GitHub releases only when tapped, validates it, shows
+   the firmware warning and sends it. The reader asks before installing. The
+   firmware runs only on the reader; nothing downloaded executes in the app.
 
 The app does not read location coordinates. On supported Apple OS versions, location permission may be requested only because the system gates Wi-Fi hotspot configuration behind that permission. The bundled privacy manifest declares app-only UserDefaults and user-selected file-metadata access; the app does not track or collect data.
 

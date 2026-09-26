@@ -1,6 +1,6 @@
 # Pocket Daily privacy policy
 
-Effective date: 2026-09-25
+Effective date: 2026-09-26
 
 Pocket Daily is an account-free, local-first companion application. It does not
 include advertising, analytics, tracking SDKs, or a Pocket Daily cloud service.
@@ -26,6 +26,11 @@ include advertising, analytics, tracking SDKs, or a Pocket Daily cloud service.
   system's permission, today's event titles and times are read on-device and
   sent only to the user's reader over the local connection. They are not
   stored by the app.
+- Reader firmware updates, only when the user taps Update reader: the app asks
+  GitHub for the latest official Pocket Daily firmware release and downloads
+  that file, then sends it to the user's reader. The request carries no
+  personal data or reader information; GitHub sees an ordinary download from
+  the device's network address.
 
 Pocket Daily does not read precise coordinates of the device. On macOS, location permission is
 requested because the operating system gates nearby Wi-Fi network information
@@ -37,7 +42,11 @@ Pocket Daily does not send personal data, reading files, diagnostics, calendar
 events, or device activity to the developer or to third parties. Direct
 transfers stay on the local Bluetooth/Wi-Fi connection selected by the user.
 Weather requests carry only the chosen city's coordinates to Apple WeatherKit
-and Apple's geocoder, operated by Apple under its own privacy policy.
+and Apple's geocoder, operated by Apple under its own privacy policy. Firmware
+update requests go to GitHub (github.com and its download servers) only on the
+user's request, contain no personal data, and are governed by GitHub's privacy
+statement. A downloaded firmware file is deleted once it has been sent or the
+update is cancelled.
 
 Connection traces and imported crash reports are stored in the app's local
 Application Support container. Temporary upload files are removed after the

@@ -6,6 +6,16 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-26 Update reader (FirmwareReleaseSource): only on tap, never in
+  demo or a direct session, the app reads GitHub's latest release of
+  puritysb/pocket-daily-firmware, downloads firmware.bin from that repo's
+  release path (size ≤ 6,553,600, size and version must match, then
+  FirmwareImageValidator), shows the firmware sheet and sends it; the reader's
+  staged prompt installs after Confirm. Chosen because the X3 cannot hold the
+  reader's own HTTPS OTA (sibling PROJECT_MEMORY 2026-09-26). Privacy, review
+  notes and store copy updated; FirmwareGuidance minimum 1.7.0. Mac + X3
+  verified 2026-09-26: Update reader reports "up to date" (reader 1.7.0-dev,
+  latest v1.6.6); a real download→send awaits a release newer than the reader.
 - 2026-09-25 Weather and events from the app (firmware 47a363f8, sibling
   docs/pocket-glance-v1.md; verified on X3 2026-09-26): the firmware dropped the AgentDeck daemon; the app composes ReaderGlance
   (WeatherKit forecast for a user-typed city geocoded with CLGeocoder — no

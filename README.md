@@ -100,6 +100,15 @@ Transport completion alone never installs firmware automatically. Before a
 firmware transfer, the app explains the compatibility, recovery, and possible
 support/warranty implications and requires an explicit acknowledgement.
 
+**Update reader** (Reader panel; hidden in demo mode and during a direct
+connection) is the normal way to update. Only when tapped, the app reads the
+latest release of `puritysb/pocket-daily-firmware`, downloads `firmware.bin`
+from that repository's release path, validates it, shows the same
+acknowledgement and sends it. When the transfer screen closes, the reader asks
+before installing. The reader's own Check for updates exists too, but an X3
+has too little memory for the HTTPS session (verified 2026-09-26), so the app
+path is the one that works everywhere.
+
 ## App Store submission
 
 The review setup, hardware dependency, compatibility wording, and firmware

@@ -26,6 +26,8 @@ struct ContentView: View {
         let id = UUID()
         let url: URL
         let action: FileImportAction
+        /// Set for an official release the app downloaded on request.
+        var officialVersion: String? = nil
     }
 
     /// Wide layouts show the inspector beside the studio; below this the
@@ -117,10 +119,17 @@ struct ContentView: View {
         .sheet(item: $pendingFirmwareTransfer) { transfer in
             FirmwareTransferSheet(
                 filename: transfer.url.lastPathComponent,
-                cancel: { pendingFirmwareTransfer = nil },
+                officialVersion: transfer.officialVersion,
+                cancel: {
+                    pendingFirmwareTransfer = nil
+                    if transfer.officialVersion != nil {
+                        try? FileManager.default.removeItem(at: transfer.url.deletingLastPathComponent())
+                    }
+                },
                 continueTransfer: {
                     pendingFirmwareTransfer = nil
-                    performTransfer(transfer.url, action: transfer.action)
+                    if transfer.officialVersion != nil { model.stageDownloadedFirmware(transfer.url) }
+                    else { performTransfer(transfer.url, action: transfer.action) }
                 }
             )
         }
@@ -224,10 +233,17 @@ struct ContentView: View {
     @ViewBuilder private var firmwareAdvice: some View {
         if let status = model.readerStatus,
            case let .updateAvailable(current, minimum) = FirmwareGuidance.advise(readerVersion: status.version) {
-            Label("Reader firmware \(current) is older than \(minimum). Update on the reader: Settings → System → Update.",
-                  systemImage: "arrow.down.circle")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            HStack(spacing: 8) {
+                Label("Firmware \(minimum) is available (reader has \(current)).",
+                      systemImage: "arrow.down.circle")
+                    .foregroundStyle(.orange)
+                if model.canUpdateReader, !model.hasDirectSession {
+                    Button("Update reader", action: updateReader).buttonStyle(.borderless)
+                } else {
+                    Link("Release", destination: FirmwareGuidance.releasesPage)
+                }
+            }
+            .font(.caption)
         }
     }
 
@@ -235,7 +251,7 @@ struct ContentView: View {
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
+            ConnectionInspector(model: model, nearby: nearby, onConnect: connect, onUpdateReader: updateReader)
             if showsStatus {
                 StatusCallout(message: model.message, tone: model.messageTone)
             }
@@ -279,6 +295,16 @@ struct ContentView: View {
         model.exitDemoMode()
         model.startConnectionSearch()
         nearby.disconnect()
+    }
+
+    /// Explicit tap only: download the latest official release, then show the
+    /// usual firmware acknowledgement before anything is sent.
+    private func updateReader() {
+        Task {
+            guard let download = await model.downloadLatestFirmware() else { return }
+            pendingFirmwareTransfer = PendingFirmwareTransfer(url: download.file, action: .wirelessUpload,
+                                                              officialVersion: download.version)
+        }
     }
 
     private func prepareTransfer(_ url: URL, action: FileImportAction) {
@@ -389,6 +415,7 @@ private struct PocketMark: View {
 
 private struct FirmwareTransferSheet: View {
     let filename: String
+    var officialVersion: String? = nil
     let cancel: () -> Void
     let continueTransfer: () -> Void
 
@@ -402,8 +429,10 @@ private struct FirmwareTransferSheet: View {
                     .frame(width: 48, height: 48)
                     .background(PocketPalette.selection, in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Stage custom firmware?").font(.title2.weight(.semibold))
-                    Text(filename).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(2)
+                    Text(officialVersion.map { "Update reader to \($0)?" } ?? "Stage custom firmware?")
+                        .font(.title2.weight(.semibold))
+                    Text(officialVersion == nil ? filename : "Official Pocket Daily release · firmware.bin")
+                        .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
 
@@ -417,7 +446,9 @@ private struct FirmwareTransferSheet: View {
             .padding(16)
             .background(PocketPalette.stage, in: RoundedRectangle(cornerRadius: 14))
 
-            Text("Keep a known recovery method available before installing. The selected file remains your responsibility.")
+            Text(officialVersion == nil
+                 ? "Keep a known recovery method available before installing. The selected file remains your responsibility."
+                 : "The app sends the release to the reader now. When you leave the transfer screen, the reader asks before installing it. Keep a known recovery method available.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -616,6 +647,7 @@ private struct ConnectionInspector: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
     let onConnect: () -> Void
+    let onUpdateReader: () -> Void
     @State private var confirmingDirectConnection = false
     @State private var showingHelp = false
 
@@ -668,6 +700,7 @@ private struct ConnectionInspector: View {
                 } message: {
                     Text("Your Wi-Fi will switch to the reader. Prepare cloud files first; internet may be unavailable. Keep Pocket Daily open during transfer.")
                 }
+                if model.readerStatus != nil, !model.hasDirectSession { updateRow }
                 DisclosureGroup("How to connect", isExpanded: $showingHelp) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("**Same Wi-Fi** · On the reader: Pocket Daily → Sync → Same Wi-Fi. This device stays on its network.")
@@ -704,6 +737,28 @@ private struct ConnectionInspector: View {
                 .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: 8))
             }
         }
+    }
+
+    /// Downloads the latest official firmware only when tapped; the reader
+    /// still asks before installing it.
+    private var updateRow: some View {
+        HStack {
+            switch model.readerUpdateState {
+            case .idle:
+                Button("Update reader…", action: onUpdateReader)
+                    .disabled(!model.canUpdateReader)
+                    .accessibilityIdentifier("update-reader")
+            case .checking:
+                ProgressView().controlSize(.small)
+                Text("Checking for firmware…").foregroundStyle(.secondary)
+            case let .downloading(version):
+                ProgressView().controlSize(.small)
+                Text("Downloading \(version)…").foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .buttonStyle(.borderless)
+        .font(.callout)
     }
 
     private var detail: String {

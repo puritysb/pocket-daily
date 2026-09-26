@@ -4,16 +4,16 @@ import XCTest
 /// Reader firmware guidance aligned with the reader's OTA update path.
 final class FirmwareGuidanceTests: XCTestCase {
     func testOlderReleaseTriggersUpdateAdvice() {
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.6.5"),
-                       .updateAvailable(current: "1.6.5", minimum: "1.6.6"))
+        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.6.6"),
+                       .updateAvailable(current: "1.6.6", minimum: "1.7.0"))
         XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.4.1"),
-                       .updateAvailable(current: "1.4.1", minimum: "1.6.6"))
+                       .updateAvailable(current: "1.4.1", minimum: "1.7.0"))
     }
 
     func testCurrentAndNewerAreUpToDate() {
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.6.6"), .upToDate)
         XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.7.0"), .upToDate)
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.6.6-something"), .upToDate)
+        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.10.0"), .upToDate)
+        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.7.0-something"), .upToDate)
     }
 
     func testDevelopmentBuildsNeverNag() {

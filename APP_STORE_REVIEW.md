@@ -55,7 +55,18 @@ warranty. The app then stages the file as `/update.bin`; installation requires a
 second explicit confirmation on the reader, which validates the image again.
 Before staging, Pocket Daily rejects an image unless its ESP32-C3 header,
 segments, checksum, SHA-256 trailer when present, and Pocket Nearby Sync product
-identity all validate locally.
+identity all validate locally. When the transfer session ends, the reader shows
+its own install prompt; nothing flashes without that confirmation.
+
+**Update reader** (Reader panel, or the note shown for older reader firmware)
+runs only when the user taps it and is hidden in demo mode. The app asks the
+developer's public GitHub repository for the latest official Pocket Daily
+firmware release, downloads `firmware.bin` over HTTPS from that repository's
+release path only, applies the same image validation, and shows the firmware
+warning before sending it over the local connection. The firmware runs only on
+the external reader, never in the app; the reader asks before installing it.
+The app sends no personal data to GitHub. Readers with enough memory can also
+check for updates themselves (Pocket Daily → Sync → Check for updates).
 
 ## Weather and calendar
 

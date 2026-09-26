@@ -123,6 +123,13 @@ final class PocketModel: ObservableObject, DeviceSession {
             }.value
         }
     }
+    /// Official firmware release lookup and download (tests substitute both).
+    struct ReleaseOperations: Sendable {
+        var latest: @Sendable () async throws -> FirmwareRelease = { try await FirmwareReleaseSource.latest() }
+        var download: @Sendable (FirmwareRelease, URL) async throws -> URL = { release, directory in
+            try await FirmwareReleaseSource.download(release, into: directory)
+        }
+    }
     static let initialMessage = "Prepare files, then find the reader on your Wi-Fi or connect directly when away."
 
     /// Studio-facing snapshot fed from this session's transitions. Views read
@@ -531,6 +538,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     @Published private(set) var glanceSentAt: Date?
     @Published private(set) var glanceError: String?
     private let localFiles: LocalFileOperations
+    private let releaseSource: ReleaseOperations
     // Bind each immutable revision to the selected session. Keeping this seam
     // at the I/O boundary lets the real Apply lifecycle run without a reader.
     typealias ContentTransportFactory = @MainActor (ContentRevision, String, String, Int) -> any ContentDeploymentTransport
@@ -570,8 +578,10 @@ final class PocketModel: ObservableObject, DeviceSession {
          contentTransportFactory: ContentTransportFactory? = nil,
          localFiles: LocalFileOperations = .init(),
          associationIO: (any ReaderAssociationIO)? = nil,
-         glanceSettings: GlanceSettings? = nil) {
+         glanceSettings: GlanceSettings? = nil,
+         releaseSource: ReleaseOperations = .init()) {
         self.client = client
+        self.releaseSource = releaseSource
         self.glanceSettings = glanceSettings ?? GlanceSettings()
         self.localFiles = localFiles
         self.contentTransportFactory = contentTransportFactory ?? { revision, identity, host, port in
@@ -1039,7 +1049,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             startHeartbeat(host: host, port: httpPort)
             return
         case let .stillPending(running, stagedVersion):
-            post("Not installed yet: the reader still runs \(running). The staged \(stagedVersion) is on the SD card as /update.bin — install it from Settings → System → Update firmware.", tone: .pending)
+            post("Not installed yet: the reader still runs \(running). The staged \(stagedVersion) is on the SD card as /update.bin — install it from Settings → System → SD Card Firmware Update.", tone: .pending)
             startHeartbeat(host: host, port: httpPort)
             return
         case .nothingStaged:
@@ -1156,15 +1166,74 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
-    func upload(_ url: URL) {
-        guard canPrepareFiles else { return }
+    enum ReaderUpdateState: Equatable {
+        case idle
+        case checking
+        case downloading(String)
+    }
+
+    @Published private(set) var readerUpdateState: ReaderUpdateState = .idle
+
+    /// "Update reader" is offered only for a connected, real reader with no
+    /// firmware already waiting, and never in demo mode.
+    var canUpdateReader: Bool {
+        canPrepareFiles && readerStatus != nil && readerUpdateState == .idle
+            && !preparedTransfers.contains { $0.filename.lowercased().hasSuffix(".bin") }
+    }
+
+    /// Runs only from an explicit tap: asks GitHub for the latest official
+    /// release and, when it is newer than the reader, downloads and validates
+    /// it. Returns the local image for the usual acknowledgement and transfer,
+    /// or nil after posting why nothing is needed or what failed.
+    func downloadLatestFirmware() async -> (file: URL, version: String)? {
+        guard canUpdateReader, let running = readerStatus?.version else { return nil }
+        readerUpdateState = .checking
+        defer { readerUpdateState = .idle }
+        post("Checking the latest Pocket Daily firmware…")
+        do {
+            let release = try await releaseSource.latest()
+            guard FirmwareReleaseSource.isNewer(release.version, than: running) else {
+                post("The reader is up to date: it runs \(running) and the latest release is \(release.version).", tone: .success)
+                return nil
+            }
+            readerUpdateState = .downloading(release.version)
+            post("Downloading Pocket Daily firmware \(release.version)…")
+            let file = try await releaseSource.download(release, Self.firmwareDownloads)
+            post("Firmware \(release.version) was downloaded and verified.")
+            return (file, release.version)
+        } catch {
+            post(error)
+            return nil
+        }
+    }
+
+    static var firmwareDownloads: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("PocketFirmware", isDirectory: true)
+    }
+
+    /// Prepares a downloaded release like a chosen file, then sends it when
+    /// a reader is still connected. The download folder is removed either way.
+    func stageDownloadedFirmware(_ file: URL) {
+        let task = upload(file)
+        Task { [weak self] in
+            await task?.value
+            try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+            guard let self, self.readerStatus != nil,
+                  self.preparedTransfers.contains(where: { $0.filename.lowercased().hasSuffix(".bin") }) else { return }
+            self.sendPreparedFiles()
+        }
+    }
+
+    @discardableResult
+    func upload(_ url: URL) -> Task<Void, Never>? {
+        guard canPrepareFiles else { return nil }
         if url.pathExtension.lowercased() == "bin",
            preparedTransfers.contains(where: { $0.filename.lowercased().hasSuffix(".bin") }) {
             post("Only one firmware image can be prepared at a time. Remove the pending files to replace it.", tone: .failure)
-            return
+            return nil
         }
         post("Preparing an offline copy before transfer…")
-        startReaderWork(attempt: connectionAttempt, kind: .local) { [self] _ in
+        return startReaderWork(attempt: connectionAttempt, kind: .local) { [self] _ in
             do {
                 let item = try await localFiles.prepare(url)
                 // A completed file receipt must survive background cancellation:
@@ -1421,7 +1490,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     static func stagedFirmwareMessage(version: String) -> String {
-        "STAGED, NOT INSTALLED YET — \(version) was verified and written to /update.bin. Install it from Settings → System → Update firmware, then reconnect: the app will confirm whether the reader is running it."
+        "STAGED, NOT INSTALLED YET — \(version) was verified and written to /update.bin. When you leave the transfer screen, the reader asks to install it (or use Settings → System → SD Card Firmware Update). Reconnect afterwards: the app will confirm whether the reader is running it."
     }
 
     /// Called by the upload client when the reader stopped answering mid-transfer.
