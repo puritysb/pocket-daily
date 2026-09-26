@@ -32,6 +32,26 @@
 - 현재 상태: 앱 6ebf228, 펌웨어 af70853c(1.7.0) 커밋, 푸시 전. 사용자 UI
   변경 후 ./scripts/capture_screenshots.sh로 스크린샷 갱신.
 
+### 2026-09-26 구현 결과 (로컬 빌드·시뮬레이터 시험만)
+
+- 위계: Canvas 위의 Home | Sleep 전환이 화면을 고르고, 오른쪽 조작부는 그
+  화면의 모듈만 보인다. 모듈은 스위치로 켜고 끌어서 순서를 바꾼다(맥락 메뉴와
+  보조기기에는 위/아래 이동). My cards는 Home의 "My cards" 행 아래에 열리고,
+  카드도 끌어서 순서를 바꾼다. Card 탭은 없어졌고 카드 편집 시 캔버스가 카드
+  페이지를 보여준다(Show Home으로 복귀).
+- 적용: 단일 Apply. 카드는 기존 content presentation으로 즉시 리더에 표시,
+  읽기·버튼 설정은 즉시 반영, Home/Sleep 배치는 Sync를 나갈 때 그려진다고
+  상태줄에 표시. Sync 안에서 Home/Daily Brief를 그리는 펌웨어 계약은
+  펌웨어 `docs/pocket-screen-present-v1.md`(제안, 미구현)로 먼저 정했다.
+  구현은 X3를 준비한 별도 세션에서(16KiB/4KiB 기준 유지, 표지 제외).
+- 버튼: 펌웨어 preferences에 `sideButtonLayout`, `frontButtonFollowOrientation`
+  추가(펌웨어 3de13206, 추가형, 호스트 시험 406개·default 빌드 통과). 앱은 GET에 키가
+  있을 때만 Reader settings에 노출하고 보낸다. 실기기 미검증.
+- 정리: Reader 패널은 상태별 동작만(연결 전: Find/Connect directly/Try demo/
+  How to connect, 연결 후: ⋯ 메뉴에 Reconnect·Update reader·End session).
+  Files는 Add 메뉴 하나(파일 선택, 텍스트 작성, Mac SD 복사). 날씨의
+  "Send now"는 실패 시 Retry로만 남김. 카드 본문 편집기는 3~8줄.
+
 
 - 앱: 콘텐츠·이미지·지원 배치·테마 편집, 로컬 미리보기, 변경분 배포,
   저장 활성화와 화면 완료의 분리, 세션 한정 live apply 구현.

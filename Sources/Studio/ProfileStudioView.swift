@@ -25,11 +25,13 @@ final class ProfileEditorState: ObservableObject {
     func revert() { draft = base }
 }
 
-/// Home & Sleep editor: everything the reader shows from Pocket Daily in one
-/// place, drawn by the firmware painter with the user's own cards and sample
-/// content (an outline when that renderer is unavailable), the controls beside
-/// it (below when `stacked`), and one explicit Send. Editing a control shows
-/// the surface it changes.
+/// Home & Sleep editor, organized around the reader's two Pocket Daily screens.
+/// Pick one and the canvas shows it drawn by the firmware painter with the
+/// user's own cards and sample content (an outline when that renderer is
+/// unavailable); the controls beside it (below when `stacked`) edit only that
+/// screen. Its pages or sections are modules switched on and dragged into
+/// order, and My cards live inside Home. Reader-wide settings sit underneath,
+/// and one Apply sends everything that changed.
 struct ProfileStudioView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var editor: ProfileEditorState
@@ -43,8 +45,15 @@ struct ProfileStudioView: View {
     @State private var cards: ContentEditorModel?
     @State private var cardsError: String?
     @State private var selectedCardID: String?
+    @State private var editingCards: Bool
+    @State private var showsReaderSettings = false
+    @State private var drag: ReorderDrag?
 
+    /// What the canvas draws. A card page belongs to Home: the selected card
+    /// as the reader shows it when opened.
     enum PreviewSurface: String, CaseIterable { case home = "Home", card = "Card", sleep = "Sleep" }
+    /// The screens the editor is organized around.
+    enum Screen: String, CaseIterable { case home = "Home", sleep = "Sleep" }
 
     init(model: PocketModel, editor: ProfileEditorState, stacked: Bool = false, scrollsControls: Bool = false,
          initialPreview: PreviewSurface = .home) {
@@ -53,11 +62,12 @@ struct ProfileStudioView: View {
         self.stacked = stacked
         self.scrollsControls = scrollsControls && !stacked
         _preview = State(initialValue: initialPreview)
+        _editingCards = State(initialValue: initialPreview == .card)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            sendBar
+            applyBar
             let columns = stacked ? AnyLayout(VStackLayout(alignment: .center, spacing: 20))
                                   : AnyLayout(HStackLayout(alignment: .top, spacing: 24))
             columns {
@@ -66,11 +76,11 @@ struct ProfileStudioView: View {
                     ScrollView {
                         controls.padding(.bottom, 24)
                     }
-                    .frame(maxWidth: 360, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: 380, maxHeight: .infinity, alignment: .topLeading)
                     .scrollIndicators(.visible)
                 } else {
                     controls
-                        .frame(maxWidth: stacked ? .infinity : 340, alignment: .topLeading)
+                        .frame(maxWidth: stacked ? .infinity : 360, alignment: .topLeading)
                 }
             }
         }
@@ -87,6 +97,7 @@ struct ProfileStudioView: View {
         .onDisappear { cardPreview.cancel() }
     }
 
+    private var screen: Screen { preview == .sleep ? .sleep : .home }
     private var draftCards: ContentDraft { cards?.draft ?? .init() }
     private var selectedCard: ContentCard? {
         draftCards.cards.first { $0.id == selectedCardID } ?? draftCards.cards.first
@@ -105,7 +116,7 @@ struct ProfileStudioView: View {
         .init(profile: editor.draft, surface: preview, hardware: model.hardware, cards: draftCards)
     }
 
-    /// The reader's own sleep screen and the Card surface are not layouts.
+    /// The reader's own sleep screen and a card page are not layouts.
     private var layoutRequest: LayoutPreviewRequest? {
         if preview == .card || (preview == .sleep && editor.draft.sleep.mode == .reader) { return nil }
         guard editor.draft.validationError == nil else { return nil }
@@ -129,15 +140,13 @@ struct ProfileStudioView: View {
 
     private var canvas: some View {
         VStack(spacing: 10) {
-            Picker("Preview", selection: $preview) {
-                ForEach(PreviewSurface.allCases, id: \.self) { surface in
-                    Text(surface.rawValue).tag(surface)
-                }
+            Picker("Screen", selection: Binding(get: { screen }, set: { preview = $0 == .home ? .home : .sleep })) {
+                ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(maxWidth: 260)
-            .accessibilityIdentifier("profile-preview-surface")
+            .frame(maxWidth: 220)
+            .accessibilityIdentifier("profile-screen")
             PocketDevicePreview(hardware: model.hardware, status: model.readerStatus, renderedScreen: canvasImage)
                 .frame(maxWidth: 340)
                 .frame(height: 470)
@@ -146,12 +155,20 @@ struct ProfileStudioView: View {
                 .accessibilityLabel(canvasLabel)
                 .accessibilityValue(canvasIsCurrent ? "Current" : "Updating")
                 .accessibilityIdentifier("profile-canvas")
-            Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .help(preview == .card ? "The card as the reader draws it when opened." :
-                      showsRender ? "Drawn by the reader's own layout code with your cards and sample content. Your reader shows its own books and weather." : "")
-                .accessibilityIdentifier("profile-canvas-caption")
+            HStack(spacing: 10) {
+                Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .help(preview == .card ? "The card as the reader draws it when opened." :
+                          showsRender ? "Drawn by the reader's own layout code with your cards and sample content. Your reader shows its own books and weather." : "")
+                    .accessibilityIdentifier("profile-canvas-caption")
+                if preview == .card {
+                    Button("Show Home") { preview = .home }
+                        .buttonStyle(.borderless)
+                        .font(.caption2)
+                        .accessibilityIdentifier("profile-show-home")
+                }
+            }
         }
         .frame(width: stacked ? nil : 340)
     }
@@ -188,7 +205,7 @@ struct ProfileStudioView: View {
         return "Layout outline"
     }
 
-    // MARK: Send
+    // MARK: Apply
 
     private var cardsRevision: ContentRevision? {
         guard let cards, !cards.draft.cards.isEmpty else { return nil }
@@ -220,47 +237,55 @@ struct ProfileStudioView: View {
 
     private var status: (text: String, symbol: String, color: Color) {
         if model.isDemoMode { return ("Demo · nothing is sent", "info.circle", .secondary) }
-        if model.readerStatus == nil { return ("Connect a reader to send", "info.circle", .secondary) }
+        if model.readerStatus == nil { return ("Connect a reader to apply changes", "info.circle", .secondary) }
         if let error = editor.draft.validationError ?? cardsValidation { return (error, "exclamationmark.triangle", .red) }
         if case let .sending(step) = cardStatus { return ("\(step)…", "arrow.triangle.2.circlepath", .secondary) }
-        if model.profileSend == .sending { return ("Saving on the reader…", "arrow.triangle.2.circlepath", .secondary) }
+        if model.profileSend == .sending { return ("Applying on the reader…", "arrow.triangle.2.circlepath", .secondary) }
         switch model.profileSend {
         case .conflict: return ("Changed on the reader · its version was loaded", "exclamationmark.triangle", .orange)
-        case let .failed(message) where anythingDirty: return ("Not saved · \(message)", "xmark.octagon", .red)
+        case let .failed(message) where anythingDirty: return ("Not applied · \(message)", "xmark.octagon", .red)
         default: break
         }
         switch cardStatus {
         case .needsCheck: return (cardStatus.label, cardStatus.symbol, .orange)
-        case .failed where cardsDirty: return ("Cards not sent · \(model.message)", "xmark.octagon", .red)
+        case .failed where cardsDirty: return ("Cards not applied · \(model.message)", "xmark.octagon", .red)
         default: break
         }
-        if anythingDirty { return ("Changes not sent", "circle.dashed", .orange) }
+        if anythingDirty { return ("Changes not applied", "circle.dashed", .orange) }
         if case .storedNotShown = cardStatus { return (cardStatus.label, cardStatus.symbol, .orange) }
         if !model.canEditReaderProfile && editor.isDirty {
             return ("This reader's firmware can't store Home & Sleep yet", "exclamationmark.triangle", .orange)
         }
-        return ("Saved on reader · shows when Pocket Daily opens", "checkmark.circle.fill", .green)
+        // The reader redraws Home and Sleep from a saved profile only when it
+        // next paints Pocket Daily, which is when Sync ends.
+        if case .saved = model.profileSend {
+            return (cardStatus == .shown ? "Applied · card on screen now, Home and Sleep when you leave Sync"
+                                         : "Applied · Home and Sleep show when you leave Sync",
+                    "checkmark.circle.fill", .green)
+        }
+        if cardStatus == .shown { return ("Applied · card shown on the reader", "checkmark.circle.fill", .green) }
+        return ("Up to date with the reader", "checkmark.circle.fill", .green)
     }
 
-    private var canSend: Bool {
+    private var canApply: Bool {
         model.readerStatus != nil && !model.isDemoMode && !model.isWorking && anythingDirty &&
             editor.draft.validationError == nil && (cardsValidation == nil || !cardsDirty)
     }
 
     /// One line when it fits; otherwise the status above the buttons.
-    private var sendBar: some View {
+    private var applyBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
                     statusLabel.lineLimit(1)
                     Spacer(minLength: 8)
-                    sendControls
+                    applyControls
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     statusLabel
                     HStack(spacing: 12) {
                         Spacer()
-                        sendControls
+                        applyControls
                     }
                 }
             }
@@ -281,7 +306,7 @@ struct ProfileStudioView: View {
             .accessibilityIdentifier("profile-status")
     }
 
-    @ViewBuilder private var sendControls: some View {
+    @ViewBuilder private var applyControls: some View {
         Button("Revert") {
             editor.revert()
             model.revertPreferences()
@@ -289,17 +314,15 @@ struct ProfileStudioView: View {
         .disabled(!(editor.isDirty || model.preferencesDirty) || model.isWorking)
         .help("Back to what the reader has. Your cards stay as they are.")
         .accessibilityIdentifier("profile-revert")
-        Button {
+        Button("Apply") {
             model.sendReaderLayout(profile: profileDirty ? editor.draft : nil,
                                    cards: cardsDirty ? cardsRevision : nil)
-        } label: {
-            Label("Send", systemImage: "paperplane.fill")
         }
         .buttonStyle(.borderedProminent)
         .keyboardShortcut(.return, modifiers: .command)
-        .disabled(!canSend)
-        .help("Send to reader (⌘↩)")
-        .accessibilityIdentifier("profile-send")
+        .disabled(!canApply)
+        .help("Apply to the reader (⌘↩). The reader stays in Sync.")
+        .accessibilityIdentifier("profile-apply")
     }
 
     // MARK: Controls
@@ -310,11 +333,12 @@ struct ProfileStudioView: View {
                 set: { editor.draft[keyPath: key] = $0; preview = surface })
     }
 
-    /// Reader settings (sent with the same Send); shown once loaded.
+    /// Reader settings (applied with the same Apply); shown once loaded.
     private func setting<Value>(_ get: @escaping (ReaderPreferences) -> Value,
-                                _ set: @escaping (Value) -> Void, on surface: PreviewSurface) -> Binding<Value>? {
+                                _ set: @escaping (Value) -> Void, on surface: PreviewSurface? = nil) -> Binding<Value>? {
         guard let preferences = model.preferences else { return nil }
-        return Binding(get: { get(model.preferences ?? preferences) }, set: { set($0); preview = surface })
+        return Binding(get: { get(model.preferences ?? preferences) },
+                       set: { set($0); if let surface { preview = surface } })
     }
 
     private var homeItems: Set<PocketProfile.HomeItem> {
@@ -326,81 +350,12 @@ struct ProfileStudioView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            ControlGroup(title: "Home", note: "Up to \(PocketProfile.maxHomeItems), in page order") {
-                if let startup = setting({ $0.startupApp == 1 }, model.setStartupPocketDaily, on: .home) {
-                    Toggle("Open Pocket Daily when the reader starts", isOn: startup)
-                        .accessibilityIdentifier("profile-startup")
-                }
-                OrderedToggleList(selection: edit(\.home.items, on: .home), available: homeItems,
-                                  identifier: "profile-home", title: { $0.title }, detail: { $0.detail })
-                if !editor.draft.home.items.contains(.word) {
-                    Toggle("Daily word when there are no cards", isOn: edit(\.home.dailyWord, on: .home))
-                        .accessibilityIdentifier("profile-daily-word")
-                }
+        VStack(alignment: .leading, spacing: 22) {
+            switch screen {
+            case .home: homeControls
+            case .sleep: sleepControls
             }
-            ControlGroup(title: "My cards", note: "Up to 3 pages") {
-                if let cards {
-                    MyCardsEditor(editor: cards, model: model, selectedID: $selectedCardID) { preview = .card }
-                } else if let cardsError {
-                    Text(cardsError).font(.caption).foregroundStyle(.red)
-                    Button("Retry loading cards") { Task { await openCards() } }
-                } else {
-                    ProgressView().controlSize(.small)
-                }
-            }
-            ControlGroup(title: "Weather and events") {
-                Picker("Weather", selection: edit(\.home.weather, on: .home)) {
-                    ForEach(PocketProfile.WeatherPanel.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accessibilityIdentifier("profile-weather")
-                Toggle("Next event", isOn: edit(\.home.nextEvent, on: .home))
-                    .disabled(editor.draft.home.weather == .off)
-                    .accessibilityIdentifier("profile-next-event")
-                GlanceControls(settings: model.glanceSettings, model: model)
-            }
-            ControlGroup(title: "Sleep", note: editor.draft.sleep.mode == .brief ? "Top to bottom" : nil) {
-                Picker("Sleep screen", selection: edit(\.sleep.mode, on: .sleep)) {
-                    ForEach(PocketProfile.SleepMode.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accessibilityIdentifier("profile-sleep-mode")
-                if editor.draft.sleep.mode == .reader {
-                    Text("Uses the Sleep Screen set on the reader.")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    OrderedToggleList(selection: edit(\.sleep.sections, on: .sleep), available: sleepSections,
-                                      identifier: "profile-sleep", title: { $0.title }, detail: { $0.detail })
-                    if editor.draft.sleep.sections.contains(.reading),
-                       let cover = setting({ $0.pocketDailySleepCover }, model.setPocketDailySleepCover, on: .sleep) {
-                        Toggle("Book cover", isOn: cover)
-                            .accessibilityIdentifier("profile-sleep-cover")
-                    }
-                }
-                if let timeout = setting({ $0.sleepTimeoutMinutes }, model.setSleepTimeout, on: .sleep) {
-                    // The reader accepts 1-30 minutes; 31 means it never sleeps on its own.
-                    Stepper(timeout.wrappedValue >= ReaderPreferences.neverSleepMinutes
-                                ? "Never sleep on its own" : "Sleep after \(timeout.wrappedValue) min",
-                            value: timeout, in: 1...ReaderPreferences.neverSleepMinutes)
-                        .accessibilityIdentifier("profile-sleep-timeout")
-                }
-            }
-            if let size = setting({ $0.fontSize }, model.setFontSize, on: preview) {
-                ControlGroup(title: "Reading") {
-                    LabeledContent("Text size") {
-                        Picker("Text size", selection: size) {
-                            Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(maxWidth: 200)
-                    }
-                    .accessibilityIdentifier("profile-text-size")
-                }
-            }
+            readerSettings
             Button("Reset to default layout") { editor.draft = .defaults }
                 .buttonStyle(.borderless)
                 .font(.caption)
@@ -409,6 +364,177 @@ struct ProfileStudioView: View {
         }
         .font(.callout)
         .disabled(model.isWorking)
+    }
+
+    @ViewBuilder private var homeControls: some View {
+        ControlGroup(title: "Home pages", note: "Drag to reorder · up to \(PocketProfile.maxHomeItems)") {
+            ModuleList(selection: edit(\.home.items, on: .home), available: homeItems,
+                       limit: PocketProfile.maxHomeItems, identifier: "profile-home", drag: $drag,
+                       title: { $0.title }, detail: { $0.detail }) { item in
+                if item == .study { cardsDisclosure }
+            } expansion: { item in
+                if item == .study, editingCards { cardsEditor }
+            }
+            if editor.draft.home.items.contains(.study), !editor.draft.home.items.contains(.word) {
+                Toggle("Daily word when there are no cards", isOn: edit(\.home.dailyWord, on: .home))
+                    .accessibilityIdentifier("profile-daily-word")
+            }
+        }
+        ControlGroup(title: "Weather and events") {
+            Picker("Weather panel", selection: edit(\.home.weather, on: .home)) {
+                ForEach(PocketProfile.WeatherPanel.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityIdentifier("profile-weather")
+            Toggle("Next event", isOn: edit(\.home.nextEvent, on: .home))
+                .disabled(editor.draft.home.weather == .off)
+                .accessibilityIdentifier("profile-next-event")
+            GlanceControls(settings: model.glanceSettings, model: model)
+        }
+        if let startup = setting({ $0.startupApp == 1 }, model.setStartupPocketDaily, on: .home) {
+            Toggle("Open Pocket Daily when the reader starts", isOn: startup)
+                .accessibilityIdentifier("profile-startup")
+        }
+    }
+
+    /// Opens My cards under their Home page, with the canvas on the selected card.
+    private var cardsDisclosure: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.2)) { editingCards.toggle() }
+            preview = editingCards && selectedCard != nil ? .card : .home
+        } label: {
+            HStack(spacing: 4) {
+                if !draftCards.cards.isEmpty { Text("\(draftCards.cards.count)").monospacedDigit() }
+                Image(systemName: "chevron.right").rotationEffect(.degrees(editingCards ? 90 : 0))
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 2)
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(editingCards ? "Hide My cards" : "Edit My cards")
+        .accessibilityIdentifier("profile-edit-cards")
+    }
+
+    @ViewBuilder private var cardsEditor: some View {
+        Group {
+            if let cards {
+                MyCardsEditor(editor: cards, model: model, selectedID: $selectedCardID, drag: $drag) { preview = .card }
+            } else if let cardsError {
+                Text(cardsError).font(.caption).foregroundStyle(.red)
+                Button("Retry loading cards") { Task { await openCards() } }
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 2)
+        .padding(.bottom, 12)
+    }
+
+    @ViewBuilder private var sleepControls: some View {
+        ControlGroup(title: "Sleep screen", note: editor.draft.sleep.mode == .brief ? "Drag to reorder" : nil) {
+            Picker("Sleep screen", selection: edit(\.sleep.mode, on: .sleep)) {
+                ForEach(PocketProfile.SleepMode.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityIdentifier("profile-sleep-mode")
+            if editor.draft.sleep.mode == .reader {
+                Text("Uses the Sleep Screen set on the reader.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                ModuleList(selection: edit(\.sleep.sections, on: .sleep), available: sleepSections,
+                           identifier: "profile-sleep", drag: $drag,
+                           title: { $0.title }, detail: { $0.detail }) { section in
+                    if section == .card {
+                        Button("Edit") {
+                            preview = .card
+                            editingCards = true
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .accessibilityIdentifier("profile-sleep-edit-cards")
+                    }
+                } expansion: { section in
+                    if section == .reading, editor.draft.sleep.sections.contains(.reading),
+                       let cover = setting({ $0.pocketDailySleepCover }, model.setPocketDailySleepCover, on: .sleep) {
+                        Toggle("Book cover", isOn: cover)
+                            .font(.caption)
+                            .padding(.leading, 30)
+                            .padding(.trailing, 10)
+                            .padding(.bottom, 8)
+                            .accessibilityIdentifier("profile-sleep-cover")
+                    }
+                }
+            }
+        }
+        if let timeout = setting({ $0.sleepTimeoutMinutes }, model.setSleepTimeout, on: .sleep) {
+            // The reader accepts 1-30 minutes; 31 means it never sleeps on its own.
+            Stepper(timeout.wrappedValue >= ReaderPreferences.neverSleepMinutes
+                        ? "Never sleep on its own" : "Sleep after \(timeout.wrappedValue) min",
+                    value: timeout, in: 1...ReaderPreferences.neverSleepMinutes)
+                .accessibilityIdentifier("profile-sleep-timeout")
+        }
+    }
+
+    /// Settings for the whole reader rather than one screen; folded by default.
+    @ViewBuilder private var readerSettings: some View {
+        if let preferences = model.preferences {
+            DisclosureGroup(isExpanded: $showsReaderSettings) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let size = setting({ $0.fontSize }, model.setFontSize) {
+                        LabeledContent("Text size") {
+                            Picker("Text size", selection: size) {
+                                Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 200)
+                        }
+                        .accessibilityIdentifier("profile-text-size")
+                    }
+                    if preferences.hasButtonSettings,
+                       let side = setting({ $0.sideButtons ?? .previousNext }, model.setSideButtons),
+                       let follow = setting({ $0.frontButtonsFollowOrientation ?? false },
+                                            model.setFrontButtonsFollowOrientation) {
+                        LabeledContent("Side buttons") {
+                            Picker("Side buttons", selection: side) {
+                                ForEach(ReaderPreferences.SideButtons.allCases, id: \.self) { Text($0.title).tag($0) }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        .help("Page turns with the side buttons while reading")
+                        .accessibilityIdentifier("profile-side-buttons")
+                        Toggle("Front buttons follow screen rotation", isOn: follow)
+                            .help("When the book is upside down or turned left, the front buttons swap to match")
+                            .accessibilityIdentifier("profile-front-buttons")
+                    } else {
+                        Text("Button settings need a newer reader firmware.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Reader settings").font(.headline)
+                    Text(readerSummary(preferences)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .accessibilityIdentifier("profile-reader-settings")
+        }
+    }
+
+    private func readerSummary(_ preferences: ReaderPreferences) -> String {
+        let size = ["S", "M", "L", "XL"].indices.contains(preferences.fontSize)
+            ? ["S", "M", "L", "XL"][preferences.fontSize] : "\(preferences.fontSize)"
+        var parts = ["Text \(size)"]
+        if let side = preferences.sideButtons { parts.append("Side: \(side.title.lowercased())") }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: Cards and schematic
@@ -467,78 +593,6 @@ private struct ControlGroup<Content: View>: View {
             }
             content
         }
-    }
-}
-
-/// Every case of `Item`; enabled ones first in their order, each with a toggle
-/// and up/down controls. Disabling the last enabled item is not offered.
-struct OrderedToggleList<Item: Hashable & CaseIterable & RawRepresentable>: View where Item.AllCases: RandomAccessCollection, Item.RawValue == String {
-    @Binding var selection: [Item]
-    /// Items this reader accepts; others are not offered.
-    var available: Set<Item>? = nil
-    let identifier: String
-    let title: (Item) -> String
-    let detail: (Item) -> String?
-
-    private var rows: [Item] {
-        selection + Item.allCases.filter { !selection.contains($0) && available?.contains($0) != false }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(rows, id: \.self) { item in
-                let index = selection.firstIndex(of: item)
-                HStack(spacing: 10) {
-                    Toggle("", isOn: Binding(
-                        get: { index != nil },
-                        set: { on in
-                            if on, index == nil { selection.append(item) }
-                            if !on, let index, selection.count > 1 { selection.remove(at: index) }
-                        }))
-                        .labelsHidden()
-                        .toggleStyle(CheckToggleStyle())
-                        .disabled(index != nil && selection.count == 1)
-                        .accessibilityLabel(title(item))
-                    (Text(index.map { "\($0 + 1). " } ?? "").monospacedDigit() + Text(title(item)))
-                        .foregroundStyle(index == nil ? .secondary : .primary)
-                    Spacer()
-                    if let index {
-                        Button { selection.swapAt(index, index - 1) } label: { Image(systemName: "chevron.up") }
-                            .disabled(index == 0)
-                            .accessibilityLabel("Move \(title(item)) up")
-                        Button { selection.swapAt(index, index + 1) } label: { Image(systemName: "chevron.down") }
-                            .disabled(index + 1 >= selection.count)
-                            .accessibilityLabel("Move \(title(item)) down")
-                    }
-                }
-                .help(detail(item) ?? "")
-                .buttonStyle(.borderless)
-                .padding(.vertical, 7)
-                .padding(.horizontal, 10)
-                .accessibilityIdentifier("\(identifier)-\(item.rawValue)")
-                Divider()
-            }
-        }
-        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-/// A native checkbox on macOS; a check circle elsewhere, which reads better
-/// than a switch inside a reorderable list.
-private struct CheckToggleStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-#if os(macOS)
-        Toggle(configuration).toggleStyle(.checkbox)
-#else
-        Button { configuration.isOn.toggle() } label: {
-            Image(systemName: configuration.isOn ? "checkmark.circle.fill" : "circle")
-                .font(.title3)
-                .foregroundStyle(configuration.isOn ? Color.accentColor : Color.secondary)
-        }
-        .buttonStyle(.plain)
-        .accessibilityValue(configuration.isOn ? "On" : "Off")
-        .accessibilityAddTraits(.isToggle)
-#endif
     }
 }
 

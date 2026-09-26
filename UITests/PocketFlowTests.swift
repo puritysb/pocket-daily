@@ -19,8 +19,8 @@ final class PocketFlowTests: XCTestCase {
         add(attachment)
     }
 
-    /// Home & Sleep opens first and redraws the firmware layout for each edit;
-    /// demo never enables Send.
+    /// Home opens first and redraws the firmware layout for each edit; Sleep is
+    /// its own screen with its own controls; demo never enables Apply.
     func testHomeAndSleepEditorPreviewsEditsInDemo() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--hardware=X3"]
@@ -30,13 +30,16 @@ final class PocketFlowTests: XCTestCase {
         app.revealInStudio(top)
         top.tap()
         XCTAssertTrue(app.waitForLayoutPreview(), "The weather edit was not redrawn")
-        XCTAssertFalse(app.buttons["profile-send"].isEnabled)
+        XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
         XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
 
+        XCTAssertFalse(app.buttons["Reader's sleep screen"].exists, "Sleep controls belong to the Sleep screen")
+        app.openScreen("Sleep")
+        XCTAssertTrue(app.waitForLayoutPreview(), "The Daily Brief never rendered")
         let readerSleep = app.buttons["Reader's sleep screen"]
         app.revealInStudio(readerSleep)
         readerSleep.tap()
-        // A sleep edit shows the sleep surface; the reader's own screen is an outline.
+        // The reader's own sleep screen is an outline.
         XCTAssertTrue(app.waitForLayoutPreview(caption: "Layout outline"))
         XCTAssertTrue(app.buttons["Sleep"].isSelected)
         let brief = app.buttons["Daily Brief"]
@@ -49,12 +52,13 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
     }
 
-    /// My cards are edited in Home & Sleep; editing shows the card page.
+    /// My cards open under their Home page; editing shows the card page.
     func testMyCardsAreEditableInDemoButNotSent() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
+        app.openCards()
         let title = app.textFields["cards-title"]
         app.revealInStudio(title)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
@@ -63,7 +67,7 @@ final class PocketFlowTests: XCTestCase {
         let edited = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "today"), object: title)
         XCTAssertEqual(XCTWaiter().wait(for: [edited], timeout: 5), .completed, "Demo cards must stay editable")
         XCTAssertTrue(app.waitForLayoutPreview(caption: "Card page"), "Editing a card shows its page")
-        XCTAssertFalse(app.buttons["profile-send"].isEnabled)
+        XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
         XCTAssertTrue(app.staticTexts["Demo · cards are not saved"].exists)
         attach(app, "my-cards-demo")
     }
@@ -74,6 +78,7 @@ final class PocketFlowTests: XCTestCase {
         app.launchArguments = ["--demo"]
         app.launch()
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
+        app.openCards()
         let menu = app.buttons["cards-image-menu"]
         app.revealInStudio(menu)
         XCTAssertTrue(menu.waitForExistence(timeout: 10))
@@ -116,9 +121,9 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         app.open("Reader")
-        let choose = app.buttons["choose-file"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
-        XCTAssertTrue(choose.isEnabled)
+        let add = app.buttons["files-add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(add.isEnabled, "Files can be prepared before a reader is connected")
         let help = app.buttons["How to connect"]
         XCTAssertTrue(help.waitForExistence(timeout: 5))
         help.tap()
@@ -139,8 +144,11 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         app.open("Reader")
+        let add = app.buttons["files-add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
         let choose = app.buttons["choose-file"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
+        XCTAssertTrue(choose.waitForExistence(timeout: 5))
         choose.tap()
         let search = app.searchFields.firstMatch
         // iPad collapses the system search field into a toolbar button.
@@ -181,14 +189,14 @@ final class PocketFlowTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Demo · nothing is sent"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Exit demo"].exists)
-        XCTAssertFalse(app.buttons["choose-file"].isEnabled, "Nothing may reach a device")
+        XCTAssertFalse(app.buttons["files-add"].isEnabled, "Nothing may reach a device")
         // Reader settings are populated in Home & Sleep so they are reviewable...
         app.open("Home & Sleep")
         let startup = app.switches["profile-startup"]
         app.revealInStudio(startup)
         XCTAssertTrue(startup.exists)
-        // ...but Send stays off.
-        XCTAssertFalse(app.buttons["profile-send"].isEnabled)
+        // ...but Apply stays off.
+        XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
 
         app.open("Reader")
         let exit = app.buttons["Exit demo"]

@@ -30,7 +30,7 @@ names one platform. Record Pass, Fail, or Blocked with a short evidence referenc
      independent-project notices.
 2. **Demo isolation**
    - Choose **Try demo** under Reader and inspect Home & Sleep, including My
-     cards and a QR code: previews are captioned as sample content and Send
+     cards and a QR code: previews are captioned as sample content and Apply
      stays disabled.
    - Confirm transfer and settings mutation remain disabled in demo mode.
 3. **Permission flow**

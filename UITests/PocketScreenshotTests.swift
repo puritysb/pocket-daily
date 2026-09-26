@@ -17,12 +17,16 @@ final class PocketScreenshotTests: XCTestCase {
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
         try save(name: "01-home-x3")
 
-        app.buttons["Sleep"].tap()
+        app.openScreen("Sleep")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Daily Brief never rendered")
         try save(name: "02-sleep-x3")
 
-        app.buttons["Card"].tap()
+        app.openScreen("Home")
+        XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never returned")
+        app.openCards()
         XCTAssertTrue(app.waitForLayoutPreview(caption: "Card page"), "The card page never rendered")
+        // Wide layouts show the canvas beside the card editor; compact ones scroll back to it.
+        if app.isCompact { app.revealCanvas() }
         try save(name: "03-cards")
 
         if app.isCompact {

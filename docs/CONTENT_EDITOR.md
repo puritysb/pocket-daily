@@ -140,9 +140,14 @@ fields beside it (below it when stacked).
 ## Home & Sleep profile editor (P2, 2026-09-25)
 
 Home & Sleep is the first studio tab on every platform and edits the reader's
-Pocket Daily profile (sibling docs/pocket-profile-v1.md). Changing a Home
-control shows the Home preview and changing a sleep control shows the Sleep
-preview.
+Pocket Daily profile (sibling docs/pocket-profile-v1.md). Since 2026-09-26 it
+is organized around the two screens: a Home | Sleep switch above the canvas
+picks the screen, and the controls show only that screen's modules (Home
+pages, weather; sleep mode and sections). Modules are switched on and dragged
+into order (`ModuleList`, with Move Up/Down in the context menu and for
+assistive technologies). My cards open under their Home page and show the
+selected card page on the canvas. Reader-wide settings (text size, side
+buttons, front buttons following rotation) sit folded underneath both.
 
 - On connection, when `/api/status` reports `pocketProfile: 1`, the app reads
   `GET /api/pocket/v1/profile` once inside the sequential connection lane.
@@ -152,7 +157,7 @@ preview.
   `ReaderProfileState` refuses unknown IDs from a newer reader instead of
   dropping them, so the app never writes back a document that loses choices.
 - The editor keeps a draft against the loaded profile; reloads never discard
-  unsent edits. Send to reader posts the whole document once with the loaded
+  unsent edits. Apply posts the whole document once with the loaded
   generation (compare-and-swap). A 409 reloads the reader's version and asks
   for review; nothing is retried automatically.
 - The canvas shows the Home or Daily Brief frame drawn by the firmware's own
@@ -162,8 +167,13 @@ preview.
   capture is not yet measured. When the renderer or font is unavailable, or
   the sleep mode is the reader's own sleep screen, the labelled layout
   schematic is shown instead.
-- Changes apply the next time Pocket Daily opens on the reader, which the
-  status line states. Demo edits locally and sends nothing.
+- The reader redraws Home and Sleep from a saved profile when Pocket Daily
+  next paints, which is when Sync ends; the status line says so. Cards changed
+  in the same Apply are shown at once through content presentation, and
+  preferences take effect immediately. Showing Home or the Daily Brief inside
+  Sync is the proposed firmware contract `docs/pocket-screen-present-v1.md`
+  (sibling), which the app does not call yet. Demo edits locally and sends
+  nothing.
 
 ## Explicit live editing session (superseded)
 

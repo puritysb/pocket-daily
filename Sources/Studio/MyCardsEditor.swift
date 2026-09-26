@@ -3,11 +3,13 @@ import UniformTypeIdentifiers
 
 /// "My cards": up to three pages the user writes for the reader's Home (and the
 /// first one for the sleep screen), each with an optional 1-bit image such as a
-/// QR code. Edits autosave locally; sending is the Home & Sleep Send.
+/// QR code. The cards are a list dragged into page order; the selected one is
+/// edited below it. Edits autosave locally; the Home & Sleep Apply sends them.
 struct MyCardsEditor: View {
     @ObservedObject var editor: ContentEditorModel
     @ObservedObject var model: PocketModel
     @Binding var selectedID: String?
+    @Binding var drag: ReorderDrag?
     /// Called when a card is edited, so the canvas can show it.
     let onEdit: () -> Void
     @Environment(\.undoManager) private var undoManager
@@ -28,7 +30,7 @@ struct MyCardsEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            cardStrip
+            cardList
             if let index = selectedIndex {
                 fields(index)
             } else {
@@ -104,32 +106,71 @@ struct MyCardsEditor: View {
 
     // MARK: Cards
 
-    private var cardStrip: some View {
-        HStack(spacing: 8) {
+    /// One row per card in page order, then Add card.
+    private var cardList: some View {
+        VStack(spacing: 0) {
             ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
-                Button {
-                    selectedID = card.id
-                    onEdit()
-                } label: {
-                    Text("\(index + 1) · \(card.title.isEmpty ? "Untitled" : card.title)")
-                        .lineLimit(1)
-                        .frame(maxWidth: 120)
-                }
-                .buttonStyle(.bordered)
-                .tint(index == selectedIndex ? .accentColor : .secondary)
-                .accessibilityIdentifier("cards-card-\(index)")
+                cardRow(index, card)
+                Divider().padding(.leading, 10)
             }
-            Button {
-                addCard()
-            } label: {
-                Label("Add card", systemImage: "plus")
+            Button(action: addCard) {
+                Label(cards.count >= 3 ? "Up to three cards" : "Add card", systemImage: "plus")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 7)
+                    .padding(.horizontal, 10)
+                    .contentShape(Rectangle())
             }
-            .labelStyle(cards.isEmpty ? AnyLabelStyle(.titleAndIcon) : AnyLabelStyle(.iconOnly))
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .foregroundStyle(cards.count >= 3 ? Color.secondary : Color.accentColor)
             .disabled(cards.count >= 3 || editor.isBusy)
-            .help(cards.count >= 3 ? "Up to three cards" : "Add card")
             .accessibilityIdentifier("cards-add")
         }
+        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 8))
+        .overlay { RoundedRectangle(cornerRadius: 8).stroke(PocketPalette.line) }
+    }
+
+    private func cardRow(_ index: Int, _ card: ContentCard) -> some View {
+        let selected = index == selectedIndex
+        return Button {
+            selectedID = card.id
+            onEdit()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary).accessibilityHidden(true)
+                Text("\(index + 1)").monospacedDigit().foregroundStyle(.secondary)
+                Text(card.title.isEmpty ? "Untitled" : card.title).lineLimit(1)
+                Spacer(minLength: 6)
+                if !card.imagePath.isEmpty {
+                    Image(systemName: "qrcode").foregroundStyle(.secondary).accessibilityLabel("Has image")
+                }
+            }
+            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .background(selected ? PocketPalette.selection : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityActions {
+            if index > 0 { Button("Move up") { move(index, by: -1) } }
+            if index + 1 < cards.count { Button("Move down") { move(index, by: 1) } }
+        }
+        .contextMenu {
+            Button("Move Up") { move(index, by: -1) }.disabled(index == 0)
+            Button("Move Down") { move(index, by: 1) }.disabled(index + 1 >= cards.count)
+            Divider()
+            Button("Remove Card", role: .destructive) { remove(index) }
+        }
+        .reorderable(list: "cards", id: card.id, order: cards.map(\.id), drag: $drag) { dragged, target in
+            var draft = editor.draft
+            let ids = draft.cards.map(\.id)
+            guard let from = ids.firstIndex(of: dragged), let to = ids.firstIndex(of: target) else { return }
+            draft.cards.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+            editor.edit(draft)
+            onEdit()
+        }
+        .disabled(editor.isBusy)
+        .accessibilityIdentifier("cards-card-\(index)")
     }
 
     @ViewBuilder private func fields(_ index: Int) -> some View {
@@ -137,29 +178,23 @@ struct MyCardsEditor: View {
             .textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("cards-title")
         TextField("Text", text: field(index, \.question), axis: .vertical)
-            .lineLimit(2...6)
+            .lineLimit(3...8)
             .textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("cards-text")
         TextField("Note (optional)", text: field(index, \.context), axis: .vertical)
             .lineLimit(1...3)
             .textFieldStyle(.roundedBorder)
             .accessibilityIdentifier("cards-note")
-        Text("Title \(cards[index].title.utf8.count)/24 · Text \(cards[index].question.utf8.count)/160 bytes")
-            .font(.caption2).foregroundStyle(.secondary)
-        imageControls(cards[index])
         HStack {
-            Button { move(index, by: -1) } label: { Image(systemName: "arrow.left") }
-                .disabled(index == 0)
-                .help("Earlier page")
-            Button { move(index, by: 1) } label: { Image(systemName: "arrow.right") }
-                .disabled(index + 1 >= cards.count)
-                .help("Later page")
+            Text("Title \(cards[index].title.utf8.count)/24 · Text \(cards[index].question.utf8.count)/160 bytes")
             Spacer()
             Button("Remove card", role: .destructive) { remove(index) }
+                .buttonStyle(.borderless)
                 .accessibilityIdentifier("cards-remove")
         }
-        .buttonStyle(.borderless)
-        .font(.caption)
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        imageControls(cards[index])
     }
 
     @ViewBuilder private func imageControls(_ card: ContentCard) -> some View {
@@ -445,11 +480,4 @@ private struct CardImageSheet: View {
             catch { self.error = error.localizedDescription }
         }
     }
-}
-
-/// Type-erased label style so one control can switch between styles.
-private struct AnyLabelStyle: LabelStyle {
-    private let make: (Configuration) -> AnyView
-    init<Style: LabelStyle>(_ style: Style) { make = { AnyView(Label($0).labelStyle(style)) } }
-    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }

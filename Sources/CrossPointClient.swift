@@ -98,10 +98,66 @@ struct CrashDiagnostic: Equatable, Sendable {
 struct ReaderPreferences: Equatable, Sendable {
     /// The reader's "never" value (CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES).
     static let neverSleepMinutes = 31
+    /// What the side buttons do in a book (CrossPointSettings::SIDE_BUTTON_LAYOUT).
+    enum SideButtons: Int, CaseIterable, Sendable {
+        case previousNext = 0, nextPrevious = 1, off = 2
+        var title: String {
+            switch self {
+            case .previousNext: "Up turns back"
+            case .nextPrevious: "Up turns forward"
+            case .off: "Off"
+            }
+        }
+    }
+
     var startupApp = 1
     var pocketDailySleepCover = true
     var sleepTimeoutMinutes = 10
     var fontSize = 1
+    /// Nil when the reader does not report it (firmware before 2026-09-26);
+    /// the app then neither offers nor sends it.
+    var sideButtons: SideButtons? = nil
+    var frontButtonsFollowOrientation: Bool? = nil
+
+    var hasButtonSettings: Bool { sideButtons != nil && frontButtonsFollowOrientation != nil }
+
+    /// `GET /api/pocket/v1/preferences`. The button keys are optional; a value
+    /// outside the known range hides that control rather than being sent back.
+    static func decode(_ data: Data) throws -> ReaderPreferences {
+        struct Wire: Decodable {
+            let startupApp: Int
+            let pocketDailySleepCover: Int
+            let sleepTimeoutMinutes: Int
+            let fontSize: Int
+            let sideButtonLayout: Int?
+            let frontButtonFollowOrientation: Int?
+        }
+        let wire = try JSONDecoder().decode(Wire.self, from: data)
+        var preferences = ReaderPreferences(
+            startupApp: wire.startupApp,
+            pocketDailySleepCover: wire.pocketDailySleepCover != 0,
+            sleepTimeoutMinutes: wire.sleepTimeoutMinutes,
+            fontSize: wire.fontSize
+        )
+        preferences.sideButtons = wire.sideButtonLayout.flatMap(SideButtons.init(rawValue:))
+        preferences.frontButtonsFollowOrientation = wire.frontButtonFollowOrientation.flatMap {
+            $0 == 0 || $0 == 1 ? $0 == 1 : nil
+        }
+        return preferences
+    }
+
+    /// `POST /api/pocket/v1/preferences`; button keys only when the reader reported them.
+    func requestBody() throws -> Data {
+        var body: [String: Int] = [
+            "startupApp": startupApp,
+            "pocketDailySleepCover": pocketDailySleepCover ? 1 : 0,
+            "sleepTimeoutMinutes": sleepTimeoutMinutes,
+            "fontSize": fontSize,
+        ]
+        if let sideButtons { body["sideButtonLayout"] = sideButtons.rawValue }
+        if let frontButtonsFollowOrientation { body["frontButtonFollowOrientation"] = frontButtonsFollowOrientation ? 1 : 0 }
+        return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
 }
 
 enum CrashReportArchive {
@@ -123,13 +179,6 @@ enum CrashReportArchive {
         return base.appendingPathComponent("Pocket", isDirectory: true)
             .appendingPathComponent("crash-reports", isDirectory: true)
     }
-}
-
-private struct PocketPreferencesResponse: Decodable {
-    let startupApp: Int
-    let pocketDailySleepCover: Int
-    let sleepTimeoutMinutes: Int
-    let fontSize: Int
 }
 
 private struct PocketCommitResponse: Decodable {
@@ -887,20 +936,15 @@ actor CrossPointClient {
         return CrashDiagnostic(report: report)
     }
 
-    func preferences(host: String, port: Int) async throws -> ReaderPreferences {        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
+    func preferences(host: String, port: Int) async throws -> ReaderPreferences {
+        guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
             throw ClientError.invalidAddress
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 6
         let (data, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response)
-        let preferences = try JSONDecoder().decode(PocketPreferencesResponse.self, from: data)
-        return ReaderPreferences(
-            startupApp: preferences.startupApp,
-            pocketDailySleepCover: preferences.pocketDailySleepCover != 0,
-            sleepTimeoutMinutes: preferences.sleepTimeoutMinutes,
-            fontSize: preferences.fontSize
-        )
+        return try ReaderPreferences.decode(data)
     }
 
     func save(preferences: ReaderPreferences, host: String, port: Int) async throws {
@@ -911,12 +955,7 @@ actor CrossPointClient {
         request.httpMethod = "POST"
         request.timeoutInterval = 6
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "startupApp": preferences.startupApp,
-            "pocketDailySleepCover": preferences.pocketDailySleepCover ? 1 : 0,
-            "sleepTimeoutMinutes": preferences.sleepTimeoutMinutes,
-            "fontSize": preferences.fontSize,
-        ])
+        request.httpBody = try preferences.requestBody()
         let (_, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response)
     }

@@ -6,15 +6,15 @@ Pocket Daily is a local-first companion for separately obtained X3/X4-class e-pa
 
 1. Launch Pocket Daily. It opens on **Home & Sleep**.
 2. Open **Reader** (a tab on iPhone; the panel on the right on iPad and Mac) and choose **Try demo**.
-3. On **Home & Sleep**, change the Home items, weather panel or sleep sections. The preview is drawn by the reader's own layout code with a sample card and built-in sample content and is captioned as sample content; nothing in it is read from a device. **My cards** (in the same editor) holds a sample card; its image menu makes a QR code on the device. Under **Weather and events**, typing a city fetches Apple Weather for that city (no location permission); turning on calendar events asks for Calendar access and reads only today's events, which are sent to a connected reader and nowhere else.
-4. Reader settings are populated in demo mode. Send, applying settings and sending files are intentionally disabled because no physical reader is connected.
+3. On **Home & Sleep**, switch between the **Home** and **Sleep** screens above the preview, then turn Home pages or sleep sections on and off, drag them into order, or move the weather panel. The preview is drawn by the reader's own layout code with a sample card and built-in sample content and is captioned as sample content; nothing in it is read from a device. **My cards** (opened from its Home page) holds a sample card; its image menu makes a QR code on the device. Under **Weather and events**, typing a city fetches Apple Weather for that city (no location permission); turning on calendar events asks for Calendar access and reads only today's events, which are sent to a connected reader and nowhere else.
+4. Reader settings are populated in demo mode. Apply, applying settings and sending files are intentionally disabled because no physical reader is connected.
 5. Choose **Exit demo** under Reader to return to normal discovery.
 
 The submitted screenshot build can also be launched with `--demo` by the development team; reviewers do not need launch arguments because the same mode is visible in the interface.
 
 ## Live hardware flow
 
-1. Prepare a file with Choose… under Files before switching networks. Firmware requires
+1. Prepare a file with Add → Choose a file… under Files before switching networks. Firmware requires
    acknowledgement and is validated before entering the offline queue.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
    choose Find on same Wi-Fi. This requests local-network access without BLE or

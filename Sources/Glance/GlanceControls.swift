@@ -50,7 +50,7 @@ struct GlanceControls: View {
     }
 
     /// Weather and events go to the reader on their own (on connection, after
-    /// a refresh, with Send); this says what happened and offers a resend.
+    /// a refresh, with Apply); this says what happened and offers a retry.
     @ViewBuilder private var deliveryStatus: some View {
         if model.readerStatus != nil, !model.isDemoMode, !model.canSendGlance {
             Label("Weather and events need reader firmware \(FirmwareGuidance.minimumRecommended) or later. Use Update reader in the Reader panel.", systemImage: "exclamationmark.triangle")
@@ -70,11 +70,15 @@ struct GlanceControls: View {
                 }
                 .font(.caption2)
                 Spacer()
-                Button("Send now") { model.refreshGlance(force: true) }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                    .disabled(model.isWorking)
-                    .accessibilityIdentifier("glance-send")
+                // Delivery is automatic (and part of Apply); a manual send is
+                // only offered to recover from a failed one.
+                if model.glanceError != nil {
+                    Button("Retry") { model.refreshGlance(force: true) }
+                        .buttonStyle(.borderless)
+                        .font(.caption)
+                        .disabled(model.isWorking)
+                        .accessibilityIdentifier("glance-send")
+                }
             }
         }
     }

@@ -661,60 +661,10 @@ private struct ConnectionInspector: View {
                 }
                 Spacer()
                 if model.isWorking { ProgressView().controlSize(.small) }
+                if isConnected { sessionMenu }
             }
-            Button(model.isDemoMode ? "Exit demo" : (model.readerStatus == nil ? "Find on same Wi-Fi" : "Reconnect")) {
-                if model.isDemoMode { model.exitDemoMode() } else { onConnect() }
-            }
-                .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
-                .disabled(model.isWorking || model.hasDirectSession)
-            if !model.isDemoMode {
-                HStack {
-                    Button(model.hasDirectSession ? "Reconnect directly" : "Connect directly") {
-                        confirmingDirectConnection = true
-                    }
-                    .disabled(model.isWorking || model.readerStatus != nil)
-                    Spacer()
-                    if model.readerStatus != nil || model.hasDirectSession {
-                        Button("End session") { nearby.disconnect(); model.endConnection() }
-                            .disabled(model.isWorking)
-                    } else {
-                        Button("Try demo") { nearby.disconnect(); model.enterDemoMode() }
-                            .accessibilityIdentifier("try-demo")
-                    }
-                }
-                .buttonStyle(.borderless)
-                .font(.callout)
-                .alert("Connect to the reader’s temporary Wi-Fi?", isPresented: $confirmingDirectConnection) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Connect directly") {
-                        model.beginDirectConnection()
-                        if !model.resumeDirectConnection() {
-                            nearby.scan()
-                            // Permission/radio failures may be synchronous and
-                            // identical to the previous state (no onChange).
-                            if let message = nearby.state.failureMessage {
-                                model.directDiscoveryFailed(message)
-                            }
-                        }
-                    }
-                } message: {
-                    Text("Your Wi-Fi will switch to the reader. Prepare cloud files first; internet may be unavailable. Keep Pocket Daily open during transfer.")
-                }
-                if model.readerStatus != nil, !model.hasDirectSession { updateRow }
-                DisclosureGroup("How to connect", isExpanded: $showingHelp) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("**Same Wi-Fi** · On the reader: Pocket Daily → Sync → Same Wi-Fi. This device stays on its network.")
-                        Text("**Direct** · On the reader choose Direct connection, then Connect directly here. Works without a router.")
-                        Text("Keep Sync open on the reader while you send. Older firmware calls these Join a Network and Nearby Sync.")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 4)
-                }
-                .font(.caption)
-            }
+            actions
+            if model.readerUpdateState != .idle { updateProgress }
             if let lease = nearby.hotspotLease, model.manualHotspotFallback {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))
@@ -737,28 +687,111 @@ private struct ConnectionInspector: View {
                 .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: 8))
             }
         }
+        .alert("Connect to the reader’s temporary Wi-Fi?", isPresented: $confirmingDirectConnection) {
+            Button("Cancel", role: .cancel) {}
+            Button("Connect directly") {
+                model.beginDirectConnection()
+                if !model.resumeDirectConnection() {
+                    nearby.scan()
+                    // Permission/radio failures may be synchronous and
+                    // identical to the previous state (no onChange).
+                    if let message = nearby.state.failureMessage {
+                        model.directDiscoveryFailed(message)
+                    }
+                }
+            }
+        } message: {
+            Text("Your Wi-Fi will switch to the reader. Prepare cloud files first; internet may be unavailable. Keep Pocket Daily open during transfer.")
+        }
     }
 
-    /// Downloads the latest official firmware only when tapped; the reader
-    /// still asks before installing it.
-    private var updateRow: some View {
-        HStack {
-            switch model.readerUpdateState {
-            case .idle:
-                Button("Update reader…", action: onUpdateReader)
+    private var isConnected: Bool { model.readerStatus != nil && !model.isDemoMode }
+
+    /// Only what makes sense now: leave demo; connect (and how); or, once
+    /// connected, nothing here, since session actions sit in the ⋯ menu.
+    @ViewBuilder private var actions: some View {
+        if model.isDemoMode {
+            Button("Exit demo") { model.exitDemoMode() }
+                .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+                .disabled(model.isWorking)
+        } else if model.hasDirectSession, model.readerStatus == nil {
+            Button("Reconnect directly") { confirmingDirectConnection = true }
+                .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+                .disabled(model.isWorking)
+            Button("End session") { nearby.disconnect(); model.endConnection() }
+                .buttonStyle(.borderless).font(.callout)
+                .disabled(model.isWorking)
+        } else if model.readerStatus == nil {
+            Button("Find on same Wi-Fi", action: onConnect)
+                .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+                .disabled(model.isWorking)
+            HStack {
+                Button("Connect directly") { confirmingDirectConnection = true }
+                    .disabled(model.isWorking)
+                Spacer()
+                Button("Try demo") { nearby.disconnect(); model.enterDemoMode() }
+                    .accessibilityIdentifier("try-demo")
+            }
+            .buttonStyle(.borderless)
+            .font(.callout)
+            DisclosureGroup("How to connect", isExpanded: $showingHelp) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("**Same Wi-Fi** · On the reader: Pocket Daily → Sync → Same Wi-Fi. This device stays on its network.")
+                    Text("**Direct** · On the reader choose Direct connection, then Connect directly here. Works without a router.")
+                    Text("Keep Sync open on the reader while you apply changes. Older firmware calls these Join a Network and Nearby Sync.")
+                        .foregroundStyle(.tertiary)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+            }
+            .font(.caption)
+        }
+    }
+
+    /// Session actions for a connected reader, out of the way until needed.
+    private var sessionMenu: some View {
+        Menu {
+            if model.hasDirectSession {
+                Button("Reconnect directly", systemImage: "arrow.clockwise") { confirmingDirectConnection = true }
+            } else {
+                Button("Reconnect", systemImage: "arrow.clockwise", action: onConnect)
+                Button("Update reader…", systemImage: "arrow.down.circle", action: onUpdateReader)
                     .disabled(!model.canUpdateReader)
                     .accessibilityIdentifier("update-reader")
-            case .checking:
-                ProgressView().controlSize(.small)
-                Text("Checking for firmware…").foregroundStyle(.secondary)
-            case let .downloading(version):
-                ProgressView().controlSize(.small)
-                Text("Downloading \(version)…").foregroundStyle(.secondary)
+            }
+            Divider()
+            Button("End session", systemImage: "xmark.circle", role: .destructive) {
+                nearby.disconnect()
+                model.endConnection()
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.title3)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(model.isWorking)
+        .accessibilityLabel("Reader actions")
+        .accessibilityIdentifier("reader-actions")
+    }
+
+    /// Update reader (in the ⋯ menu or the firmware notice) downloads the
+    /// latest official firmware only when tapped; the reader still asks before
+    /// installing it. This shows that download.
+    private var updateProgress: some View {
+        HStack {
+            ProgressView().controlSize(.small)
+            switch model.readerUpdateState {
+            case .idle: EmptyView()
+            case .checking: Text("Checking for firmware…")
+            case let .downloading(version): Text("Downloading \(version)…")
             }
             Spacer()
         }
-        .buttonStyle(.borderless)
         .font(.callout)
+        .foregroundStyle(.secondary)
     }
 
     private var detail: String {
@@ -802,25 +835,38 @@ private struct FilesInspector: View {
         }
     }
 
-    private var chooseButton: some View {
-        Button("Choose…", action: choose)
-            .buttonStyle(.bordered)
-            .disabled(!isEnabled)
-            .accessibilityIdentifier("choose-file")
+    /// Every way to add a file, in one place.
+    private var addMenu: some View {
+        Menu {
+            Button("Choose a file…", systemImage: "doc", action: choose)
+                .accessibilityIdentifier("choose-file")
+            Button("Write text to read…", systemImage: "square.and.pencil") { writing = true }
+                .accessibilityIdentifier("write-text")
+#if os(macOS)
+            Divider()
+            Button("Copy a file to an SD card…", systemImage: "sdcard", action: copyToSD)
+                .accessibilityIdentifier("copy-to-sd")
+#endif
+        } label: {
+            Label("Add", systemImage: "plus")
+        }
+        .fixedSize()
+        .disabled(!isEnabled)
+        .accessibilityIdentifier("files-add")
     }
 
     var body: some View {
         InspectorCard(title: "FILES", symbol: "arrow.up.doc") {
-            // The button moves under the label when the inspector is narrow.
+            // The menu moves under the label when the inspector is narrow.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
                     dropLabel.fixedSize()
                     Spacer(minLength: 0)
-                    chooseButton
+                    addMenu
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     dropLabel
-                    chooseButton
+                    addMenu
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -836,14 +882,9 @@ private struct FilesInspector: View {
                 return true
             } isTargeted: { targeted = $0 }
             .opacity(isEnabled ? 1 : 0.55)
-            Button("Write text to read…", systemImage: "square.and.pencil") { writing = true }
-                .buttonStyle(.borderless)
-                .font(.callout)
-                .disabled(!isEnabled)
-                .accessibilityIdentifier("write-text")
-                .sheet(isPresented: $writing) {
-                    TextDocumentComposer { url in receive([url]) }
-                }
+            .sheet(isPresented: $writing) {
+                TextDocumentComposer { url in receive([url]) }
+            }
             if model.hasDirectSession {
                 Text("Only files already on this device can be prepared while connected directly.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -863,12 +904,6 @@ private struct FilesInspector: View {
                     }
                 }
             }
-#if os(macOS)
-            Button("Copy to an SD card…", action: copyToSD)
-                .buttonStyle(.borderless)
-                .font(.callout)
-                .disabled(model.isWorking || model.isDemoMode)
-#endif
         }
     }
 }

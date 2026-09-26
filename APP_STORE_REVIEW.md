@@ -19,14 +19,15 @@ review without an account or reader: open **Reader** (a tab on iPhone, the
 panel on the right on iPad and Mac) and choose **Try demo**. Home & Sleep then
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
-from a device. Its My cards section makes QR codes on the device. Demo
-settings are populated, but Send, file transfer and applying settings are
+from a device. Switch between the Home and Sleep screens above the preview;
+My cards open from their Home page and make QR codes on the device. Demo
+settings are populated, but Apply, file transfer and applying settings are
 disabled so review data can never be mistaken for a connected device. Cards a
 connected reader already shows can be loaded back for review.
 
 Live hardware actions require a compatible reader:
 
-1. Prepare a file with Choose… under Files before switching networks. Firmware requires
+1. Prepare a file with Add → Choose a file… under Files before switching networks. Firmware requires
    acknowledgement and is validated before entering the offline queue.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
    choose Find on same Wi-Fi. This requests local-network access without BLE or

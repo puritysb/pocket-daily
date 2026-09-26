@@ -1,8 +1,9 @@
 import XCTest
 
 /// Navigation shared by the flow and screenshot tests. The app shows tabs
-/// (Home & Sleep, Cards, Reader) on iPhone and, on wide layouts, a studio
-/// switch beside an always-visible Reader inspector.
+/// (Home & Sleep, Reader) on iPhone and, on wide layouts, the studio beside an
+/// always-visible Reader inspector. The studio switches between the Home and
+/// Sleep screens above its canvas.
 extension XCUIApplication {
     var isCompact: Bool { tabBars.firstMatch.exists }
 
@@ -36,6 +37,28 @@ extension XCUIApplication {
     /// Scrolls the studio (canvas and its controls) until `element` is hittable.
     func revealInStudio(_ element: XCUIElement, attempts: Int = 8) {
         for _ in 0..<attempts where !element.isHittable { swipeUp() }
+    }
+
+    /// Scrolls the studio back up until the canvas is in view.
+    func revealCanvas(attempts: Int = 8) {
+        let canvas = descendants(matching: .any)["profile-canvas"]
+        for _ in 0..<attempts where !canvas.isHittable { swipeDown() }
+    }
+
+    /// Shows the Home or Sleep screen of the studio.
+    func openScreen(_ screen: String) {
+        revealCanvas()
+        let segment = buttons[screen]
+        XCTAssertTrue(segment.waitForExistence(timeout: 5))
+        segment.tap()
+    }
+
+    /// Opens My cards under their Home page.
+    func openCards() {
+        let disclosure = buttons["profile-edit-cards"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 10))
+        revealInStudio(disclosure)
+        disclosure.tap()
     }
 
     /// The Home & Sleep canvas once its frame matches the current edit.

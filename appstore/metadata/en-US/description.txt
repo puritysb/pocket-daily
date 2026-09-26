@@ -1,7 +1,7 @@
 Pocket Daily is a private, local-first studio for a compatible pocket e-paper reader.
 
 Shape your reader's Home and Sleep screens
-Choose which Home pages appear and in what order (continue reading, your own cards, the daily word), place the weather panel, and compose the Daily Brief the reader shows while asleep. Weather for a city you choose comes from Apple Weather, and today's events can come from your calendars; the app sends both to the reader. The preview is drawn by the reader's own layout code with your cards and sample content, and one Send saves the layout and reader settings without reinstalling firmware.
+Choose which Home pages appear and in what order (continue reading, your own cards, the daily word), place the weather panel, and compose the Daily Brief the reader shows while asleep. Weather for a city you choose comes from Apple Weather, and today's events can come from your calendars; the app sends both to the reader. The preview is drawn by the reader's own layout code with your cards and sample content, and one Apply saves the layout, your cards and reader settings, including what the side buttons do, without reinstalling firmware.
 
 Your own cards, with QR codes
 Write up to three cards (a reading goal, a question, contact details in case the reader is lost) and add an image, a QR code made from a link or text, or an image from a link. The first card can stay on the sleep screen. If you lose your local copy, load the cards back from the reader.

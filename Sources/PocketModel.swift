@@ -318,7 +318,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
                 readerProfile = saved
                 profileSend = .saved(saved.generation)
-                post("Home & Sleep settings saved on the reader. They apply the next time Pocket Daily opens.",
+                post("Home & Sleep saved on the reader. They show when you leave Sync.",
                      tone: .success)
             } catch CrossPointClient.ProfileRequestError.conflict {
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
@@ -378,7 +378,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     }
                     outcome.succeeded = true
                     if cards == nil {
-                        post("Saved on \(hardware.rawValue). Home and sleep changes show the next time Pocket Daily opens.",
+                        post("Applied on \(hardware.rawValue). Settings take effect now; Home and Sleep changes show when you leave Sync.",
                              tone: .success)
                     }
                 } catch {
@@ -795,7 +795,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             uploadStreamResume: nil,
             diagnosticsAffordable: nil
         )
-        preferences = ReaderPreferences()
+        // Demo shows every control a current reader offers.
+        preferences = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false)
         preferencesBaseline = preferences
         crashDiagnostic = nil
         preferencesDirty = false
@@ -1140,6 +1141,18 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     func setFontSize(_ size: Int) {
         preferences?.fontSize = size
+        preferencesDirty = true
+    }
+
+    func setSideButtons(_ layout: ReaderPreferences.SideButtons) {
+        guard preferences?.sideButtons != nil else { return }
+        preferences?.sideButtons = layout
+        preferencesDirty = true
+    }
+
+    func setFrontButtonsFollowOrientation(_ enabled: Bool) {
+        guard preferences?.frontButtonsFollowOrientation != nil else { return }
+        preferences?.frontButtonsFollowOrientation = enabled
         preferencesDirty = true
     }
 

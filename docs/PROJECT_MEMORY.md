@@ -6,6 +6,20 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-26 UI/UX redesign (local build and simulator tests only): the studio
+  is organized around the reader's two screens. A Home | Sleep switch above the
+  canvas picks the screen; its modules (Home pages, sleep sections) are switched
+  on with a switch and dragged into order (`ModuleList`, `ReorderableList.swift`,
+  one shared drag record so lists never reorder each other). My cards open
+  under their Home page as a draggable card list. Reader-wide settings (text
+  size, side buttons, front buttons follow rotation) are folded underneath.
+  The single action is **Apply** (`profile-apply`). Reader panel shows only the
+  actions for its state (session actions in a ⋯ menu); Files has one Add menu
+  (choose, write text, Mac SD copy). Button settings use the additive
+  preferences keys `sideButtonLayout` (0-2) and `frontButtonFollowOrientation`
+  (sibling docs/nearby-sync-v1.md, firmware 3de13206); readers that omit them get no button controls. Home and Sleep still
+  appear on the reader only when Sync ends; drawing them inside Sync is the
+  proposed, unimplemented sibling contract docs/pocket-screen-present-v1.md.
 - 2026-09-26 Update reader (FirmwareReleaseSource): only on tap, never in
   demo or a direct session, the app reads GitHub's latest release of
   puritysb/pocket-daily-firmware, downloads firmware.bin from that repo's
