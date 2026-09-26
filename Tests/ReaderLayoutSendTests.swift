@@ -106,6 +106,54 @@ final class ReaderLayoutSendTests: XCTestCase {
         XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/preferences", "/api/pocket/v1/glance"])
     }
 
+    /// A reader that draws screens inside Sync shows the edited Home after the
+    /// profile is saved; only a layout change asks for it.
+    func testApplyShowsTheEditedScreenOnAReaderThatDrawsIt() async throws {
+        LayoutSendURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LayoutSendURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"t","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"pocketProfile":1,"screenPresentation":1}"#.utf8))
+        model.preferences = ReaderPreferences()
+        XCTAssertTrue(model.canShowScreens)
+
+        var profile = PocketProfile.defaults
+        profile.home.weather = .top
+        model.sendReaderLayout(profile: profile, cards: nil, show: .home)
+        try await waitIdle(model)
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path),
+                       ["/api/pocket/v1/profile", "/api/pocket/v1/screen/present"])
+        XCTAssertEqual(model.screenShow, .shown(.home, generation: 1))
+        XCTAssertEqual(model.messageTone, .success)
+
+        // Settings alone do not redraw a screen.
+        LayoutSendURLProtocol.reset()
+        model.setFontSize(2)
+        model.sendReaderLayout(profile: nil, cards: nil, show: .home)
+        try await waitIdle(model)
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/preferences"])
+    }
+
+    /// Readers without the capability are never asked to draw a screen.
+    func testOlderReaderIsNotAskedToDrawAScreen() async throws {
+        LayoutSendURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LayoutSendURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let model = try connectedModel(session: session)
+        defer { model.pauseForBackground() }
+        XCTAssertFalse(model.canShowScreens)
+        model.sendReaderLayout(profile: .defaults, cards: nil, show: .home)
+        try await waitIdle(model)
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/profile"])
+        XCTAssertEqual(model.screenShow, .idle)
+    }
+
     func testDemoSendsNothing() throws {
         let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO())
         model.enterDemoMode()
@@ -141,6 +189,12 @@ private final class LayoutSendURLProtocol: URLProtocol, @unchecked Sendable {
             return data
         } ?? request.httpBody ?? Data()
         Self.lock.withLock { Self.body = sent }
+        if url.path.hasPrefix("/api/pocket/v1/screen/") {
+            // The reader drew the requested screen for the requested generation.
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let value = { (name: String) in items.first { $0.name == name }?.value ?? "" }
+            body = Data(#"{"schema":1,"deviceID":"\#(value("deviceID"))","surface":"\#(value("surface"))","generation":\#(value("generation")),"phase":"rendered","failure":"none","heap":20000,"block":8000}"#.utf8)
+        }
         if url.path == "/api/pocket/v1/profile" {
             // Echo the sent document as the reader's stored profile.
             if var object = try? JSONSerialization.jsonObject(with: sent) as? [String: Any] {

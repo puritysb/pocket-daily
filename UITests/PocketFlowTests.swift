@@ -26,10 +26,12 @@ final class PocketFlowTests: XCTestCase {
         app.launchArguments = ["--demo", "--hardware=X3"]
         app.launch()
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
-        let top = app.buttons["Top"]
-        app.revealInStudio(top)
-        top.tap()
+        // Weather is a block of the Home list; its switch takes it off the screen.
+        let weather = app.switches["profile-home-weather"]
+        app.revealInStudio(weather)
+        weather.tap()
         XCTAssertTrue(app.waitForLayoutPreview(), "The weather edit was not redrawn")
+        XCTAssertFalse(app.switches["profile-next-event"].exists, "Weather settings fold away with it")
         XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
         XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
 

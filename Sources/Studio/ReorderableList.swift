@@ -79,6 +79,8 @@ where Item.AllCases: RandomAccessCollection, Item.RawValue == String {
     /// Items this reader accepts; others are not offered.
     var available: Set<Item>? = nil
     var limit: Int? = nil
+    /// False when the list sits inside another framed block.
+    var framed = true
     let identifier: String
     @Binding var drag: ReorderDrag?
     let title: (Item) -> String
@@ -100,8 +102,8 @@ where Item.AllCases: RandomAccessCollection, Item.RawValue == String {
                 if item != rows.last { Divider().padding(.leading, 10) }
             }
         }
-        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 10))
-        .overlay { RoundedRectangle(cornerRadius: 10).stroke(PocketPalette.line) }
+        .background(framed ? PocketPalette.panel : .clear, in: RoundedRectangle(cornerRadius: 10))
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(framed ? PocketPalette.line : .clear) }
     }
 
     @ViewBuilder private func header(_ item: Item) -> some View {

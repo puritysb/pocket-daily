@@ -31,6 +31,9 @@ struct CrossPointStatus: Codable, Equatable {
     var contentRead: Int? = nil
     /// Weather and events from the app (sibling docs/pocket-glance-v1.md).
     var pocketGlance: Int? = nil
+    /// Draws the saved Home or Daily Brief inside Sync
+    /// (sibling docs/pocket-screen-present-v1.md).
+    var screenPresentation: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -736,6 +739,37 @@ actor CrossPointClient {
         let body = try await contentResponse(action: "presentation", method: "GET", revision: active.revision,
                                              deviceID: deviceID, host: host, port: port)
         return try ContentPresentationReceipt.decode(body, deviceID: deviceID, active: active)
+    }
+
+    /// Asks the reader to draw a saved screen for `generation` of its profile.
+    func presentScreen(_ screen: ReaderScreen, generation: UInt32, deviceID: String, host: String,
+                       port: Int) async throws -> ScreenPresentationReceipt {
+        try await screenResponse(path: "present", method: "POST", screen: screen, generation: generation,
+                                 deviceID: deviceID, host: host, port: port)
+    }
+
+    /// Read-only receipt for a screen presentation request.
+    func screenPresentation(_ screen: ReaderScreen, generation: UInt32, deviceID: String, host: String,
+                            port: Int) async throws -> ScreenPresentationReceipt {
+        try await screenResponse(path: "presentation", method: "GET", screen: screen, generation: generation,
+                                 deviceID: deviceID, host: host, port: port)
+    }
+
+    private func screenResponse(path: String, method: String, screen: ReaderScreen, generation: UInt32,
+                                deviceID: String, host: String, port: Int) async throws -> ScreenPresentationReceipt {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/screen/" + path,
+                                 query: ["deviceID": deviceID, "surface": screen.rawValue,
+                                         "generation": String(generation)]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 10
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        try Self.requireSuccess(response, body: body)
+        return try ScreenPresentationReceipt.decode(body, deviceID: deviceID, screen: screen, generation: generation)
     }
 
     /// One chunk of one file of a published content revision. The caller

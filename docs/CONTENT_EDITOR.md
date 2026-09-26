@@ -142,10 +142,13 @@ fields beside it (below it when stacked).
 Home & Sleep is the first studio tab on every platform and edits the reader's
 Pocket Daily profile (sibling docs/pocket-profile-v1.md). Since 2026-09-26 it
 is organized around the two screens: a Home | Sleep switch above the canvas
-picks the screen, and the controls show only that screen's modules (Home
-pages, weather; sleep mode and sections). Modules are switched on and dragged
-into order (`ModuleList`, with Move Up/Down in the context menu and for
-assistive technologies). My cards open under their Home page and show the
+picks the screen, and the controls show only that screen's modules. Home is
+listed top to bottom as two blocks, Pages and Weather: dragging Weather above
+or below Pages sets `home.weather` (top/bottom), its switch sets `off`, and
+the next-event line and city/calendar settings open inside it (under the
+Weather or Today row on Sleep). Pages and sleep sections are switched on and
+dragged into order (`ModuleList`, with Move Up/Down in the context menu and
+for assistive technologies). My cards open under their Home page and show the
 selected card page on the canvas. Reader-wide settings (text size, side
 buttons, front buttons following rotation) sit folded underneath both.
 
@@ -170,10 +173,12 @@ buttons, front buttons following rotation) sit folded underneath both.
 - The reader redraws Home and Sleep from a saved profile when Pocket Daily
   next paints, which is when Sync ends; the status line says so. Cards changed
   in the same Apply are shown at once through content presentation, and
-  preferences take effect immediately. Showing Home or the Daily Brief inside
-  Sync is the proposed firmware contract `docs/pocket-screen-present-v1.md`
-  (sibling), which the app does not call yet. Demo edits locally and sends
-  nothing.
+  preferences take effect immediately. When `/api/status` reports
+  `screenPresentation: 1` (sibling docs/pocket-screen-present-v1.md), Apply
+  asks the reader to draw the screen being edited (Home, or the Daily Brief)
+  after a layout change and follows the receipt with reads only
+  (`ScreenPresenter`); cards changed in the same Apply are then not drawn
+  separately. Demo edits locally and sends nothing.
 
 ## Explicit live editing session (superseded)
 

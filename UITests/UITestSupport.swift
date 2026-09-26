@@ -34,9 +34,16 @@ extension XCUIApplication {
         }
     }
 
-    /// Scrolls the studio (canvas and its controls) until `element` is hittable.
+    /// Scrolls the studio (canvas and its controls) until `element` is hittable
+    /// and clear of the Apply bar pinned at the bottom of compact layouts.
     func revealInStudio(_ element: XCUIElement, attempts: Int = 8) {
-        for _ in 0..<attempts where !element.isHittable { swipeUp() }
+        let apply = buttons["profile-apply"]
+        func clear() -> Bool {
+            guard element.isHittable else { return false }
+            guard isCompact, apply.exists else { return true }
+            return element.frame.maxY < apply.frame.minY - 24
+        }
+        for _ in 0..<attempts where !clear() { swipeUp() }
     }
 
     /// Scrolls the studio back up until the canvas is in view.

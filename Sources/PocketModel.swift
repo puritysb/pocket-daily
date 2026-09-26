@@ -54,7 +54,11 @@ enum FirmwareInstallCheck {
 enum StatusTone: Equatable {
     case neutral
     case success
+    /// Stopped or unconfirmed partway; the message says what to check.
     case pending
+    /// Nothing is wrong: the next step happens on the reader (for example,
+    /// installing a firmware update that was just sent).
+    case onReader
     case failure
 }
 
@@ -256,6 +260,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             if readerProfile != nil, readerProfile?.deviceID != readerStatus?.deviceID || isDemoMode {
                 readerProfile = nil
                 profileSend = .idle
+                screenShow = .idle
             }
             if oldValue?.deviceID != readerStatus?.deviceID || readerStatus == nil { loadedContentRevision = nil }
         }
@@ -274,6 +279,17 @@ final class PocketModel: ObservableObject, DeviceSession {
         return loadedContentRevision
     }
     enum ProfileSendState: Equatable { case idle, sending, saved(UInt32), failed(String), conflict }
+    /// Drawing a saved Home or Daily Brief on the reader inside Sync.
+    enum ScreenShowState: Equatable {
+        case idle
+        case showing(ReaderScreen)
+        case shown(ReaderScreen, generation: UInt32)
+        case failed(ReaderScreen, String)
+    }
+    @Published private(set) var screenShow: ScreenShowState = .idle
+
+    /// The reader can draw its saved Home and Daily Brief without leaving Sync.
+    var canShowScreens: Bool { canEditReaderProfile && readerStatus?.screenPresentation == 1 }
     @Published private(set) var profileSend: ProfileSendState = .idle
     @Published private(set) var message = PocketModel.initialMessage
     @Published private(set) var messageTone: StatusTone = .neutral
@@ -336,10 +352,13 @@ final class PocketModel: ObservableObject, DeviceSession {
         if started == nil { profileSend = .idle }
     }
 
-    /// Home & Sleep's single Send: the profile and reader settings in one reader
+    /// Home & Sleep's single Apply: the profile and reader settings in one reader
     /// work item, then My cards through the content lane once those succeeded.
-    /// Each part is sent only when it changed; nothing is retried.
-    func sendReaderLayout(profile: PocketProfile?, cards: ContentRevision?) {
+    /// Each part is sent only when it changed; nothing is retried. `show` is the
+    /// screen being edited: when the reader can draw screens inside Sync, it
+    /// draws that one afterwards (and cards are not drawn separately, since
+    /// the screen shows them).
+    func sendReaderLayout(profile: PocketProfile?, cards: ContentRevision?, show: ReaderScreen? = nil) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, readerStatus != nil else { return }
         let settings = preferencesDirty ? preferences : nil
         let profile = canEditReaderProfile ? profile : nil
@@ -351,6 +370,8 @@ final class PocketModel: ObservableObject, DeviceSession {
         let generation = readerProfile?.generation ?? 0
         final class Outcome { var succeeded = false }
         let outcome = Outcome()
+        let show = canShowScreens ? show : nil
+        screenShow = .idle
         if profile != nil { profileSend = .sending }
         let settingsWork = profile == nil && settings == nil ? nil :
             startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
@@ -380,8 +401,13 @@ final class PocketModel: ObservableObject, DeviceSession {
                     }
                     outcome.succeeded = true
                     if cards == nil {
-                        post("Applied on \(hardware.rawValue). Settings take effect now; Home and Sleep changes show when you leave Sync.",
-                             tone: .success)
+                        if let show, profile != nil, let identity, let generation = readerProfile?.generation {
+                            await showScreen(show, generation: generation, deviceID: identity, host: host, port: port,
+                                             attempt: attempt)
+                        } else {
+                            post("Applied on \(hardware.rawValue). Settings take effect now; Home and Sleep changes show when you leave Sync.",
+                                 tone: .success)
+                        }
                     }
                 } catch {
                     guard attempt == connectionAttempt else { return }
@@ -399,7 +425,38 @@ final class PocketModel: ObservableObject, DeviceSession {
                 await settingsWork.value
                 guard outcome.succeeded, attempt == connectionAttempt else { return }
             }
-            applyContent(cards)
+            guard let content = applyContent(cards, drawCards: show == nil) else { return }
+            await content.value
+            guard let show, attempt == connectionAttempt, case .complete? = contentDeployment?.phase,
+                  let identity, let generation = readerProfile?.generation else { return }
+            startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                await showScreen(show, generation: generation, deviceID: identity, host: host, port: port,
+                                 attempt: attempt)
+            }
+        }
+    }
+
+    /// Inside a reader work item: asks the reader to draw `screen` for this
+    /// profile generation and follows its receipt with reads only.
+    private func showScreen(_ screen: ReaderScreen, generation: UInt32, deviceID: String, host: String, port: Int,
+                            attempt: Int) async {
+        let name = screen == .home ? "Home" : "the sleep screen"
+        screenShow = .showing(screen)
+        post("Showing \(name) on the reader…")
+        do {
+            try await ScreenPresenter.present(deviceID: deviceID, screen: screen, generation: generation, using: .init(
+                request: { try await self.client.presentScreen(screen, generation: generation, deviceID: deviceID,
+                                                               host: host, port: port) },
+                state: { try await self.client.screenPresentation(screen, generation: generation, deviceID: deviceID,
+                                                                  host: host, port: port) }))
+            guard attempt == connectionAttempt else { return }
+            screenShow = .shown(screen, generation: generation)
+            post("Applied. The reader shows \(name) now; press Back on the reader to return to Sync.", tone: .success)
+        } catch {
+            guard attempt == connectionAttempt, !(error is CancellationError) else { return }
+            screenShow = .failed(screen, error.localizedDescription)
+            post("Applied, but not shown on the reader yet. \(error.localizedDescription)", tone: .pending)
         }
     }
 
@@ -1052,7 +1109,11 @@ final class PocketModel: ObservableObject, DeviceSession {
             startHeartbeat(host: host, port: httpPort)
             return
         case let .stillPending(running, stagedVersion):
-            post("Not installed yet: the reader still runs \(running). The staged \(stagedVersion) is on the SD card as /update.bin — install it from Settings → System → SD Card Firmware Update.", tone: .pending)
+            post("""
+                 Firmware \(stagedVersion) is still waiting on the reader, which runs \(running).
+                 1. Press Back on the reader to leave Sync.
+                 2. Choose Install, or open Settings → System → SD Card Firmware Update.
+                 """, tone: .onReader)
             startHeartbeat(host: host, port: httpPort)
             return
         case .nothingStaged:
@@ -1328,7 +1389,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     mirror.apply(.transferProgress(1))
                     if isFirmware {
                         if let key, let version = item.firmwareVersion { UserDefaults.standard.set(version, forKey: key) }
-                        post(Self.stagedFirmwareMessage(version: item.firmwareVersion ?? "unknown version"), tone: .pending)
+                        post(Self.stagedFirmwareMessage(version: item.firmwareVersion ?? "unknown version"), tone: .onReader)
                     } else {
                         post("\(item.filename) was verified and published at \(path).", tone: .success)
                     }
@@ -1504,8 +1565,14 @@ final class PocketModel: ObservableObject, DeviceSession {
         if !readerEnded { post(message + " Close Sync on the reader; its session-end response was not received.", tone: .pending) }
     }
 
+    /// Sent is not installed: the reader installs only after its own confirmation.
     static func stagedFirmwareMessage(version: String) -> String {
-        "STAGED, NOT INSTALLED YET — \(version) was verified and written to /update.bin. When you leave the transfer screen, the reader asks to install it (or use Settings → System → SD Card Firmware Update). Reconnect afterwards: the app will confirm whether the reader is running it."
+        """
+        Firmware \(version) is on the reader, not installed yet.
+        1. Press Back on the reader to leave Sync.
+        2. Choose Install and wait for the reader to restart.
+        Then reconnect and the app confirms the new version. You can also install it later from Settings → System → SD Card Firmware Update.
+        """
     }
 
     /// Called by the upload client when the reader stopped answering mid-transfer.
@@ -1538,7 +1605,12 @@ final class PocketModel: ObservableObject, DeviceSession {
             do {
                 let result = try await localFiles.copy(source, root)
                 if let version = result.firmwareVersion {
-                    post("STAGED, NOT INSTALLED YET — \(version) was written to /update.bin. Install on the reader and check its version there; an SD folder does not identify the reader.", tone: .pending)
+                    post("""
+                         Firmware \(version) was copied to the SD card as update.bin, not installed yet.
+                         1. Put the card in the reader.
+                         2. Open Settings → System → SD Card Firmware Update and install it.
+                         Then check the version on the reader.
+                         """, tone: .onReader)
                 } else {
                     post("Copied to SD card: \(result.path)", tone: .success)
                 }
@@ -1583,8 +1655,10 @@ final class PocketModel: ObservableObject, DeviceSession {
         return true
     }
 
+    /// `drawCards` false stores and activates the cards without drawing the
+    /// card page (a screen that shows them is drawn next instead).
     @discardableResult
-    func applyContent(_ revision: ContentRevision) -> Task<Void, Never>? {
+    func applyContent(_ revision: ContentRevision, drawCards: Bool = true) -> Task<Void, Never>? {
         guard !isWorking, !hasReaderWork else { return nil }
         guard !isDemoMode, !isInBackground, let status = readerStatus else {
             post(isDemoMode ? "Demo mode does not change a reader." : "Connect to a reader before applying content.")
@@ -1624,7 +1698,9 @@ final class PocketModel: ObservableObject, DeviceSession {
                 try Task.checkCancellation()
                 let active = try await deployment.deploy(revision)
                 guard attempt == connectionAttempt else { return }
-                if status.contentPresentation == true {
+                if !drawCards {
+                    post("Cards applied on the reader.", tone: .success)
+                } else if status.contentPresentation == true {
                     do {
                         try await ContentPresenter.present(deviceID: identity, active: active, using: .init(
                             request: { try await self.client.presentContent(active, deviceID: identity, host: host, port: port) },

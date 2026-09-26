@@ -71,7 +71,7 @@ names one platform. Record Pass, Fail, or Blocked with a short evidence referenc
       read it for transfer.
     - With a test SD card mounted, copy the review EPUB and a valid firmware image;
       confirm the EPUB lands at the root and is never overwritten, and that the
-      firmware is published as `/update.bin` with the orange "Staged" result.
+      firmware is published as `/update.bin` with the "Next: finish on the reader" result (not installed until confirmed on the reader).
 12. **Privacy and network observation**
     - Confirm the app works without an account and sends no analytics or cloud
       traffic. Expected traffic is limited to the physical reader's local link.

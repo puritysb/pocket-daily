@@ -179,14 +179,21 @@ struct ContentView: View {
         TabView(selection: $section) {
             ForEach(StudioSection.allCases, id: \.self) { tab in
                 NavigationStack {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
-                            if tab != .reader { firmwareAdvice }
-                            studio(tab, stacked: true)
+                    Group {
+                        if tab == .layout {
+                            // Scrolls on its own so Apply stays pinned above the tab bar.
+                            ProfileStudioView(model: model, editor: profileEditor, stacked: true, pinsApplyBar: true,
+                                              header: AnyView(firmwareAdvice), initialPreview: initialPreview)
+                        } else {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    studio(tab, stacked: true)
+                                }
+                                .padding()
+                            }
+                            .scrollDismissesKeyboard(.interactively)
                         }
-                        .padding()
                     }
-                    .scrollDismissesKeyboard(.interactively)
                     .background(PocketPalette.workspace)
                     .navigationTitle(tab.rawValue)
 #if os(iOS)
@@ -429,7 +436,7 @@ private struct FirmwareTransferSheet: View {
                     .frame(width: 48, height: 48)
                     .background(PocketPalette.selection, in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(officialVersion.map { "Update reader to \($0)?" } ?? "Stage custom firmware?")
+                    Text(officialVersion.map { "Update reader to \($0)?" } ?? "Send custom firmware?")
                         .font(.title2.weight(.semibold))
                     Text(officialVersion == nil ? filename
                          : officialVersion?.contains("-") == true ? "Official Pocket Daily pre-release · firmware.bin"
@@ -443,7 +450,7 @@ private struct FirmwareTransferSheet: View {
                 SafetyLine(symbol: "checkmark.shield", text: "Use only Pocket Daily or compatible CrossPoint-based firmware for this reader profile.")
                 SafetyLine(symbol: "building.2.crop.circle", text: "Factory firmware and manufacturer services are not supported by this app.")
                 SafetyLine(symbol: "wrench.and.screwdriver", text: "Custom firmware can affect support or warranty if it causes device damage.")
-                SafetyLine(symbol: "hand.tap", text: "Pocket Daily only stages the file. Installation still requires confirmation on the reader.")
+                SafetyLine(symbol: "hand.tap", text: "Pocket Daily only sends the file. The reader installs it only after you confirm on the reader.")
             }
             .padding(16)
             .background(PocketPalette.stage, in: RoundedRectangle(cornerRadius: 14))
@@ -512,7 +519,7 @@ struct ProjectInformationSheet: View {
                         Text("No account, analytics, advertising, or cloud relay. Device discovery and transfer stay on Bluetooth and the local network. Pocket Daily does not read your coordinates.")
                     }
                     InfoSection(title: "Firmware responsibility", symbol: "externaldrive.badge.exclamationmark") {
-                        Text("Custom firmware can affect device support or warranty. Pocket Daily stages user-selected files but never installs firmware without confirmation on the reader.")
+                        Text("Custom firmware can affect device support or warranty. Pocket Daily sends firmware files you choose but never installs firmware without confirmation on the reader.")
                     }
 
                     ViewThatFits(in: .horizontal) {
@@ -577,8 +584,9 @@ private struct InfoSection<Content: View>: View {
 }
 
 /// The single place the app reports what just happened. The tone travels
-/// with the message from the model, so success, a staged-but-not-installed
-/// firmware, and failures are visually distinct without guessing from wording.
+/// with the message from the model, so success, a next step on the reader
+/// (such as installing firmware that was sent), an interrupted operation and
+/// failures are visually distinct without guessing from wording.
 private struct StatusCallout: View {
     let message: String
     let tone: StatusTone
@@ -586,7 +594,8 @@ private struct StatusCallout: View {
     private var symbol: String {
         switch tone {
         case .success: "checkmark.circle.fill"
-        case .pending: "arrow.down.circle.fill"
+        case .pending: "pause.circle.fill"
+        case .onReader: "hand.tap.fill"
         case .failure: "exclamationmark.triangle.fill"
         case .neutral: "info.circle"
         }
@@ -596,6 +605,7 @@ private struct StatusCallout: View {
         switch tone {
         case .success: .green
         case .pending: .orange
+        case .onReader: .accentColor
         case .failure: .red
         case .neutral: .secondary
         }
@@ -604,7 +614,8 @@ private struct StatusCallout: View {
     private var title: String? {
         switch tone {
         case .success: "Done"
-        case .pending: "Staged — install on the reader"
+        case .pending: nil
+        case .onReader: "Next: finish on the reader"
         case .failure: "Attention"
         case .neutral: nil
         }
