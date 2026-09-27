@@ -6,6 +6,13 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-27 Articles and EPUB: browser sharing → local review/edit → EPUB
+  preparation → explicit SD transfer → reader library and user-controlled
+  deletion. iOS share extension uses an App Group; macOS has the in-app library.
+  Contracts: docs/ARTICLES.md and docs/EPUB_ENGINE.md. A prepared article is
+  retained when the reader lacks articleLibrary support. The old X3 EPUB
+  sample opens, but long-section reading froze during user testing today;
+  physical EPUB acceptance is failed/pending diagnosis, not complete.
 - 2026-09-26 Firmware beta channel: DEBUG builds use
   `FirmwareReleaseSource.Channel.beta` (GitHub `/releases?per_page=10`,
   newest non-draft usable release, pre-releases included) and offer any other

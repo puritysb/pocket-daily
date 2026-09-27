@@ -33,6 +33,7 @@ struct CrossPointStatus: Codable, Equatable {
     var pocketGlance: Int? = nil
     /// Draws the saved Home or Daily Brief inside Sync
     /// (sibling docs/pocket-screen-present-v1.md).
+    var articleLibrary: Int? = nil
     var screenPresentation: Int? = nil
 }
 

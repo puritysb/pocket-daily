@@ -832,6 +832,7 @@ private struct FilesInspector: View {
     let copyToSD: () -> Void
     @State private var targeted = false
     @State private var writing = false
+    @State private var articles = false
 
     private var isEnabled: Bool { model.canPrepareFiles }
 
@@ -853,6 +854,8 @@ private struct FilesInspector: View {
         Menu {
             Button("Choose a file…", systemImage: "doc", action: choose)
                 .accessibilityIdentifier("choose-file")
+            Button("Articles…", systemImage: "doc.text") { articles = true }
+                .accessibilityIdentifier("articles-library")
             Button("Write text to read…", systemImage: "square.and.pencil") { writing = true }
                 .accessibilityIdentifier("write-text")
 #if os(macOS)
@@ -896,8 +899,9 @@ private struct FilesInspector: View {
             } isTargeted: { targeted = $0 }
             .opacity(isEnabled ? 1 : 0.55)
             .sheet(isPresented: $writing) {
-                TextDocumentComposer { url in receive([url]) }
+                TextDocumentComposer { url in try await model.prepareGeneratedReadingFile(url) }
             }
+            .sheet(isPresented: $articles) { ArticleLibraryView(model: model) }
             if model.hasDirectSession {
                 Text("Only files already on this device can be prepared while connected directly.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -942,48 +946,6 @@ private struct TroubleshootingInspector: View {
                   systemImage: "wrench.and.screwdriver")
                 .font(.callout.weight(.medium))
         }
-    }
-}
-
-/// Pasted or typed text becomes a UTF-8 .txt book the reader opens like any
-/// other; it is prepared exactly like a chosen file.
-private struct TextDocumentComposer: View {
-    let prepare: (URL) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var text = ""
-    @State private var error: String?
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Title", text: $title)
-                    .accessibilityIdentifier("compose-title")
-                TextEditor(text: $text)
-                    .frame(minHeight: 220)
-                    .accessibilityIdentifier("compose-text")
-                if let error { Text(error).foregroundStyle(.red).font(.caption) }
-            }
-            .formStyle(.grouped)
-            .navigationTitle("Text to read")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Prepare") { write() }
-                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .accessibilityIdentifier("compose-prepare")
-                }
-            }
-        }
-        .frame(minWidth: 420, minHeight: 420)
-    }
-
-    private func write() {
-        do {
-            let url = try TextDocument.write(title: title, text: text)
-            prepare(url)
-            dismiss()
-        } catch { self.error = error.localizedDescription }
     }
 }
 

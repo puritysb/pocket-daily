@@ -7,6 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    SYSTEM_HEADER_SEARCH_PATHS: "$(inherited) $(SDKROOT)/usr/include/libxml2"
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 1.0.0
     DEVELOPMENT_TEAM: QF36NDHYHD
@@ -27,10 +28,13 @@ targets:
         type: folder
         buildPhase: resources
     dependencies:
+      - target: PocketShare
+        embed: true
       - framework: Support/PocketUIHost/PocketUIHost.xcframework
         embed: false
       - sdk: libc++.tbd
       - sdk: libz.tbd
+      - sdk: libxml2.tbd
     preBuildScripts:
       - name: Verify Host Renderer
         script: /usr/bin/python3 "$SRCROOT/scripts/host_renderer_artifact.py" verify "$SRCROOT/Support/PocketUIHost"
@@ -65,6 +69,7 @@ targets:
     entitlements:
       path: Support/Pocket.entitlements
       properties:
+        com.apple.security.application-groups: [group.bound.serendipity.pocket.daily]
         com.apple.developer.networking.HotspotConfiguration: true
         com.apple.developer.weatherkit: true
     settings:
@@ -90,6 +95,7 @@ targets:
         embed: false
       - sdk: libc++.tbd
       - sdk: libz.tbd
+      - sdk: libxml2.tbd
     preBuildScripts:
       - name: Verify Host Renderer
         script: /usr/bin/python3 "$SRCROOT/scripts/host_renderer_artifact.py" verify "$SRCROOT/Support/PocketUIHost"
@@ -133,6 +139,39 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily
         PRODUCT_NAME: Pocket
         CODE_SIGN_ENTITLEMENTS: Support/PocketMac.entitlements
+  PocketShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Sources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      - path: Sources/Articles/ArticleRecord.swift
+      - path: Sources/Articles/ArticleExtraction.swift
+      - path: Sources/Articles/ArticleCaptureView.swift
+    dependencies:
+      - sdk: libxml2.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily.share
+        APPLICATION_EXTENSION_API_ONLY: YES
+    entitlements:
+      path: Support/PocketShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.bound.serendipity.pocket.daily]
+    info:
+      path: Support/PocketShare-Info.plist
+      properties:
+        CFBundleDisplayName: Pocket Daily
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
   PocketTests:
     type: bundle.unit-test
     platform: iOS
@@ -142,6 +181,7 @@ targets:
       - target: Pocket
     settings:
       base:
+        GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: bound.serendipity.pocket.daily.tests
   PocketUITests:
     type: bundle.ui-testing

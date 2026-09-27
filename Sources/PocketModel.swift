@@ -1355,6 +1355,9 @@ final class PocketModel: ObservableObject, DeviceSession {
                         .appendingPathComponent(item.id.uuidString).appendingPathComponent("transfer.json"), options: .atomic)
                     preparedTransfers[0] = item
                     let url = TransferPreparation.file(item)
+                    if ArticleEPUB.isFilename(url.lastPathComponent), status.articleLibrary != 1 || status.uploadStreamPort == nil {
+                        throw CrossPointClient.ClientError.unexpectedMessage("Update the reader firmware to use the Articles library. Your prepared article is kept.")
+                    }
                     let isFirmware = url.pathExtension.lowercased() == "bin"
                     if isFirmware {
                         guard PocketHardware(deviceName: status.device) != nil else {
@@ -1621,7 +1624,8 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     private func destination(for url: URL) -> String {
-        switch url.pathExtension.lowercased() {
+        if ArticleEPUB.isFilename(url.lastPathComponent) { return "/Articles" }
+        return switch url.pathExtension.lowercased() {
         case "pdl": "/pocket-daily/learning"
         default: "/"
         }

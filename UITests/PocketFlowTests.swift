@@ -179,6 +179,125 @@ final class PocketFlowTests: XCTestCase {
         wait(for: [staysOpen], timeout: 5)
     }
 
+    /// EPUB creation is local, keeps text after validation failure, and queues a durable copy.
+    func testTypedTextCanBecomeAnOfflineEPUB() {
+        let app = XCUIApplication()
+        app.launch()
+        app.open("Reader")
+        let add = app.buttons["files-add"]
+        app.revealInReader(add)
+        add.tap()
+        app.buttons["write-text"].tap()
+        let title = app.textFields["compose-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["EPUB"].isSelected)
+        let prepare = app.buttons["compose-prepare"]
+        XCTAssertFalse(prepare.isEnabled)
+        title.tap()
+        title.typeText(String(repeating: "x", count: 257))
+        let text = app.textViews["compose-text"]
+        text.tap()
+        text.typeText("An offline reading document.\n\nSecond paragraph.")
+        prepare.tap()
+        XCTAssertTrue(app.staticTexts["compose-error"].waitForExistence(timeout: 5))
+        XCTAssertTrue((text.value as? String)?.contains("Second paragraph") == true)
+        app.buttons["compose-cancel"].tap()
+        add.tap()
+        app.buttons["write-text"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        title.typeText("Offline EPUB check")
+        text.tap()
+        text.typeText("An offline reading document.\n\nSecond paragraph.")
+        prepare.tap()
+        let filename = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@",
+                                                            "Offline EPUB check-", ".epub")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 10))
+        XCTAssertFalse(springboard.alerts.firstMatch.exists)
+        app.terminate()
+        app.launch()
+        app.open("Reader")
+        XCTAssertTrue(filename.waitForExistence(timeout: 10), "Prepared EPUB must survive relaunch")
+        app.buttons["Remove"].tap()
+    }
+
+    func testSystemShareExtensionSavesTextIntoAppLibrary() {
+        let app = XCUIApplication()
+        let articleTitle = "Shared article " + UUID().uuidString.prefix(8)
+        app.launchArguments = ["--ui-test-article-share"]
+        app.launch()
+        app.buttons["Share selected article text"].tap()
+        let destination = app.cells["Pocket Daily"].firstMatch
+        XCTAssertTrue(destination.waitForExistence(timeout: 10))
+        destination.tap()
+        let title = app.textFields["article-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        title.tap()
+        title.typeText(articleTitle)
+        XCTAssertTrue((app.textViews["article-body"].value as? String)?.contains("Selected article text") == true)
+        attach(app, "article-share-capture")
+        app.buttons["article-save"].tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: title)
+        XCTAssertEqual(XCTWaiter().wait(for: [closed], timeout: 5), .completed)
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        app.open("Reader")
+        let add = app.buttons["files-add"]
+        app.revealInReader(add)
+        add.tap()
+        app.buttons["articles-library"].tap()
+        XCTAssertTrue(app.staticTexts[articleTitle].waitForExistence(timeout: 10))
+        attach(app, "article-library-shared")
+        app.buttons["Delete"].firstMatch.tap()
+        let delete = app.buttons["Delete " + articleTitle]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        delete.tap()
+    }
+
+    func testArticleCanBeSavedOfflineReviewedAndPrepared() {
+        let articleTitle = "Article check " + UUID().uuidString.prefix(8)
+        let app = XCUIApplication()
+        app.launch()
+        app.open("Reader")
+        let add = app.buttons["files-add"]
+        app.revealInReader(add)
+        add.tap()
+        app.buttons["articles-library"].tap()
+        app.buttons["Add article"].tap()
+        let title = app.textFields["article-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        title.tap()
+        title.typeText(articleTitle)
+        let body = app.textViews["article-body"]
+        body.tap()
+        body.typeText("A saved article for reading offline. Second sentence.")
+        app.buttons["article-save"].tap()
+        let saved = app.staticTexts[articleTitle].firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 10))
+        app.buttons["Prepare for reader"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Ready in Files.")).firstMatch.waitForExistence(timeout: 10))
+        attach(app, "article-library-prepared")
+        app.buttons["Done"].tap()
+        let filename = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "pd-article-", ".epub")).firstMatch
+        XCTAssertTrue(filename.waitForExistence(timeout: 10))
+        app.terminate()
+        app.launch()
+        app.open("Reader")
+        app.revealInReader(add)
+        add.tap()
+        app.buttons["articles-library"].tap()
+        XCTAssertTrue(saved.waitForExistence(timeout: 5))
+        app.buttons["Delete"].firstMatch.tap()
+        let confirmDelete = app.buttons["Delete " + articleTitle]
+        XCTAssertTrue(confirmDelete.waitForExistence(timeout: 5))
+        confirmDelete.tap()
+        let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: saved)
+        XCTAssertEqual(XCTWaiter().wait(for: [removed], timeout: 5), .completed)
+        app.buttons["Done"].tap()
+        app.buttons["Remove"].tap()
+    }
+
     /// Demo mode is the path App Review uses without hardware. It must populate
     /// the interface while leaving every device-mutating control disabled.
     func testDemoModeIsPopulatedButCannotTransfer() {
