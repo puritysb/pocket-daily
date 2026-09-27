@@ -4,6 +4,28 @@
 X3/X4 컴패니언이다.** 결정·계약: [READER_EXPANSION.md](READER_EXPANSION.md), 헌법: `AGENTS.md`.
 푸시·태그·GitHub 릴리스·스토어 제출은 하지 않았고, 이번 변경은 아직 커밋하지 않았다.
 
+## 9월 27일 3차: 펌웨어 위험 보완과 기기 간 교차 검증 (펌웨어 `feat/reader-support`)
+
+- 글자 수가 많은 장: advance 캐시를 LRU(768, 긴 문단 2,048)로 바꾸고 블록 단위로 읽는다.
+  1,596개 서로 다른 음절 장의 SD open 10,217 → 3, 줄바꿈 결과 byte 동일(host).
+- 없는 글자: 보이지 않는 문자(ZWJ·변형 선택자·피부색 등)는 그리지 않고, 이모지 연쇄는 첫 이모지 하나로,
+  없으면 OFL 대체 글꼴 PocketSymbols(Noto Emoji·Symbols 2·Math, 예약 이름 없음, 413 KB) → 작은 점선 틀.
+  섹션 캐시 버전 131(모든 책 1회 재배치). 앱은 이 글꼴을 번들하고 Reader → Files에서 보내기를 제안한다
+  (리더 재시작 후 적용). **기존 버그 수정: 무선 전송된 .cpfont가 SD 루트로 가던 것을 `/.fonts/<family>`로.**
+- reading-progress v1(서버 없는 기기 간 교환) 펌웨어 구현: 상태 `readingProgress: 1`, GET/POST
+  `/api/pocket/v1/reading`, 책을 닫을 때 XPointer 기록(메모리 부족 시 생략), 다음 열 때 "기기: N% · 이동?".
+  기존 KOReader XPath 결함도 수정(text 노드 번호, 목록 뒤 문단 번호, 엔티티).
+- 교차 검증(하드웨어 없음): 펌웨어가 앱 XPointer 해석 한국어 15/15·Frankenstein 114/114,
+  앱이 펌웨어 XPointer 258/258(첫 실행에서 `&apos;` offset 5글자 밀림을 찾아 펌웨어 `63140410`에서 수정).
+- 최종: 앱 단위 414, UI 흐름 13 + 리더 1, 두 시뮬레이터 이어 읽기, Mac 리더·실제 책·교차 검증,
+  스토어 패키지 검사 통과. 펌웨어 host 483, scripts 67, `pio run` 경고 0(flash +19 KB).
+  `pio check`는 패키지 미러가 멈춰 cppcheck 2.20 직접 실행으로 대체. Mac 가이드 책 시험은 6회 중 1회
+  원인 미확인 실패 후 4회 연속 통과(간헐 가능성 기록).
+- X3/X4에서 확인할 것: 긴 한국어 장 넘김 속도, 대체 글꼴 로딩 후 heap, 회전 텍스트 기준선, 책 닫을 때
+  위치 기록 시간(`RPS Recorded … ms`)과 절전 진입, 앱과 GET/POST(LAN·직접 연결), 이동 확인 창의 버튼·방향.
+- 남은 일: 앱 미리보기(host 렌더러)에 대체 글꼴 등록(지금은 앱 미리보기에서 이모지가 점선 틀),
+  공개 KOSync 서버 복구 후 실제 왕복, iCloud App ID 기능 활성화, 푸시·릴리스.
+
 ## 9월 27일 2차: 서버 없는 이어 읽기와 직접 검증 (앱 `feat/reader-expansion`)
 
 - 공개 KOSync 서버 `sync.koreader.rocks`가 HTTP 522(Cloudflare→원서버 연결 실패)로 응답하지 않음을 확인.

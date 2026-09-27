@@ -6,6 +6,13 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-27 Firmware feat/reader-support (host-verified only): advance-cache
+  LRU + block reads for large alphabets, invisible/emoji-cluster handling,
+  OFL PocketSymbols fallback font (bundled in the app, sent to
+  /.fonts/PocketSymbols/, used after reader restart), reading-progress v1
+  (docs/READING_PROGRESS.md). App↔firmware XPointers cross-checked both ways
+  (258/258, 15/15, 114/114). Wireless .cpfont transfers now go to
+  /.fonts/<family>/ like the SD copy. X3/X4 acceptance pending.
 - 2026-09-27 Sync without a server: the public KOSync server returned HTTP
   522 (known recurring outages), so iCloud key-value storage (same Apple ID)
   and direct reader exchange (docs/READING_PROGRESS.md, firmware
