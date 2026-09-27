@@ -1,18 +1,18 @@
 {
   "abi": 1,
   "artifactFiles": {
-    "Info.plist": "61ff43dbc9b39b022e7afede82745b29598fcc2a04ec0afbcbb0f9928f4194af",
+    "Info.plist": "22563e7aff66b9577f448db8c6531bf2273a324e7d8b4a9b00761c183ef7ee5b",
     "ios-arm64/Headers/PocketUIHost.h": "5e9158931c459cfd3d36be1d63f26c92a5a16d9e621f99362ca066c23ffdd4f9",
     "ios-arm64/Headers/module.modulemap": "a420c54741587252aa49b911f7471ae947fe47e381ba0f13b73fef6a075ae62d",
-    "ios-arm64/libpdui_host.a": "1e352d6c3806a9f6437f4d7189afbd66be75f802c509be7935c02a3d4a5f0a87",
+    "ios-arm64/libpdui_host.a": "27e452a2cb7e8af1084f70eccac5147c6225cf9e4426f5500d5d2f23174d82e3",
     "ios-arm64_x86_64-simulator/Headers/PocketUIHost.h": "5e9158931c459cfd3d36be1d63f26c92a5a16d9e621f99362ca066c23ffdd4f9",
     "ios-arm64_x86_64-simulator/Headers/module.modulemap": "a420c54741587252aa49b911f7471ae947fe47e381ba0f13b73fef6a075ae62d",
-    "ios-arm64_x86_64-simulator/libpdui_host.a": "14c62c2192bc6276914699ad8acf1602701f8db799a56cb4934f091ac11eed67",
+    "ios-arm64_x86_64-simulator/libpdui_host.a": "32f879bbcc50ff68387eab0d71182370a59a8c22ff8e48090f9c0a98177f2fb1",
     "macos-arm64_x86_64/Headers/PocketUIHost.h": "5e9158931c459cfd3d36be1d63f26c92a5a16d9e621f99362ca066c23ffdd4f9",
     "macos-arm64_x86_64/Headers/module.modulemap": "a420c54741587252aa49b911f7471ae947fe47e381ba0f13b73fef6a075ae62d",
-    "macos-arm64_x86_64/libpdui_host.a": "70d11788af8071b8f872c2100381da916e1bdf4c2c2c4e52a1c0b2664d034b29"
+    "macos-arm64_x86_64/libpdui_host.a": "2371f1cbb0106be74559ebb1f65841f69d18c8b9d0d31128e8b5fc493a460781"
   },
-  "artifactSHA256": "73e5a1d21111b8ffdbc5ec83041353f9a334d8bd26a8fd15079e8881da484b2b",
+  "artifactSHA256": "93248edd64d0b2305503740200fabe4325a25cc41af61519d9a2d2476f9f88d2",
   "cmake": "cmake version 4.4.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
   "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
   "platforms": {
@@ -45,7 +45,7 @@
   },
   "schema": 1,
   "source": {
-    "commit": "bca376e71c78631d7c526a0ef88117af453d6911",
+    "commit": "45e881afc1529137970a35112a5f2a474ae5c293",
     "files": {
       "host/CMakeLists.txt": "292a32a043fb6a7a6674214c79ffb61d7b0b15a04aead91b66e6e90e8352be7f",
       "host/HostChecksums.cpp": "b01ec49ae7c634bd893364e62e47446cbb5b1cb756392ff8f4cfe7dcc50573af",
