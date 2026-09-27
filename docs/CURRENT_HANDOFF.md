@@ -35,7 +35,9 @@ SHA-256 `c175a49c25ccdd503059d8bad66619274eeb92bc343d749f753af0df1ac450cc`.
 
 옆 버튼은 앱에서 Up turns forward → Apply 후 GET으로 `sideButtonLayout=1`을 확인했고,
 재부팅 뒤에도 유지됐다. fontSize=3, frontButtonFollowOrientation=0은 그대로다.
-물리 방향은 저장 readback과 별도로 확인한다.
+물리 방향은 저장 readback과 별도로 확인한다. 사용자는 기존 책에서 “오른쪽 버튼이 이전 페이지로 간다”고 보고했다.
+앞면 좌우 버튼인지 가로로 잡은 옆면 버튼인지, 화면 방향이 무엇인지는 확인 대기다.
+옆면 설정 1만으로 앞면 버튼 오동작 원인을 단정하거나 설정을 임의로 바꾸지 않았다.
 
 ## 검증과 한계
 
