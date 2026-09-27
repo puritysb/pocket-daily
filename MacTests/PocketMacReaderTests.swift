@@ -49,6 +49,67 @@ final class PocketMacReaderTests: XCTestCase {
         }
     }
 
+    /// Real-world books, when `TEST_RUNNER_POCKET_EPUB_SAMPLES` names a folder of
+    /// EPUB files: import, render, turn, jump to the middle, and restore that
+    /// place from its XPointer alone in a fresh reader, as another device would.
+    @MainActor
+    func testSampleBooksImportRenderAndRestore() async throws {
+        guard let folder = ProcessInfo.processInfo.environment["POCKET_EPUB_SAMPLES"] else {
+            throw XCTSkip("Set TEST_RUNNER_POCKET_EPUB_SAMPLES to a folder of EPUB files.")
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MacSamples-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storage = BookLibrary(root: root)
+        let files = try FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: folder), includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "epub" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        XCTAssertFalse(files.isEmpty)
+        for file in files {
+            let name = file.deletingPathExtension().lastPathComponent
+            let started = Date()
+            let book = try await storage.importFile(at: file)
+            XCTAssertFalse(book.title.isEmpty, name)
+            let url = try await storage.fileURL(for: book)
+            let (session, window) = open(url)
+            try await waitUntil("\(name) first page", timeout: 60) { session.phase == .ready && session.position != nil }
+            let opened = Date().timeIntervalSince(started)
+            let start = try XCTUnwrap(session.position)
+            for _ in 0..<3 { session.next(); try await Task.sleep(for: .milliseconds(250)) }
+            try await waitUntil("\(name) turns") { (session.position?.fraction ?? 0) > start.fraction }
+            session.go(toFraction: 0.5)
+            try await waitUntil("\(name) middle", timeout: 30) { abs((session.position?.fraction ?? 0) - 0.5) < 0.05 }
+            try await Task.sleep(for: .milliseconds(400))
+            let middle = try XCTUnwrap(session.position)
+            let xpointer = try XCTUnwrap(middle.xpointer, "\(name) has no XPointer at the middle")
+            let image = try await session.webView.takeSnapshot(configuration: nil)
+            attach(image, "sample-\(name)-middle")
+            XCTAssertTrue(Self.hasInk(image), "\(name) drew no text")
+            window.orderOut(nil)
+
+            let (restored, restoredWindow) = open(url, at: ReadingPosition(fraction: 0, xpointer: xpointer, cfi: nil,
+                                                                           chapter: nil, updatedAt: Date()))
+            try await waitUntil("\(name) restore", timeout: 60) { restored.phase == .ready && restored.position != nil }
+            try await Task.sleep(for: .milliseconds(400))
+            let landed = try XCTUnwrap(restored.position)
+            XCTAssertEqual(landed.fraction, middle.fraction, accuracy: 0.02,
+                           "\(name): \(xpointer) restored to \(landed.xpointer ?? "nil")")
+            print("sample \(name): opened in \(String(format: "%.1f", opened)) s, toc \(session.toc.count), middle \(xpointer), restored \(landed.xpointer ?? "nil")")
+            restoredWindow.orderOut(nil)
+        }
+    }
+
+    @MainActor
+    private func open(_ url: URL, at position: ReadingPosition? = nil) -> (ReaderSession, NSWindow) {
+        let session = ReaderSession(bookFile: url, appearance: ReaderAppearance())
+        session.open(at: position)
+        let hosting = NSHostingView(rootView: ReaderWebView(session: session).frame(width: 720, height: 900))
+        let frame = NSRect(x: 0, y: -20_000, width: 720, height: 900)
+        let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = hosting
+        window.setFrame(frame, display: true)
+        window.orderFrontRegardless()
+        return (session, window)
+    }
+
     @MainActor
     private func waitUntil(_ what: String, timeout: TimeInterval = 20, _ condition: () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
