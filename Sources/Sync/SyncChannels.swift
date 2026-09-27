@@ -102,7 +102,11 @@ struct ReaderReadingList: Decodable, Equatable, Sendable {
         guard list.v == 1, list.deviceID == deviceID, list.books.count <= 32 else {
             throw CrossPointClient.ClientError.unexpectedMessage("The reader sent reading positions for another device.")
         }
-        list.books = list.books.filter {
+        list.books = list.books.map { entry in
+            var entry = entry
+            entry.document = entry.document.lowercased()
+            return entry
+        }.filter {
             KOReaderDocumentDigest.isDigest($0.document) && $0.percentage.isFinite
                 && (0...1).contains($0.percentage)
                 && ($0.progress.map { $0.hasPrefix("/body/DocFragment[") && $0.utf8.count <= 512 } ?? true)

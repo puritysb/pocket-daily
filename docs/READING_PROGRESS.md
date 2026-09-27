@@ -43,3 +43,14 @@
   현재 진행도를 즉시 바꾸지 않는다.
 - 앱: 연결 후 목록을 받아 서재와 문서 식별값으로 맞추고, 리더의 위치를 기기별 후보로 저장한다
   (책을 열 때 제안). 앱이 더 앞선 책은 대기 위치로 보낸다. 설정 "연결 시 리더와 위치 교환"(기본 켬).
+
+### 펌웨어 구현과의 차이 (2026-09-27, 펌웨어 `d9a8e0f5`)
+
+- 펌웨어 XPointer는 항상 `[1]`과 `text()[N].off`를 쓰고, 문단 시작은 요소까지만, 장 시작은
+  `/body/DocFragment[N]/body`다. 앱 파서는 둘 다 허용한다.
+- GET은 chunked 응답이며 메모리 부족 시 503, 식별 불일치·전송 중 409를 준다. 앱은 조용히 건너뛴다.
+  `progress`가 null이면 `updated`는 0이다. 앱은 XPointer 없는 항목을 제안하지 않는다.
+- POST는 partial MD5와 파일명 식별값 모두를 받는다. `filenameDocument`는 빈 문자열일 수 있다.
+- 교차 검증: 펌웨어가 앱 XPointer를 해석(한국어 15/15, Frankenstein 114/114 동일 글자),
+  앱이 펌웨어 XPointer 258개를 해석(`MacTests` `testFirmwareXPointersResolveToTheSameText`).
+  첫 실행에서 펌웨어가 `&apos;`를 6글자로 세어 이후 offset이 5글자 밀리는 버그를 찾아 펌웨어에서 수정했다.

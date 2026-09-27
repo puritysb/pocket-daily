@@ -97,6 +97,87 @@ final class PocketMacReaderTests: XCTestCase {
         }
     }
 
+    /// Firmware-generated XPointers (sibling test/reading_progress/fixtures) must
+    /// resolve in the app's XPointer module to the same text the firmware saw.
+    @MainActor
+    func testFirmwareXPointersResolveToTheSameText() async throws {
+        let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("pocket-daily-firmware/test/reading_progress/fixtures")
+        let golden = fixtures.appendingPathComponent("firmware-xpointers.json")
+        guard FileManager.default.fileExists(atPath: golden.path) else {
+            throw XCTSkip("The sibling firmware checkout with reading-progress fixtures is not present.")
+        }
+        struct Position: Decodable { let sectionIndex: Int; let xpointer: String; let textAt: String }
+        struct Book: Decodable { let epub: String; let positions: [Position] }
+        struct Golden: Decodable { let books: [Book] }
+        let books = try JSONDecoder().decode(Golden.self, from: Data(contentsOf: golden)).books
+
+        let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 100, height: 100), configuration: {
+            let configuration = WKWebViewConfiguration()
+            configuration.setURLSchemeHandler(ReaderSchemeHandler(bookFile: golden), forURLScheme: ReaderSchemeHandler.scheme)
+            return configuration
+        }())
+        let loaded = expectation(description: "loaded")
+        let delegate = LoadDelegate { loaded.fulfill() }
+        webView.navigationDelegate = delegate
+        webView.loadHTMLString("<!doctype html><title>x</title>", baseURL: URL(string: "pocket-reader://engine/"))
+        await fulfillment(of: [loaded], timeout: 10)
+
+        var total = 0
+        var mismatches: [String] = []
+        for book in books {
+            let archive = try ZIPArchive(url: fixtures.appendingPathComponent(book.epub))
+            let sections = try Self.spine(archive)
+            for position in book.positions {
+                total += 1
+                let path = sections[position.sectionIndex]
+                let xhtml = String(decoding: try archive.data(for: XCTUnwrap(archive.entry(path)), limit: 8 << 20), as: UTF8.self)
+                let text = try await webView.callAsyncJavaScript("""
+                    const X = await import('pocket-reader://engine/xpointer.js')
+                    const doc = new DOMParser().parseFromString(xhtml, 'application/xhtml+xml')
+                    const parsed = X.parse(xpointer)
+                    if (!parsed) return 'unparsed'
+                    const { range } = X.toRange(doc, parsed)
+                    let node = range.startContainer, offset = range.startOffset, out = ''
+                    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+                    if (node.nodeType !== Node.TEXT_NODE) {
+                        const marker = node.childNodes[offset] ?? node
+                        walker.currentNode = marker
+                        node = marker.nodeType === Node.TEXT_NODE ? marker : walker.nextNode()
+                        offset = 0
+                    } else walker.currentNode = node
+                    while (node && [...out].length < 12) {
+                        out += node.data.slice(offset)
+                        offset = 0
+                        node = walker.nextNode()
+                    }
+                    return [...out].slice(0, 12).join('')
+                    """, arguments: ["xhtml": xhtml, "xpointer": position.xpointer], contentWorld: .page) as? String
+                if text != position.textAt {
+                    mismatches.append("\(book.epub) \(position.xpointer): firmware \"\(position.textAt)\" app \"\(text ?? "nil")\"")
+                }
+            }
+        }
+        print("firmware XPointers: \(total - mismatches.count)/\(total) resolve to the same text")
+        XCTAssertGreaterThan(total, 200)
+        XCTAssertTrue(mismatches.isEmpty, mismatches.prefix(10).joined(separator: "\n")); mismatches.forEach { print("MISMATCH", $0) }
+        _ = delegate
+    }
+
+    private static func spine(_ archive: ZIPArchive) throws -> [String] {
+        let container = String(decoding: try archive.data(for: XCTUnwrap(archive.entry("META-INF/container.xml")), limit: 1 << 20), as: UTF8.self)
+        let opfPath = try XCTUnwrap(container.firstMatch(of: /full-path="([^"]+)"/)).1
+        let opf = String(decoding: try archive.data(for: XCTUnwrap(archive.entry(String(opfPath))), limit: 4 << 20), as: UTF8.self)
+        var hrefs: [String: String] = [:]
+        for item in opf.matches(of: /<item\b[^>]*>/) {
+            let tag = String(item.0)
+            if let id = tag.firstMatch(of: /\bid="([^"]+)"/)?.1, let href = tag.firstMatch(of: /\bhref="([^"]+)"/)?.1 {
+                hrefs[String(id)] = EPUBPackageReader.resolve(String(href), relativeTo: String(opfPath))
+            }
+        }
+        return opf.matches(of: /<itemref\b[^>]*idref="([^"]+)"/).compactMap { hrefs[String($0.1)] }
+    }
+
     @MainActor
     private func open(_ url: URL, at position: ReadingPosition? = nil) -> (ReaderSession, NSWindow) {
         let session = ReaderSession(bookFile: url, appearance: ReaderAppearance())
@@ -139,4 +220,10 @@ final class PocketMacReaderTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+}
+
+private final class LoadDelegate: NSObject, WKNavigationDelegate {
+    let done: () -> Void
+    init(_ done: @escaping () -> Void) { self.done = done }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { done() }
 }

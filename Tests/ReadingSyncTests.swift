@@ -219,6 +219,19 @@ final class ReadingSyncTests: XCTestCase {
         XCTAssertTrue(sync.exchange(with: list, readerName: "X3", library: [ahead]).isEmpty)
     }
 
+    func testReaderListAcceptsFirmwareShapes() throws {
+        let json = """
+        {"v":1,"deviceID":"X3-1","books":[
+          {"path":"/Books/a.epub","document":"\(digest.uppercased())","filenameDocument":"","progress":null,"percentage":0.25,"updated":0,"seq":1},
+          {"path":"/Books/b.epub","document":"\(digest)","filenameDocument":"","progress":"/body/DocFragment[2]/body/p[3]","percentage":0.5,"updated":0,"seq":2}
+        ]}
+        """
+        let list = try ReaderReadingList.decode(Data(json.utf8), deviceID: "X3-1")
+        XCTAssertEqual(list.books.map(\.document), [digest, digest], "Upper-case digests are normalized")
+        XCTAssertNil(list.books[0].progress)
+        XCTAssertEqual(list.books[1].progress, "/body/DocFragment[2]/body/p[3]", "Element-only positions are kept")
+    }
+
     func testReaderListRejectsOtherReadersAndOversizedReplies() {
         let json = #"{"v":1,"deviceID":"other","books":[]}"#
         XCTAssertThrowsError(try ReaderReadingList.decode(Data(json.utf8), deviceID: "X3-1"))
