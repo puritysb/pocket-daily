@@ -13,8 +13,12 @@
   계약: [READING_PROGRESS.md](READING_PROGRESS.md), 펌웨어 `docs/reading-progress-v1.md`.
 - 외부에서 연 파일: 가져오기 성공 후 앱의 Documents/Inbox 직속 임시 사본만 삭제한다.
 - 브랜치: 앱 `feat/reader-expansion`, 펌웨어 `feat/reader-support`. 푸시·릴리스 안 함.
-- X3(`5B09AF70`) 설치 펌웨어: `1.7.0-dev-feat-reader-support-13d46fa7`. 멈춤·검은 팝업·4장 색인 실패 해결 확인.
-  진행 중: 페이지 넘김 성능(`readerPerf` 텔레메트리와 최적화) — 끝나면 바로 스테이징(사용자 요청).
+- X3(`5B09AF70`) 설치 펌웨어: `1.7.0-dev-feat-reader-support-bc158e02`. 멈춤·검은 팝업·4장 색인 실패·
+  하단 CJK 제목 잘림 해결 확인. 페이지 넘김 실측(`/api/status` `readerPerf`, File Transfer 모드):
+  시작 전 평균 약 2.0 s → 일반 넘김 0.8–1.4 s. 큰 장(니체, XHTML 150–250 KB)으로 뒤로 넘김은
+  7.8–9.6 s → 뒤쪽 장 미리 배치로 3 ms(flag 64). 남은 고정 비용: 화면 새로고침 약 445 ms,
+  AA 약 400 ms, 15쪽마다 전체 새로고침 3.2 s(설정으로 조정 가능), 색인 후 전체 새로고침 3.2 s.
+  41aea867은 실기기 회귀였고 a38eca21에서 수정했다(펌웨어 PROJECT_MEMORY 참고).
 - 남은 검증(실기기·서명 필요):
   1. 위치 왕복 정확도: 같은 책에서 X3 → iPhone → X3 후 화면 첫 문장 차이(긴 한글 문단, 삽화,
      글자 크기 변경 포함). 펌웨어는 긴 문단 안 위치를 페이지 수·문단 길이로 추정하므로 문자열
