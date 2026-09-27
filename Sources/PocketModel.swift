@@ -620,7 +620,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     private var nearbyLease: HotspotLease?
     private var readerWorkTask: Task<Void, Never>?
     private var readerWorkOwner: UUID?
-    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection }
+    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage }
     private var readerWorkKind: ReaderWorkKind?
     private var isInBackground = false
     private var expectedDeviceID: String?
@@ -861,7 +861,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             uploadChunkBytes: nil,
             uploadStreamPort: nil,
             uploadStreamResume: nil,
-            diagnosticsAffordable: nil
+            diagnosticsAffordable: nil,
+            totalHeap: 262_144
         )
         // Demo shows every control a current reader offers.
         preferences = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false)
@@ -1128,17 +1129,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         case .nothingStaged:
             break
         }
-        if nearbyLease != nil {
-            post("Direct connection ready. Optional diagnostics are deferred to leave memory for transfers. Keep this app open.")
-        } else if !diagnosticsAffordable {
-            post("Connected to \(status.device). Reader memory is low (\(status.freeHeap / 1024) KB free), so the crash report was skipped to keep transfers stable.")
-        } else if crashDiagnostic != nil {
-            post("Connected to \(status.device). A saved crash report is available below.")
-        } else if status.mode == "STA" {
-            post("Connected to \(status.device) over your Wi-Fi network — the most reliable path for firmware and content transfers.")
-        } else {
-            post("Connected to \(status.device).")
-        }
+        post(nearbyLease != nil ? "Connected directly. Keep Sync open on the reader." : "Connected to \(status.device). Ready to apply settings or send content.")
         startHeartbeat(host: host, port: httpPort)
     }
 
@@ -1187,6 +1178,78 @@ final class PocketModel: ObservableObject, DeviceSession {
                 }
             }
         }
+    }
+
+    @Published private(set) var readerFilePage: ReaderFilePage?
+    @Published private(set) var readerSpace: ReaderSpaceUsage?
+    @Published private(set) var readerFilesError: String?
+    var isReadingStorage: Bool { readerWorkKind == .storage && isWorking }
+    func cancelStorageRead() { if readerWorkKind == .storage { readerWorkTask?.cancel() } }
+
+    func refreshReaderSpace() { readerStorageOperation(folder: nil, cursor: 0, deletion: nil) }
+    func loadReaderFiles(_ folder: String, cursor: Int = 0) { readerStorageOperation(folder: folder, cursor: cursor, deletion: nil) }
+    func deleteReaderFile(_ path: String, size: Int64, folder: String, identity: String?) {
+        guard let identity, identity == readerStatus?.deviceID else { return }
+        readerStorageOperation(folder: folder, cursor: 0, deletion: (path, size))
+    }
+    private func readerStorageOperation(folder: String?, cursor: Int, deletion: (String, Int64)?) {
+        guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
+              readerStatus?.readerFiles == 1, let identity = readerStatus?.deviceID else { return }
+        let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
+        readerFilesError = nil
+        if folder != nil { readerFilePage = nil }
+        startReaderWork(attempt: attempt, kind: .storage) { [self] owner in
+            do {
+                if let deletion {
+                    let data = try await client.readerStorageRequest(endpoint: "files", identity: identity, host: host, port: port,
+                        query: ["path": deletion.0, "size": String(deletion.1), "cursor": "0"], delete: true)
+                    struct Deleted: Decodable { let deviceID: String; let deleted: Bool }
+                    let receipt = try JSONDecoder().decode(Deleted.self, from: data)
+                    guard receipt.deviceID == identity, receipt.deleted else {
+                        throw CrossPointClient.ClientError.unexpectedMessage("Deletion was not confirmed. Refresh the folder.")
+                    }
+                    guard ownsReaderWork(owner, attempt: attempt) else { return }
+                    readerSpace = nil
+                }
+                if let folder {
+                    let data = try await client.readerStorageRequest(endpoint: "files", identity: identity, host: host, port: port,
+                        query: ["path": folder, "cursor": String(cursor)])
+                    let page = try JSONDecoder().decode(ReaderFilePage.self, from: data)
+                    try page.validate(identity: identity, folder: folder, cursor: cursor)
+                    guard ownsReaderWork(owner, attempt: attempt) else { return }
+                    readerFilePage = page
+                } else {
+                    var next = 0
+                    var free: Int64 = 0
+                    var expectedTotal: Int64?
+                    repeat {
+                        let data = try await client.readerStorageRequest(endpoint: "storage", identity: identity, host: host, port: port,
+                            query: ["cursor": String(next)])
+                        let chunk = try JSONDecoder().decode(ReaderSpaceChunk.self, from: data)
+                        guard chunk.deviceID == identity, chunk.totalBytes >= 0, chunk.freeBytes >= 0,
+                              chunk.freeBytes <= chunk.totalBytes, free <= chunk.totalBytes - chunk.freeBytes,
+                              expectedTotal == nil || expectedTotal == chunk.totalBytes,
+                              chunk.nextCursor == 0 || (chunk.nextCursor == (next == 0 ? 4098 : next + 4096) && chunk.nextCursor <= 0x0FFFFFF7) else {
+                            throw CrossPointClient.ClientError.unexpectedMessage("SD card changed. Refresh usage again.")
+                        }
+                        guard ownsReaderWork(owner, attempt: attempt) else { return }
+                        expectedTotal = chunk.totalBytes
+                        free += chunk.freeBytes
+                        next = chunk.supported ? chunk.nextCursor : 0
+                        if next == 0 { readerSpace = ReaderSpaceUsage(deviceID: identity, total: chunk.totalBytes, free: chunk.supported ? free : nil) }
+                        try Task.checkCancellation()
+                    } while next != 0
+                }
+            } catch {
+                guard ownsReaderWork(owner, attempt: attempt), !Task.isCancelled else { return }
+                readerFilesError = error.localizedDescription
+            }
+        }
+    }
+
+    func destinationLabel(for item: PreparedTransfer) -> String {
+        let folder = destination(for: TransferPreparation.file(item))
+        return "SD card " + (folder == "/" ? "/" : folder + "/") + item.filename
     }
 
     func setStartupPocketDaily(_ enabled: Bool) {

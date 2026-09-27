@@ -6,6 +6,13 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-27 Reader resources/files: RAM usage replaces routine memory warnings;
+  refreshable SD usage and Sync folder browse/reading-file delete require
+  `readerFiles: 1`. Prepared content shows its SD destination. Old firmware
+  remains usable without invented usage values. Contract: docs/READER_FILES.md.
+  Identity/path/cursor validation and deletion confirmation are covered locally;
+  X3 installation and SD file-management acceptance remain pending.
+
 - 2026-09-27 Host renderer imported from the reviewed sibling source snapshot
   (see Support/PocketUIHost/PROVENANCE.json and PIN.json). Includes shared
   Home/Brief font fixes. Artifact verification, renderer tests and both

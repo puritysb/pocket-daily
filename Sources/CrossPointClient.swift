@@ -36,6 +36,8 @@ struct CrossPointStatus: Codable, Equatable {
     var screenPresentation: Int? = nil
     var transferControl: Int?
     var articleLibrary: Int? = nil
+    var totalHeap: Int? = nil
+    var readerFiles: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -994,6 +996,24 @@ actor CrossPointClient {
         request.httpBody = try preferences.requestBody()
         let (_, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response)
+    }
+
+    func readerStorageRequest(endpoint: String, identity: String, host: String, port: Int,
+                              query: [String: String], delete: Bool = false) async throws -> Data {
+        var query = query
+        query["deviceID"] = identity
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/" + endpoint, query: query) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = delete ? "DELETE" : "GET"
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        try Self.requireSuccess(response, body: body)
+        guard body.count <= 8192 else { throw ClientError.unexpectedMessage("Reader response is too large.") }
+        return body
     }
 
     /// Only hidden UUID staging files can be discarded. Published content/update.bin is never a target.

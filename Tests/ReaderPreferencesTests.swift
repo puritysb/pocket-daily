@@ -73,3 +73,33 @@ final class ReaderPreferencesTests: XCTestCase {
         XCTAssertTrue(model.preferencesDirty)
     }
 }
+
+final class ReaderFileValidationTests: XCTestCase {
+    func testValidPageAndIdentityBoundary() throws {
+        let page = ReaderFilePage(deviceID: "reader-a", path: "/Books", entries: [.init(name: "book.epub", directory: false, size: 100, deletable: true)], nextCursor: 128)
+        XCTAssertNoThrow(try page.validate(identity: "reader-a", folder: "/Books", cursor: 0))
+        XCTAssertThrowsError(try page.validate(identity: "reader-b", folder: "/Books", cursor: 0))
+        XCTAssertThrowsError(try page.validate(identity: "reader-a", folder: "/", cursor: 0))
+        XCTAssertThrowsError(try page.validate(identity: "reader-a", folder: "/Books", cursor: 128))
+    }
+    func testMalformedEntryCannotBecomeDeletePath() {
+        for name in ["../book", ".cache", "folder/book", "%2e%2e", "bad\nname"] {
+            let page = ReaderFilePage(deviceID: "a", path: "/", entries: [.init(name: name, directory: false, size: 1, deletable: true)], nextCursor: 0)
+            XCTAssertThrowsError(try page.validate(identity: "a", folder: "/", cursor: 0))
+        }
+    }
+}
+
+@MainActor
+final class ReaderFileDeletionIdentityTests: XCTestCase {
+    func testConfirmationForAnotherReaderDoesNotStartWork() throws {
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO())
+        defer { model.pauseForBackground() }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"t","device":"X3","deviceID":"reader-b","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"readerFiles":1}"#.utf8))
+        model.deleteReaderFile("/book.epub", size: 100, folder: "/", identity: "reader-a")
+        XCTAssertFalse(model.isWorking)
+        model.deleteReaderFile("/book.epub", size: 100, folder: "/", identity: nil)
+        XCTAssertFalse(model.isWorking)
+    }
+}

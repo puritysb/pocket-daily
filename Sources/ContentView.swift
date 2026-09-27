@@ -579,6 +579,7 @@ private struct ConnectionInspector: View {
                 if isConnected { sessionMenu }
             }
             actions
+            if model.readerStatus != nil { ReaderStoragePanel(model: model) }
             if let lease = nearby.hotspotLease, model.manualHotspotFallback {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))
@@ -832,7 +833,7 @@ private struct FilesInspector: View {
                 .accessibilityIdentifier("copy-to-sd")
 #endif
         } label: {
-            Label("Add", systemImage: "plus")
+            Label("Prepare content", systemImage: "plus")
         }
         .fixedSize()
         .disabled(!isEnabled)
@@ -901,6 +902,7 @@ private struct PreparedTransferQueue: View {
                 Text("Ready · \(items.count)").font(.subheadline.weight(.semibold))
                 ForEach(items) { item in
                     Text(item.filename).font(.caption).lineLimit(2)
+                    Text(model.destinationLabel(for: item)).font(.caption2).foregroundStyle(.secondary)
                 }
                 if isActive {
                     ProgressView(value: model.uploadProgress)
