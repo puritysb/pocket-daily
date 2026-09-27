@@ -37,7 +37,7 @@
 
 ## 지금 가장 먼저 해결할 문제: EPUB 읽기
 
-현재 X3는 `1.7.0-dev-main-bca376e7-wa4be8509`다. 새 Articles/transferControl 구현은 미설치다.
+마지막 확인한 X3 버전은 `1.7.0-dev-main-bca376e7-wa4be8509`다. 새 Articles/transferControl 구현은 미설치다.
 샘플 `/Pocket-EPUB-check-c175a49c.epub`에 대해 사용자가 다음을 확인했다.
 
 1. 첫 본문은 표시된다. “함께 읽습니다.” 뒤 깨진 글자는 원문의 `👩🏽‍💻` 위치다.
@@ -68,12 +68,16 @@ SHA-256 `c175a49c25ccdd503059d8bad66619274eeb92bc343d749f753af0df1ac450cc`.
   `<cmath>`, host 포맷, native cppcheck adapter로 로컬 수정했다. 원격 CI 재실행은 푸시 후 필요하다.
 - 최신 UI 스크린샷 11장과 스토어 패키지 검사 통과. iPhone UI 13개 통과.
   iPad는 공유 확장 초기 입력 대기 1회 실패 후 같은 코드 재시험 통과. 간헐 실패는 미해결이다.
-  순차 시험 중 새 SpringBoard crash 보고서는 없었으며, 이전 crash를 해결했다고 주장하지 않는다.
+  초기 순차 시험 중 새 SpringBoard crash 보고서는 없었으나, 후속 UI 시험에서는
+  Xcode 결과 수집 정지와 simulator launcher Mach -308 오류가 발생했다. 재시작/재시험은
+  통과했지만 개발 환경의 간헐 실패와 이전 SpringBoard crash 원인을 해결했다고 주장하지 않는다.
 - X4/direct, 새 Articles 삭제·전송 취소의 물리 수용, Sync CJK 헤더의 폰트/heap,
   렌더러 내부 임시 할당의 저메모리 동작은 아직 미검증이다.
 
 ## Git과 작업 환경
 
+- 후속 SD 관리는 펌웨어 `b818e819`, 앱 `31d21e8`, 화면 편집 개선은 앱 `af206a5`로 정리했다.
+  앱 렌더러도 `b818e819`에 맞춰 재생성·출처 검증했고 관련 25개 시험과 macOS 빌드가 통과했다.
 - 기능별 로컬 커밋으로 정리했다. 정확한 커밋 목록은 각 저장소 `git log`를 따른다.
   이전에 존재하던 앱 main의 로컬 17개 커밋도 푸시하지 않았다.
 - 펌웨어 SDK의 `SDCardManager.h` 변경은 추적된 `scripts/storage_sdk.patch`의 적용 결과다.

@@ -17,7 +17,7 @@ with a dated note below.
   (see Support/PocketUIHost/PROVENANCE.json and PIN.json). Includes shared
   Home/Brief font fixes. Artifact verification, renderer tests and both
   platform builds pass; provenance is rebuilt against sibling commit
-  45e881af after consolidation. No hardware acceptance is implied.
+  b818e819 after SD-management consolidation. No hardware acceptance is implied.
 - 2026-09-27 Articles and EPUB: browser sharing → local review/edit → EPUB
   preparation → explicit SD transfer → reader library and user-controlled
   deletion. iOS share extension uses an App Group; macOS has the in-app library.
