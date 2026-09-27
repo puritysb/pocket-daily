@@ -6,6 +6,16 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-27 Product direction changed (user decision): Pocket Daily is a
+  standalone, account-free e-book reader AND the X3/X4 companion; Library is
+  the first screen. Renderer: pinned foliate-js subset in Support/ReaderEngine
+  (WKWebView, app-only `pocket-reader://` scheme, CSP blocks book scripts).
+  Positions: KOReader XPointer + percentage (+ CFI locally); document identity:
+  KOReader partial MD5 (offset 0 first, matches firmware and KOReader).
+  KOReader sync is optional and recommended; never auto-jumps. Android is a
+  later target with platform-neutral contracts. Decision record and contracts:
+  docs/READER_EXPANSION.md. Store category moves to Books. Local tests/builds
+  pass; real KOSync round trip and X3/X4 continuity are unverified.
 - 2026-09-27 Reader resources/files: RAM usage replaces routine memory warnings;
   refreshable SD usage and Sync folder browse/reading-file delete require
   `readerFiles: 1`. Prepared content shows its SD destination. Old firmware

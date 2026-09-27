@@ -1,8 +1,46 @@
 # 현재 통합 상태
 
-기준: 2026-09-27. 이 세션이 앱/펌웨어 정리를 전담하고 다른 세션은 편집·커밋·기기 작업을 중단했다.
-**로컬 통합 검사는 통과했지만, X3 긴 EPUB 읽기에서 멈춤이 보고돼 실기기 수용은 실패/조사 중이다.**
-푸시·태그·GitHub 릴리스·스토어 제출은 하지 않았다.
+기준: 2026-09-27. **제품 방향이 바뀌었다: Pocket Daily는 기기 없이도 쓰는 집중형 전자책 리더이자
+X3/X4 컴패니언이다.** 결정·계약: [READER_EXPANSION.md](READER_EXPANSION.md), 헌법: `AGENTS.md`.
+푸시·태그·GitHub 릴리스·스토어 제출은 하지 않았고, 이번 변경은 아직 커밋하지 않았다.
+
+## 9월 27일 리더 확장 (앱, 미커밋)
+
+- 첫 화면이 Library다(iPhone 탭: Library · Customize reader · Reader, 넓은 화면: Library · Customize reader).
+  첫 실행 시 원본 안내 책(`WelcomeBook`)을 만든다. Articles는 Library의 선반으로 옮겼고
+  Reader → Files의 Articles 메뉴는 제거했다. 기사는 같은 `pd-article-<uuid>.epub`를 서재에서 읽고 리더로 보낸다.
+- 리더: foliate-js 고정 커밋 부분집합(`Support/ReaderEngine`, SOURCE.json)을 WKWebView에서
+  `pocket-reader://` scheme으로만 제공한다. CSP로 책 스크립트 차단, 네트워크 없음, 링크는 확인 후 브라우저.
+  즉시 페이지 넘김, 탭 영역(좌/우/가운데), 키보드·페이지 넘김 리모컨, 목차, 글자 크기·글꼴·줄 간격·여백·
+  Paper/White/Night, 넓은 화면 2단. Mac은 책마다 별도 창. 책은 컨트롤 숨김 상태로 열린다.
+- 서재: EPUB 바이트 그대로 보관, TXT/MD(UTF-8·UTF-16·CP949)는 EPUB로 변환(Markdown `#`/`##`는 장).
+  KOReader partial MD5로 중복 제거. DRM(비글꼴 암호화)은 거절. XTC는 Reader → Files 안내.
+- 위치: KOReader XPointer + 전체 진행률 + CFI. `xpointer.js`는 crengine 직렬화
+  (같은 이름 형제 1개면 번호 생략, 공백 텍스트 노드 제외, code point offset)를 따른다.
+- KOSync: 선택형·권장. 로그인/계정 생성, Keychain에 MD5 키만, 리다이렉트 거부, 8초 debounce 업로드,
+  다른 기기의 더 앞선 위치만 "이동" 제안(자동 이동 없음), 거절한 레코드는 다시 묻지 않음.
+  연결된 리더가 있으면 Sync 화면에서 비밀번호를 다시 받아 CrossPoint `/api/settings`
+  (`koServerUrl/koUsername/koPassword/koMatchMethod`)로 리더도 설정한다. 실기기 미검증.
+- 스토어: 카테고리 Books(주)/Education(부), 메타데이터·심사 노트·개인정보(PRIVACY.md, docs/privacy)·
+  공개 페이지·About·THIRD_PARTY_NOTICES 갱신. 기존 설명의 "옆 버튼 동작 저장" 문구는 UI 제거와 맞지 않아 삭제.
+  App Privacy는 "수집 없음"을 유지하되 사용자 선택 KOSync 서버 해석을 제출 시 확인할 것(privacy_answers.json).
+- 검증: 단위 406개 통과(iOS 26.5 iPhone 17 Pro 시뮬레이터; KOSync·식별값 47, 서재·동기화·엔진 20 포함),
+  iOS/macOS 빌드, UI 흐름 13개 + 리더 UI 1개 통과(App Group이 필요한 기사 시험 때문에 ad-hoc 서명
+  `CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`으로 실행). 스크린샷 14장(iPhone 5, iPad 5, Mac 4) 재생성 후
+  `validate_app_store.sh` 통과. 진행률은 페이지 시작 기준(foliate 페이지 끝 기준·한 페이지 섹션 NaN 문제 수정).
+  실제 KOSync 서버 왕복, X3/X4 이어 읽기, 리더 KOSync 설정 전송은 미검증이다.
+- 에이전트 worktree `.claude/worktrees/agent-a415f8666cd78557c`는 파일을 옮긴 뒤 남아 있다(추적 안 함).
+
+## 9월 27일 X3 긴 EPUB 멈춤 — host 원인 규명 (펌웨어, 미커밋)
+
+- host 하네스(실제 parser/layout/renderer, PocketSansWorld_12): 3번 섹션 layout은 빠름(43쪽).
+  멈춤은 렌더링: 상태 표시줄의 한글 장 제목이 `UiCjkFont`→`prewarmSdCardFont`로 페이지 글리프 캐시를
+  덮어써, X3의 grayscale 14회 strip pass마다 글리프를 SD에서 다시 읽었다(pass당 ~450 open, 페이지당 6천+).
+- 수정: `FontCacheManager`가 페이지 렌더 동안 페이지 글리프 집합을 고정. host 전체 447/447, `pio run -e default`,
+  strict cppcheck 통과. 새 시험 `test/gfx_host/SdFontPageCacheTest.cpp`.
+- 이모지 깨짐은 글꼴에 👩/🏽/💻가 없어 대체 문자로 그려지는 것(손상 아님).
+- 남은 위험: 한 장에 고유 글자 768개 초과 시 advance 캐시 overflow로 layout 중 SD 로드 급증(1,600음절에 1만 open).
+  **X3 실기기 재시험 전에는 고쳤다고 주장하지 않는다.** 절차: 섹션 캐시 삭제 → 3번 섹션 → 10회 이상 앞뒤 넘김.
 
 ## 9월 27일 후속 UI / SD 관리 변경
 
@@ -35,7 +73,7 @@
 - Sync Home/Sleep 표시 구현 및 사용자 화면 확인 완료. Sync의 책 표지는 의도된 임시 표지다.
   세부 이력: [EPUB_INTEGRATION_HANDOFF.md](EPUB_INTEGRATION_HANDOFF.md).
 
-## 지금 가장 먼저 해결할 문제: EPUB 읽기
+## 이전 기록: X3 EPUB 읽기 멈춤 보고 (host 원인은 위 항목)
 
 마지막 확인한 X3 버전은 `1.7.0-dev-main-bca376e7-wa4be8509`다. 새 Articles/transferControl 구현은 미설치다.
 샘플 `/Pocket-EPUB-check-c175a49c.epub`에 대해 사용자가 다음을 확인했다.
