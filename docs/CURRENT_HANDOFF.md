@@ -4,6 +4,20 @@
 X3/X4 컴패니언이다.** 결정·계약: [READER_EXPANSION.md](READER_EXPANSION.md), 헌법: `AGENTS.md`.
 푸시·태그·GitHub 릴리스·스토어 제출은 하지 않았고, 이번 변경은 아직 커밋하지 않았다.
 
+## 9월 28일: X3 실기기 결과 (펌웨어 `feat/reader-support`)
+
+- 멈춤: `75df8f0e` 설치 후 「나는 고양이로소이다」(일본어·한국어 대역) 페이지 넘김 멈춤 재현 안 됨.
+- 검은 팝업·빈 페이지의 세로 막대: 활성 UI pack(`studio-6c134a9368a44871`)의 `popupCornerRadius`가
+  상자를 검게 만들고 글자도 검게 둬 모든 팝업이 검은 상자였다(beta.1부터). `7191e1a7`로 수정,
+  X3에서 "Failed to index…" 문구가 읽히는 것을 사용자가 확인. 세로 막대는 가로 방향(orientation 1)의 그 팝업.
+- 4장 색인 실패: 첫 장 압축 해제의 연속 32 KiB 창이 단편화된 heap에서 할당 실패. `f8c9d118`로 8 KiB×4
+  분할, `1e338826`/`13d46fa7`로 실패 기록(`/api/status` `lastBuildError`, SD 96바이트). X3 설치
+  (`13d46fa7`) 후 4장 열림, `lastBuildError` 없음, 위치 기록에 XPointer 저장 확인.
+- 진행 중: 페이지 넘김 성능(기기 단계별 시간 `readerPerf` 텔레메트리, host 프로파일링, 출력 동일 최적화).
+- 나중: 니체 「인간적인 너무나 인간적인」(570 KB, 독일어·한국어 대역) 59% 부근 스크롤 불가 보고 —
+  File Transfer 모드에서 책과 SD 루트의 `crash_report.1.txt`/`.3.txt`를 받아 확인할 것.
+- 펌웨어 작업 트리에 formatter가 바꾼 공백 전용 파일 5개가 미커밋으로 남아 있다(사용자 결정 대기).
+
 ## 9월 27일 4차: KOReader 제외, 미리보기 대체 글꼴, X3 멈춤 조사
 
 - 사용자 결정: KOReader 동기화 연동은 이번 버전에서 제외하고 노출하지 않는다. 이어 읽기는 iCloud와
