@@ -103,6 +103,14 @@ typedef struct {
   size_t image_size;
 } pdui_card_input;
 int32_t pdui_set_cards(pdui_context* context, const pdui_card_input* cards, uint32_t count) PDUI_NOEXCEPT;
+
+// Version 1 additive: the reader's glyph-fallback font (PocketSymbols, see the
+// firmware's assets/fonts/PocketSymbols). Glyphs the preview font lacks are
+// borrowed from it, as on the reader's normal Home/Sleep screens; the preview
+// font then loads in Cached mode like those screens. Bytes (1..64MiB cpfont)
+// are copied. font=NULL,size=0 removes it and restores the bounded UI mode.
+// A rejected font leaves the previous state unchanged. Invalidates the frame.
+int32_t pdui_set_fallback_font(pdui_context* context, const uint8_t* font, size_t size) PDUI_NOEXCEPT;
 #ifdef __cplusplus
 }
 #endif

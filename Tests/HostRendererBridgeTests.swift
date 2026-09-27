@@ -128,6 +128,36 @@ final class HostRendererBridgeTests: XCTestCase {
         } catch { XCTAssertEqual(error as? HostRendererBridge.Failure, .invalidOptions) }
     }
 
+    /// Emoji and symbols the preview font lacks come from the reader's fallback
+    /// font, as on the reader; without it such a card cannot be previewed.
+    func testFallbackFontDrawsEmojiThePreviewFontLacks() async throws {
+        let previewFont = try await PreviewFontStore.shared.font()
+        let card = ContentCard(id: "emoji", title: "오늘 ✅", question: "Read 📚 → done 👩🏽‍💻")
+        let withFallback = try HostRendererBridge(font: previewFont, hardware: .x3)
+        let frame = try await withFallback.render(card: card, options: options)
+        #if canImport(UIKit)
+        let attachment = XCTAttachment(image: UIImage(cgImage: try XCTUnwrap(frame.image())))
+        attachment.name = "card-emoji-fallback"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        #endif
+
+        let without = try HostRendererBridge(font: previewFont, hardware: .x3, fallbackFont: nil)
+        do {
+            _ = try await without.render(card: card, options: options)
+            XCTFail("A card with glyphs the preview font lacks rendered without a fallback")
+        } catch { XCTAssertEqual(error as? HostRendererBridge.Failure, .render(2)) }
+
+        // Text the preview font covers renders the same in both font modes except
+        // for about one pixel row of bold Hangul (Cached, the reader's Home mode,
+        // versus BoundedUI); the fallback adds no other change.
+        let plain = ContentCard(id: "plain", title: "오늘 한 장", question: "Read one page.")
+        let covered = try await withFallback.render(card: plain, options: options)
+        let bounded = try await without.render(card: plain, options: options)
+        let differingBits = zip(covered.pixels, bounded.pixels).reduce(0) { $0 + ($1.0 ^ $1.1).nonzeroBitCount }
+        XCTAssertLessThan(differingBits, 200, "Covered text changed beyond the known one-row mode difference")
+    }
+
     func testCancellationDoesNotReturnAPreview() async throws {
         let renderer = try HostRendererBridge(font: font(), hardware: .x3)
         let task = Task { try await renderer.render(card: nil, options: options) }

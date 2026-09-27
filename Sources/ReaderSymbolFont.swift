@@ -7,6 +7,9 @@ enum ReaderSymbolFont {
     static let fileName = "PocketSymbols_12.cpfont"
     static let byteCount = 413_062
 
+    /// Loaded once; shared by every preview renderer.
+    static let bundledData: Data? = bundledURL.flatMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }
+
     static var bundledURL: URL? {
         Bundle.main.url(forResource: "ReaderFonts", withExtension: nil)?
             .appendingPathComponent("PocketSymbols/\(fileName)")

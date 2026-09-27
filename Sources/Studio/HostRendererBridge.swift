@@ -116,13 +116,17 @@ actor HostRendererBridge {
     private let hardware: PocketHardware
     private let orientation: Orientation
     private let font: Data
+    private let fallbackFont: Data?
     private var context: Context?
 
+    /// `fallbackFont` is the reader's glyph-fallback font (emoji and symbols);
+    /// by default the PocketSymbols font the app offers to install on the reader.
     init(font: Data, hardware: PocketHardware, orientation: Orientation = .portrait,
-         bundle: Bundle = .main) throws {
+         fallbackFont: Data? = ReaderSymbolFont.bundledData, bundle: Bundle = .main) throws {
         guard !font.isEmpty, font.count <= 64 * 1024 * 1024 else { throw Failure.invalidFont }
         self.bundle = bundle
         self.font = font
+        self.fallbackFont = fallbackFont
         self.hardware = hardware
         self.orientation = orientation
     }
@@ -138,6 +142,13 @@ actor HostRendererBridge {
                         bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, &pointer)
         }
         guard status == PDUI_OK, let pointer else { throw Failure.invalidFont }
+        if let fallbackFont, !fallbackFont.isEmpty {
+            // Without it the preview still renders; only fallback glyphs are missing.
+            let installed = fallbackFont.withUnsafeBytes { bytes in
+                pdui_set_fallback_font(pointer, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count)
+            }
+            if installed != PDUI_OK { NSLog("Pocket preview fallback font was rejected (%d)", installed) }
+        }
         let created = Context(pointer)
         context = created
         return created

@@ -106,3 +106,13 @@ Use exact IDs when multiple installed runtimes share a model name. An optional
 under `.build/`). Failed runs retain their temporary result bundles and report
 the location; success cleans the temporary exports after publishing screenshots.
 Do not treat a runner's diagnostic-collection phase as a completed test result.
+
+## Glyph-fallback font (2026-09-27)
+
+`HostRendererBridge` installs the bundled PocketSymbols font with
+`pdui_set_fallback_font` (firmware `75df8f0e`), so previews draw emoji and
+symbols the preview font lacks, as the reader does once the font is installed.
+The preview font then loads in Cached mode, the mode of the reader's normal
+Home/Sleep screens; without a fallback it stays in BoundedUI. For covered text
+the two modes differ by about one pixel row at the top of bold Hangul (under
+200 bits per X3 card page); `HostRendererBridgeTests` bounds that difference.
