@@ -6,6 +6,11 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-27 KOReader sync removed from this version by user decision (hidden,
+  code deleted; history before c594af7). Continue Reading = iCloud KVS + reader
+  exchange only. Previews use the PocketSymbols fallback (firmware 75df8f0e).
+  On this Mac Python cannot reach the LAN; stage firmware with /usr/bin/curl
+  (/upload to a hidden .part, then /api/pocket/v1/commit), see CURRENT_HANDOFF.
 - 2026-09-27 Firmware feat/reader-support (host-verified only): advance-cache
   LRU + block reads for large alphabets, invisible/emoji-cluster handling,
   OFL PocketSymbols fallback font (bundled in the app, sent to

@@ -4,6 +4,22 @@
 X3/X4 컴패니언이다.** 결정·계약: [READER_EXPANSION.md](READER_EXPANSION.md), 헌법: `AGENTS.md`.
 푸시·태그·GitHub 릴리스·스토어 제출은 하지 않았고, 이번 변경은 아직 커밋하지 않았다.
 
+## 9월 27일 4차: KOReader 제외, 미리보기 대체 글꼴, X3 멈춤 조사
+
+- 사용자 결정: KOReader 동기화 연동은 이번 버전에서 제외하고 노출하지 않는다. 이어 읽기는 iCloud와
+  리더 직접 교환만 쓴다(Library → Continue Reading, 토글 2개). 관련 코드·시험·스크립트 삭제, 스토어·
+  개인정보·공개 페이지 문구 정리. 앱 단위 373·UI 14 통과, 스크린샷 14장·패키지 검사 통과.
+- 앱 미리보기에 대체 글꼴 연결: 펌웨어 `75df8f0e`의 `pdui_set_fallback_font`, 렌더러 artifact 재가져오기.
+  이모지 카드가 오류 대신 그려진다. Cached/BoundedUI 차이는 굵은 한글 윗줄 약 1픽셀(시험으로 한정).
+- X3 멈춤 보고(「나는 고양이로소이다」 한국어, 여러 장 넘김 후 먹통): 기기 펌웨어는 `1.7.0-beta.1`로
+  이번 세션의 멈춤 수정(`93017b70` 페이지 글리프 캐시, `347c6ec8` 글자 수 캐시)이 없다. 재시작 원인
+  "software restart", crash report 없음 → 긴 정지 후 수동 재시작과 일치. 책 파일은 Mac에 없어 host 재현 전.
+- 수정 펌웨어 `1.7.0-dev-feat-reader-support-75df8f0e-wafd75b32`를 X3(192.168.68.73)에 스테이징함
+  (size 6,055,584, CRC32 8A05CB14 확인). **리더에서 설치 확인과 같은 책 재시험 대기.**
+- 이 Mac은 Python의 로컬 네트워크 접근이 막혀 `pocket_put.py`가 "No route to host"로 실패한다.
+  `/usr/bin/curl`은 된다: `curl -F "file=@firmware/update.bin;filename=.pocket-<id>.part" "http://<ip>/upload?path=/"`
+  후 `POST /api/pocket/v1/commit` `{staging,target:"/update.bin",size,crc32}` (앱의 HTTP 경로와 같음).
+
 ## 9월 27일 3차: 펌웨어 위험 보완과 기기 간 교차 검증 (펌웨어 `feat/reader-support`)
 
 - 글자 수가 많은 장: advance 캐시를 LRU(768, 긴 문단 2,048)로 바꾸고 블록 단위로 읽는다.
