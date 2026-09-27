@@ -45,7 +45,7 @@ capture_ios() {
   xcodebuild test \
     -project Pocket.xcodeproj -scheme Pocket -destination "id=$udid" \
     -derivedDataPath "$DERIVED_DATA" -resultBundlePath "$WORK/$folder.xcresult" \
-    -only-testing:PocketUITests CODE_SIGNING_ALLOWED=NO -quiet
+    -only-testing:PocketUITests CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
   xcrun simctl status_bar "$udid" clear >/dev/null
   xcrun simctl shutdown "$udid" >/dev/null
   publish "$folder" "$width" "$height"

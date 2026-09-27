@@ -83,3 +83,20 @@ already passed the complete suite.
 Run `scripts/validate_app_store.sh` before archive. The validator intentionally
 keeps the account, build-upload, TestFlight, and physical-review evidence in
 `submission.json` as external release work rather than source repository defects.
+
+## Article library development — 2026-09-27
+
+The working tree adds Files → Add → Articles, local article retention, explicit
+EPUB preparation, and an iOS/iPadOS Share → Pocket Daily extension. macOS uses
+Add article to paste a link or text. HTTPS page retrieval is user initiated;
+review the extracted text before saving. Link-only saves cannot be prepared
+until text is added. No reader is needed to save or review articles.
+
+The app and extension require the App Group `group.bound.serendipity.pocket.daily`.
+The extension bundle ID is `bound.serendipity.pocket.daily.share`. Registering
+these capabilities and obtaining matching distribution profiles are authorized
+account-holder actions, still pending; unsigned local builds do not verify them.
+The extension must ship with matching parent version/build and privacy manifest.
+Article sending requires reader `articleLibrary: 1` plus the streaming transport.
+See `docs/ARTICLES.md` (from repository root) for the contract and acceptance gates.
+This is not a new Store submission or a verified physical sharing flow.
