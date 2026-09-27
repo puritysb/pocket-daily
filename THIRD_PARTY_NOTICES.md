@@ -18,3 +18,13 @@ Pocket Daily does not bundle CrossPoint Reader firmware, third-party books, or
 the separately licensed Pocket Daily learning datasets in the application
 binary. Firmware and learning-pack releases carry their own license and source
 notices. User-selected files remain the user's responsibility.
+
+## Reader engine
+
+The in-app reader bundles a pinned subset of
+[foliate-js](https://github.com/johnfactotum/foliate-js) (MIT License,
+copyright 2022 John Factotum) and its vendored build of
+[zip.js](https://github.com/gildas-lormeau/zip.js) (BSD 3-Clause License,
+copyright 2023 Gildas Lormeau). The exact commit, file list and license texts
+are in `Support/ReaderEngine/`; the app shows them under About → Reader engine
+notices.

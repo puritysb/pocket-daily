@@ -1,0 +1,8 @@
+{
+  "name": "foliate-js",
+  "repository": "https://github.com/johnfactotum/foliate-js",
+  "commit": "78914aef4466eb960965702401634c2cb348e9b1",
+  "license": "MIT (foliate-js), BSD-3-Clause (vendor/zip.js from zip.js by Gildas Lormeau)",
+  "files": ["view.js", "epub.js", "epubcfi.js", "progress.js", "overlayer.js", "text-walker.js", "paginator.js", "fixed-layout.js", "vendor/zip.js", "LICENSE"],
+  "modifications": "none; unused modules (PDF, MOBI, FB2, CBZ, OPDS, TTS, dictionary, search, demo UI) are not bundled"
+}

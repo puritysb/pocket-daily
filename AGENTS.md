@@ -41,8 +41,11 @@ Current, changeable state lives in `docs/PROJECT_MEMORY.md`.
 ## Product identity
 
 Pocket Daily is one universal App Store product with iOS, iPadOS, and macOS
-targets. It is an account-free companion for X3/X4 readers running Pocket Daily
-or compatible CrossPoint-based firmware.
+targets. It is an account-free, distraction-free e-book reader that works on
+its own, and the companion for X3/X4 readers running Pocket Daily or compatible
+CrossPoint-based firmware. Both roles are first-class: reading must never
+require a device, and the companion must never be demoted to a hidden extra.
+The decision record and contracts are in `docs/READER_EXPANSION.md`.
 
 The app is independent and is not affiliated with or endorsed by CrossPoint
 Reader, Xteink, or a device manufacturer. Compatibility language must remain
@@ -51,6 +54,17 @@ manufacturer cloud service.
 
 ## Core experience
 
+- The Library and reader open first and work offline without hardware,
+  accounts, or network. Books are DRM-free EPUB (TXT and Markdown are converted
+  to EPUB on import); the library keeps book bytes unchanged so the file sent
+  to a reader is the file read in the app.
+- The reader imitates e-paper: instant page turns, minimal chrome, paper, white
+  and night pages. Book scripts never run; the engine is the pinned foliate-js
+  subset in `Support/ReaderEngine`, served only from the app's own URL scheme.
+- Positions use KOReader XPointers plus overall progress, the format shared
+  with X3/X4 firmware and KOReader. KOReader sync is optional and recommended;
+  it contacts only the server the user chose and never moves the page without
+  asking.
 - Current-network discovery never changes the Apple device Wi-Fi. Bluetooth
   pairing and a temporary private Wi-Fi lease provide an explicitly selected
   direct connection that works without a router or internet.
@@ -63,7 +77,11 @@ manufacturer cloud service.
 - Demo mode supports first-run exploration and App Review without a reader, but
   it must not mutate a device, join a network, or perform a transfer.
 - Pocket Hub, AgentDeck, accounts, analytics, and infrastructure Wi-Fi are not
-  prerequisites for the app.
+  prerequisites for the app. A KOReader sync account is an optional,
+  user-chosen service, not a Pocket Daily account.
+- Android is a future target: keep reading, sync, library, and transfer
+  contracts platform-neutral and documented; do not start it without a product
+  decision.
 
 Shared behavior belongs under `Sources/` unless a platform constraint requires
 a focused iOS or macOS implementation. Maintain a single coherent product
@@ -100,7 +118,10 @@ Never introduce automatic flashing after transport completion.
   App Store screenshots (`scripts/capture_screenshots.sh`).
 - `MacTests/`: renders the Mac App Store screenshots by hosting the shipping
   views in an off-screen window, so no Accessibility permission is needed.
-- `Support/`: entitlements and platform support files.
+- `Sources/Library`, `Sources/Reading`, `Sources/Sync`: the in-app library,
+  reader bridge, and optional KOReader sync.
+- `Support/`: entitlements and platform support files; `Support/ReaderEngine`
+  holds the pinned reader engine (see its `SOURCE.json`).
 - `project.yml`: XcodeGen source of truth.
 - `Pocket.xcodeproj/`: generated and checked-in Xcode project.
 - `appstore/`: App Store metadata, screenshots, and submission manifest.

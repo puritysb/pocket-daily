@@ -19,6 +19,14 @@ struct PocketApp: App {
 #if os(macOS)
         .defaultSize(width: 1180, height: 780)
 #endif
+#if os(macOS)
+        WindowGroup("Reader", id: "reader", for: UUID.self) { $bookID in
+            if let bookID {
+                MacReaderWindow(bookID: bookID)
+            }
+        }
+        .defaultSize(width: 760, height: 900)
+#endif
     }
 
     private var mainView: some View {
@@ -30,3 +38,17 @@ struct PocketApp: App {
 #endif
     }
 }
+
+#if os(macOS)
+private struct MacReaderWindow: View {
+    let bookID: UUID
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        ReaderContainer(bookID: bookID, library: .shared, sync: .shared) {
+            dismissWindow(id: "reader", value: bookID)
+        }
+        .frame(minWidth: 420, minHeight: 560)
+    }
+}
+#endif

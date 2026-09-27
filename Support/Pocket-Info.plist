@@ -6,6 +6,34 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>Pocket Daily</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>EPUB book</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.idpf.epub-container</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Text document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.plain-text</string>
+				<string>net.daringfireball.markdown</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,6 +50,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -36,7 +66,7 @@
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Pocket Daily reads today's events only when you turn on calendar events, to show them on your reader. They are sent only to your reader over your local connection.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Pocket Daily connects directly to your reader to sync books, study data, and firmware.</string>
+	<string>Pocket Daily connects directly to your X3/X4 reader to send books, screens, and firmware.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.</string>
 	<key>UILaunchScreen</key>

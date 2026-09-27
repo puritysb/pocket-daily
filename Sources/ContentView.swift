@@ -1,18 +1,24 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// One studio on every platform: Home & Sleep (layout, My cards and reader
-/// settings); the connection and files sit in the inspector (a Reader tab on
-/// iPhone).
+/// The Library (reading on this device) comes first; the reader companion
+/// follows: Home & Sleep (layout, My cards and reader settings), then the
+/// connection and files, which sit in the inspector on wide layouts.
 enum StudioSection: String, CaseIterable, Hashable {
-    case layout = "Customize reader", reader = "Reader"
+    case library = "Library", layout = "Customize reader", reader = "Reader"
 
     var symbol: String {
         switch self {
+        case .library: "books.vertical"
         case .layout: "rectangle.3.group"
         case .reader: "dot.radiowaves.left.and.right"
         }
     }
+}
+
+/// A library book opened for reading.
+struct ReadingTarget: Identifiable, Hashable {
+    let id: UUID
 }
 
 struct ContentView: View {
@@ -33,7 +39,13 @@ struct ContentView: View {
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController()
     @StateObject private var profileEditor = ProfileEditorState()
+    @ObservedObject private var library = LibraryModel.shared
+    @ObservedObject private var sync = ReadingSync.shared
     @State private var section: StudioSection
+    @State private var reading: ReadingTarget?
+#if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+#endif
     @State private var importing = false
     @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
@@ -44,7 +56,7 @@ struct ContentView: View {
     private let initialPreview: ProfileStudioView.PreviewSurface
 
     /// The store screenshots open a given tab and preview surface.
-    init(initialSection: StudioSection = .layout, initialPreview: ProfileStudioView.PreviewSurface = .home) {
+    init(initialSection: StudioSection = .library, initialPreview: ProfileStudioView.PreviewSurface = .home) {
         _section = State(initialValue: initialSection)
         self.initialPreview = initialPreview
     }
@@ -52,12 +64,28 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { proxy in
             if proxy.size.width >= Self.wideWidth {
-                desktopStudio(stacked: proxy.size.width - Self.inspectorWidth < Self.sideBySideWidth)
+                wideLayout(stacked: proxy.size.width - Self.inspectorWidth < Self.sideBySideWidth)
             } else {
                 compactStudio
             }
         }
         .background(PocketPalette.workspace)
+#if os(iOS)
+        .fullScreenCover(item: $reading) { target in
+            ReaderContainer(bookID: target.id, library: library, sync: sync) { reading = nil }
+        }
+#endif
+        .onOpenURL { url in
+            Task {
+                let book = await library.importFiles([url])
+                // iOS copies documents opened from other apps into Documents/Inbox;
+                // the library keeps its own copy.
+                if url.isFileURL, url.deletingLastPathComponent().lastPathComponent == "Inbox" {
+                    try? FileManager.default.removeItem(at: url)
+                }
+                if let book { open(book) }
+            }
+        }
         .modifier(TransferFilePicker(
             isPresented: $importing,
             allowedContentTypes: importAction == .sdRoot ? [.folder] : [.epub, .data],
@@ -126,6 +154,54 @@ struct ContentView: View {
 
     // MARK: Layouts
 
+    private func open(_ book: LibraryBook) {
+#if os(macOS)
+        openWindow(id: "reader", value: book.id)
+#else
+        reading = ReadingTarget(id: book.id)
+#endif
+    }
+
+    private var libraryView: some View {
+        LibraryView(model: model, library: library, sync: sync, open: open)
+    }
+
+    /// Wide windows keep the inspector beside the studio, so the companion is one tab.
+    @ViewBuilder private func wideLayout(stacked: Bool) -> some View {
+#if os(macOS)
+        // The Mac switches sections from the window's own header: a tab view there
+        // renders as a detached segmented strip and cannot host the Library toolbar.
+        VStack(spacing: 0) {
+            Picker("Section", selection: Binding(
+                get: { section == .reader ? .layout : section },
+                set: { section = $0 }
+            )) {
+                Text(StudioSection.library.rawValue).tag(StudioSection.library)
+                Text(StudioSection.layout.rawValue).tag(StudioSection.layout)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(.vertical, 10)
+            .accessibilityIdentifier("app-section")
+            Divider()
+            if section == .library { libraryView } else { desktopStudio(stacked: stacked) }
+        }
+#else
+        TabView(selection: Binding(
+            get: { section == .reader ? .layout : section },
+            set: { section = $0 }
+        )) {
+            libraryView
+                .tabItem { Label(StudioSection.library.rawValue, systemImage: StudioSection.library.symbol) }
+                .tag(StudioSection.library)
+            desktopStudio(stacked: stacked)
+                .tabItem { Label(StudioSection.layout.rawValue, systemImage: StudioSection.layout.symbol) }
+                .tag(StudioSection.layout)
+        }
+#endif
+    }
+
     private func desktopStudio(stacked: Bool) -> some View {
         HStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -162,7 +238,10 @@ struct ContentView: View {
 
     private var compactStudio: some View {
         TabView(selection: $section) {
-            ForEach(StudioSection.allCases, id: \.self) { tab in
+            libraryView
+                .tabItem { Label(StudioSection.library.rawValue, systemImage: StudioSection.library.symbol) }
+                .tag(StudioSection.library)
+            ForEach([StudioSection.layout, .reader], id: \.self) { tab in
                 NavigationStack {
                     Group {
                         if tab == .layout {
@@ -203,6 +282,7 @@ struct ContentView: View {
         case .layout: ProfileStudioView(model: model, editor: profileEditor, stacked: stacked,
                                         initialPreview: initialPreview)
         case .reader: inspector
+        case .library: libraryView
         }
     }
 
@@ -404,19 +484,22 @@ struct ProjectInformationSheet: View {
                         PocketMark()
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Pocket Daily").font(.title2.weight(.semibold))
-                            Text("Independent, local-first reader companion")
+                            Text("Independent, local-first e-book reader and reader companion")
                                 .font(.subheadline).foregroundStyle(.secondary)
                         }
                     }
 
+                    InfoSection(title: "Reading", symbol: "books.vertical") {
+                        Text("Reads DRM-free EPUB books, and text or Markdown files converted to EPUB, on this device. No reader hardware is needed.")
+                    }
                     InfoSection(title: "Compatibility", symbol: "rectangle.connected.to.line.below") {
-                        Text("Designed for X3/X4 hardware running Pocket Daily or compatible CrossPoint-based firmware. Factory firmware and manufacturer cloud services are not supported.")
+                        Text("The companion is designed for X3/X4 hardware running Pocket Daily or compatible CrossPoint-based firmware. Factory firmware and manufacturer cloud services are not supported.")
                     }
                     InfoSection(title: "Independent project", symbol: "person.crop.circle.badge.checkmark") {
                         Text("Pocket Daily is not affiliated with, sponsored by, or endorsed by CrossPoint Reader, Xteink, or any device manufacturer.")
                     }
                     InfoSection(title: "Privacy", symbol: "lock.shield") {
-                        Text("No account, analytics, advertising, or cloud relay. Device discovery and transfer stay on Bluetooth and the local network. Pocket Daily does not read your coordinates.")
+                        Text("No account, analytics, advertising, or cloud relay. Your library stays on this device. Device discovery and transfer stay on Bluetooth and the local network. Optional KOReader sync sends reading positions only to the server you choose. Pocket Daily does not read your coordinates.")
                     }
                     InfoSection(title: "Firmware responsibility", symbol: "externaldrive.badge.exclamationmark") {
                         Text("Custom firmware can affect device support or warranty. Pocket Daily offers official firmware updates and requires confirmation on the reader before installation.")
@@ -445,6 +528,7 @@ struct ProjectInformationSheet: View {
         Link("Privacy policy", destination: PocketLinks.privacy)
         Link("Open-source notices", destination: PocketLinks.notices)
         NavigationLink("Preview font notices") { PreviewFontNotices() }
+        NavigationLink("Reader engine notices") { ReaderEngineNotices() }
         Link("Support", destination: PocketLinks.support)
     }
 }
@@ -463,6 +547,28 @@ private struct PreviewFontNotices: View {
             do { notices = try await PreviewFontStore.shared.notices() }
             catch { notices = "Font notices are unavailable: \(error.localizedDescription)" }
         }
+    }
+}
+
+/// MIT and BSD notices for the bundled reader engine, read from the app bundle.
+private struct ReaderEngineNotices: View {
+    private var notices: String {
+        guard let root = Bundle.main.url(forResource: "ReaderEngine", withExtension: nil) else {
+            return "Reader engine notices are unavailable."
+        }
+        let files = [("foliate-js (MIT)", "foliate-js/LICENSE"), ("zip.js (BSD-3-Clause)", "foliate-js/vendor/zip.js.LICENSE")]
+        return files.map { title, path in
+            let text = (try? String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)) ?? "Unavailable."
+            return "\(title)\n\n\(text)"
+        }.joined(separator: "\n\n")
+    }
+
+    var body: some View {
+        ScrollView {
+            Text(notices).font(.caption).textSelection(.enabled).padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Reader engine notices")
     }
 }
 
@@ -798,7 +904,6 @@ private struct FilesInspector: View {
     let copyToSD: () -> Void
     @State private var targeted = false
     @State private var writing = false
-    @State private var articles = false
 
     private var isEnabled: Bool { model.canPrepareFiles }
 
@@ -820,8 +925,6 @@ private struct FilesInspector: View {
         Menu {
             Button("Choose a file…", systemImage: "doc", action: choose)
                 .accessibilityIdentifier("choose-file")
-            Button("Articles…", systemImage: "doc.text") { articles = true }
-                .accessibilityIdentifier("articles-library")
             Button("Write text to read…", systemImage: "square.and.pencil") { writing = true }
                 .accessibilityIdentifier("write-text")
 #if os(macOS)
@@ -867,12 +970,11 @@ private struct FilesInspector: View {
             .sheet(isPresented: $writing) {
                 TextDocumentComposer { url in try await model.prepareGeneratedReadingFile(url) }
             }
-            .sheet(isPresented: $articles) { ArticleLibraryView(model: model) }
             if model.hasDirectSession {
                 Text("Only files already on this device can be prepared while connected directly.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("Books, articles and written text are saved on the reader’s SD card.")
+            Text("Books, articles and written text are saved on the reader’s SD card. Saved articles and your books are in the Library.")
                 .font(.caption).foregroundStyle(.secondary)
             PreparedTransferQueue(model: model, kind: .content)
         }

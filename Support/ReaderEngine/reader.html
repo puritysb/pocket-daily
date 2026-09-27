@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' blob:; img-src 'self' blob: data:; font-src 'self' blob: data:; media-src blob:; frame-src 'self' blob:; connect-src 'self' blob:">
+<title>Pocket Daily Reader</title>
+<style>
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--pd-background, #f4f1ea);
+    -webkit-touch-callout: none;
+    -webkit-text-size-adjust: 100%;
+}
+foliate-view {
+    display: block;
+    position: absolute;
+    inset: var(--pd-inset-top, 0px) 0 var(--pd-inset-bottom, 0px) 0;
+}
+</style>
+<script type="module" src="reader.js"></script>
+</head>
+<body></body>
+</html>

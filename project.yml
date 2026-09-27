@@ -27,6 +27,9 @@ targets:
       - path: Support/PreviewFont
         type: folder
         buildPhase: resources
+      - path: Support/ReaderEngine
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: PocketShare
         embed: true
@@ -53,8 +56,18 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: EPUB book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.idpf.epub-container]
+          - CFBundleTypeName: Text document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.plain-text, net.daringfireball.markdown]
+        LSSupportsOpeningDocumentsInPlace: false
         NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.
-        NSLocalNetworkUsageDescription: Pocket Daily connects directly to your reader to sync books, study data, and firmware.
+        NSLocalNetworkUsageDescription: Pocket Daily connects directly to your X3/X4 reader to send books, screens, and firmware.
         NSLocationWhenInUseUsageDescription: Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
         NSCalendarsFullAccessUsageDescription: Pocket Daily reads today's events only when you turn on calendar events, to show them on your reader. They are sent only to your reader over your local connection.
         NSBonjourServices:
@@ -90,6 +103,9 @@ targets:
       - path: Support/PreviewFont
         type: folder
         buildPhase: resources
+      - path: Support/ReaderEngine
+        type: folder
+        buildPhase: resources
     dependencies:
       - framework: Support/PocketUIHost/PocketUIHost.xcframework
         embed: false
@@ -113,9 +129,18 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
-        LSApplicationCategoryType: public.app-category.education
+        LSApplicationCategoryType: public.app-category.books
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: EPUB book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.idpf.epub-container]
+          - CFBundleTypeName: Text document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.plain-text, net.daringfireball.markdown]
         NSBluetoothAlwaysUsageDescription: Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.
-        NSLocalNetworkUsageDescription: Pocket Daily connects directly to your reader to sync books, study data, and firmware.
+        NSLocalNetworkUsageDescription: Pocket Daily connects directly to your X3/X4 reader to send books, screens, and firmware.
         NSLocationUsageDescription: Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.
         NSCalendarsFullAccessUsageDescription: Pocket Daily reads today's events only when you turn on calendar events, to show them on your reader. They are sent only to your reader over your local connection.
         NSBonjourServices:
