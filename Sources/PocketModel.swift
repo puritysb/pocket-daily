@@ -367,6 +367,28 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// screen being edited: when the reader can draw screens inside Sync, it
     /// draws that one afterwards (and cards are not drawn separately, since
     /// the screen shows them).
+    /// Exchanges reading positions with a reader that offers reading-progress v1,
+    /// once per connection. Quiet on failure: it never blocks the session.
+    func exchangeReadingPositions(_ exchange: @escaping @MainActor (ReaderReadingList, String) -> [KOSyncProgress]) {
+        guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, let status = readerStatus,
+              status.readingProgress == 1, let identity = status.deviceID,
+              readingExchangeAttempt != connectionAttempt else { return }
+        let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
+        readingExchangeAttempt = attempt
+        startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+            do {
+                let list = try await client.readingProgress(identity: identity, host: host, port: port)
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                for record in exchange(list, status.device).prefix(10) {
+                    try await client.offerReadingProgress(record, identity: identity, host: host, port: port)
+                    guard ownsReaderWork(owner, attempt: attempt) else { return }
+                }
+            } catch {
+                NSLog("Pocket reading-position exchange failed: %@", error.localizedDescription)
+            }
+        }
+    }
+
     enum ReaderSyncSetupError: LocalizedError {
         case unavailable, unsupported
         var errorDescription: String? {
@@ -642,6 +664,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     private let contentTransportFactory: ContentTransportFactory
     private let discoveryIO: any ReaderDiscoveryIO
     private let associationIO: any ReaderAssociationIO
+    private var readingExchangeAttempt: Int?
     private var activeHost = "192.168.4.1"
     private var activeHTTPPort = 80
     private var heartbeatTask: Task<Void, Never>?

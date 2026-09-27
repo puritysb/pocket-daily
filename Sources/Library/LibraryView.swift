@@ -51,7 +51,7 @@ struct LibraryView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showingSync = true } label: {
-                        Label("Sync", systemImage: sync.isConnected ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath.circle")
+                        Label("Sync", systemImage: sync.hasAnyChannel ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath.circle")
                     }
                     .accessibilityIdentifier("library-sync")
                 }
@@ -91,7 +91,7 @@ struct LibraryView: View {
             .accessibilityIdentifier("library-shelf")
             Spacer()
             Button { showingSync = true } label: {
-                Label(sync.isConnected ? "Sync on" : "Sync", systemImage: "arrow.triangle.2.circlepath")
+                Label(sync.hasAnyChannel ? "Sync on" : "Sync", systemImage: "arrow.triangle.2.circlepath")
             }
             .accessibilityIdentifier("library-sync")
             Button { importing = true } label: { Label("Add books", systemImage: "plus") }
@@ -163,7 +163,9 @@ struct LibraryView: View {
             Image(systemName: "arrow.triangle.2.circlepath").font(.title3)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Keep your place on every device").font(.subheadline.weight(.semibold))
-                Text("Connect KOReader sync to continue where you left off on your X3/X4 reader, KOReader, or another device running Pocket Daily.")
+                Text(sync.isICloudActive
+                     ? "Your Apple devices already stay in step through iCloud, and a connected X3/X4 reader too. Add a free KOReader sync account to continue in KOReader and on your reader away from this app."
+                     : "Turn on iCloud to continue on your other Apple devices, and add a free KOReader sync account to continue in KOReader and on your X3/X4 reader.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button("Set up sync") { showingSync = true }

@@ -15,6 +15,18 @@ run scripts from books, and does not load anything from the network. Links in a
 book open in your browser only after you confirm. Removing a book deletes its
 local copy; deleting the app deletes the library.
 
+## Keeping your place across devices
+
+- iCloud (on by default when you are signed in to iCloud): for each book you
+  open, a fingerprint of the book file, your position and progress, this
+  device's name and a random installation identifier are stored in your own
+  iCloud key-value storage so your other Apple devices can offer to continue.
+  Apple operates iCloud under its own privacy policy; the developer receives
+  nothing. Turn it off in Library → Sync.
+- Your X3/X4 reader (on by default): while connected over the local
+  connection, the app and a reader whose firmware supports it exchange the same
+  kind of record for books both have. Nothing leaves the local connection.
+
 ## Optional KOReader sync
 
 KOReader sync is off until you sign in or create an account on a KOReader sync

@@ -38,6 +38,9 @@ struct CrossPointStatus: Codable, Equatable {
     var articleLibrary: Int? = nil
     var totalHeap: Int? = nil
     var readerFiles: Int? = nil
+    /// Reading positions exchanged without a server (docs/READING_PROGRESS.md,
+    /// sibling docs/reading-progress-v1.md).
+    var readingProgress: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -996,6 +999,36 @@ actor CrossPointClient {
         request.httpBody = try preferences.requestBody()
         let (_, response) = try await http.data(for: request, session: session)
         try Self.requireSuccess(response)
+    }
+
+    func readingProgress(identity: String, host: String, port: Int) async throws -> ReaderReadingList {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/reading", query: ["deviceID": identity]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, response) = try await http.data(for: request, session: session)
+        try Self.requireSuccess(response, body: data)
+        return try ReaderReadingList.decode(data, deviceID: identity)
+    }
+
+    /// Offers a position to the reader; it asks before moving when the book opens.
+    func offerReadingProgress(_ record: KOSyncProgress, identity: String, host: String, port: Int) async throws {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/reading") else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "deviceID": identity, "document": record.document, "progress": record.progress,
+            "percentage": record.percentage, "device": record.device,
+        ])
+        let (data, response) = try await http.data(for: request, session: session)
+        if (response as? HTTPURLResponse)?.statusCode == 404 { return }
+        try Self.requireSuccess(response, body: data)
     }
 
     /// Writes the reader's own KOReader sync settings (CrossPoint `/api/settings`).

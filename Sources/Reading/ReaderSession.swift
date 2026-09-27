@@ -238,7 +238,6 @@ final class ReaderSession: NSObject, ObservableObject, WKNavigationDelegate {
                 guard let label = item["label"] as? String, let href = item["href"] as? String, !label.isEmpty else { return nil }
                 return TOCItem(id: index, label: label, href: href, depth: item["depth"] as? Int ?? 0)
             }
-            phase = .ready
         case "relocate":
             let reported = (message["fraction"] as? NSNumber)?.doubleValue ?? 0
             let fraction = reported.isFinite ? min(max(reported, 0), 1) : 0
@@ -248,6 +247,8 @@ final class ReaderSession: NSObject, ObservableObject, WKNavigationDelegate {
                                        chapter: message["chapter"] as? String,
                                        updatedAt: Date())
             position = next
+            // Ready once a page is on screen, not when the package has parsed.
+            if phase == .loading { phase = .ready }
             if let location = message["location"] as? [String: Any],
                let current = (location["current"] as? NSNumber)?.intValue,
                let total = (location["total"] as? NSNumber)?.intValue, total > 0 {

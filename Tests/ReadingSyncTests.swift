@@ -31,7 +31,18 @@ final class ReadingSyncTests: XCTestCase {
         }
     }
 
+    private final class Cloud: UbiquitousValues {
+        var values: [String: Any] = [:]
+        func dictionary(forKey key: String) -> [String: Any]? { values[key] as? [String: Any] }
+        func set(_ value: Any?, forKey key: String) { values[key] = value }
+        func removeObject(forKey key: String) { values[key] = nil }
+        var dictionaryRepresentation: [String: Any] { values }
+        func synchronize() -> Bool { true }
+    }
+
     private let ownID = String(repeating: "a", count: 32)
+    private var cloud: Cloud!
+    private var cloudAvailable = false
     private let digest = String(repeating: "b", count: 32)
     private var transport: Transport!
     private var sync: ReadingSync!
@@ -42,7 +53,10 @@ final class ReadingSyncTests: XCTestCase {
         defaults = UserDefaults(suiteName: "ReadingSyncTests-\(UUID().uuidString)")
         let store = KOSyncAccountStore(settings: Settings(), secrets: Secrets(), deviceName: "Pocket Daily iPhone",
                                        makeDeviceID: { [ownID] in ownID })
-        sync = ReadingSync(store: store, defaults: defaults, transport: transport)
+        cloud = Cloud()
+        sync = ReadingSync(store: store, defaults: defaults, transport: transport,
+                           iCloud: ICloudProgressStore(values: cloud), iCloudAvailable: { [unowned self] in cloudAvailable },
+                           readerPositions: ReaderPositionStore(defaults: defaults))
         try await sync.connect(server: "https://sync.example.com", username: "reader", password: "secret", create: false)
         transport.requests = []
     }
@@ -133,7 +147,94 @@ final class ReadingSyncTests: XCTestCase {
         transport.reply = { _ in (401, "{}") }
         let suggestion = await sync.suggestion(for: book, current: local(0))
         XCTAssertNil(suggestion)
-        XCTAssertEqual(sync.statusLine, "Sync needs you to sign in again")
+        XCTAssertEqual(sync.statusLine, "Server sync needs you to sign in again")
+        transport.reply = { _ in (522, "error code: 522") }
+        _ = await sync.suggestion(for: book, current: local(0))
+        XCTAssertEqual(sync.statusLine, "The sync server is not responding; positions will sync later")
+    }
+
+    // MARK: Serverless channels
+
+    func testICloudCarriesPositionsBetweenAppleDevices() async throws {
+        try sync.disconnect()
+        cloudAvailable = true
+        transport.requests = []
+        await sync.pushNow(local(0.3), for: book)
+        XCTAssertTrue(transport.requests.isEmpty, "Without an account nothing reaches a server")
+        let stored = try XCTUnwrap(cloud.values[ICloudProgressStore.prefix + digest] as? [String: Any])
+        XCTAssertEqual(stored["device_id"] as? String, ownID)
+        let own = await sync.suggestion(for: book, current: local(0.1))
+        XCTAssertNil(own, "This device's own iCloud record is not offered back")
+
+        cloud.values[ICloudProgressStore.prefix + digest] = [
+            "progress": "/body/DocFragment[5]/body/p/text().2", "percentage": 0.7,
+            "device": "Pocket Daily iPad", "device_id": String(repeating: "c", count: 32), "timestamp": 1_800_000_000,
+        ]
+        let fromPad = await sync.suggestion(for: book, current: local(0.3))
+        XCTAssertEqual(fromPad?.source, .iCloud)
+        XCTAssertEqual(fromPad?.device, "Pocket Daily iPad")
+        sync.iCloudEnabled = false
+        let disabled = await sync.suggestion(for: book, current: local(0.3))
+        XCTAssertNil(disabled)
+    }
+
+    func testICloudRejectsMalformedRecords() {
+        let store = ICloudProgressStore(values: cloud)
+        cloud.values[ICloudProgressStore.prefix + digest] = ["progress": "bad", "percentage": 0.5, "device": "x"]
+        XCTAssertNil(store.record(for: digest))
+        cloud.values[ICloudProgressStore.prefix + digest] = ["progress": "/body/DocFragment[1]/body", "percentage": Double.nan, "device": "x"]
+        XCTAssertNil(store.record(for: digest))
+        XCTAssertNil(store.record(for: "not-a-digest"))
+    }
+
+    func testReaderExchangeStoresReaderPositionsAndOffersFurtherOnes() async throws {
+        try sync.disconnect()
+        var ahead = book
+        ahead.position = local(0.8)
+        var behindBook = book
+        behindBook.documentDigest = String(repeating: "d", count: 32)
+        behindBook.position = local(0.1)
+        let json = """
+        {"v":1,"deviceID":"X3-1","books":[
+          {"path":"/Books/a.epub","document":"\(digest)","progress":"/body/DocFragment[2]/body/p[4]/text().0","percentage":0.5,"updated":0,"seq":3},
+          {"path":"/Books/b.epub","document":"\(behindBook.documentDigest)","progress":"/body/DocFragment[9]/body/p/text().1","percentage":0.6,"updated":0,"seq":4},
+          {"path":"/Books/c.epub","document":"zz","progress":null,"percentage":0.2}
+        ]}
+        """
+        let list = try ReaderReadingList.decode(Data(json.utf8), deviceID: "X3-1")
+        XCTAssertEqual(list.books.count, 2, "Malformed entries are dropped")
+        let outgoing = sync.exchange(with: list, readerName: "X3", library: [ahead, behindBook])
+        XCTAssertEqual(outgoing.map(\.document), [digest], "Only books further along here are offered to the reader")
+        XCTAssertEqual(outgoing.first?.percentage ?? 0, 0.8, accuracy: 0.0001)
+
+        let suggestion = await sync.suggestion(for: behindBook, current: behindBook.position)
+        XCTAssertEqual(suggestion?.source, .reader("X3"))
+        XCTAssertEqual(suggestion?.position.xpointer, "/body/DocFragment[9]/body/p/text().1")
+        sync.dismiss(suggestion!)
+        _ = sync.exchange(with: list, readerName: "X3", library: [ahead, behindBook])
+        let again = await sync.suggestion(for: behindBook, current: behindBook.position)
+        XCTAssertNil(again, "A dismissed reader position stays dismissed across exchanges")
+
+        sync.readerExchangeEnabled = false
+        XCTAssertTrue(sync.exchange(with: list, readerName: "X3", library: [ahead]).isEmpty)
+    }
+
+    func testReaderListRejectsOtherReadersAndOversizedReplies() {
+        let json = #"{"v":1,"deviceID":"other","books":[]}"#
+        XCTAssertThrowsError(try ReaderReadingList.decode(Data(json.utf8), deviceID: "X3-1"))
+        XCTAssertThrowsError(try ReaderReadingList.decode(Data(repeating: 32, count: 9000), deviceID: "X3-1"))
+    }
+
+    func testServerHealthExplainsPublicOutage() async {
+        transport.reply = { request in request.url?.path == "/healthcheck" ? (200, #"{"state":"OK"}"#) : (404, "") }
+        await sync.checkServer("https://sync.example.com")
+        XCTAssertEqual(sync.serverHealth, .available)
+        transport.reply = { _ in (522, "error code: 522") }
+        await sync.checkServer(KOSyncServer.standard.baseURL.absoluteString)
+        guard case .unavailable(let message) = sync.serverHealth else { return XCTFail("Expected an outage") }
+        XCTAssertTrue(message.contains("public KOReader sync server is not responding"))
+        await sync.checkServer("http://insecure.example.com")
+        guard case .unavailable = sync.serverHealth else { return XCTFail("Plain HTTP is rejected") }
     }
 }
 

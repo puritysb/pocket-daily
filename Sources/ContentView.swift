@@ -146,6 +146,8 @@ struct ContentView: View {
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
         }
+        .onChange(of: model.isWorking) { _, working in if !working { exchangeReadingPositions() } }
+        .onChange(of: model.readerStatus?.deviceID) { _, _ in exchangeReadingPositions() }
         .task { model.refreshGlance() }
         .task(id: model.isDemoMode) {
             if !model.isDemoMode { await model.checkFirmwareAtLaunch() }
@@ -153,6 +155,12 @@ struct ContentView: View {
     }
 
     // MARK: Layouts
+
+    private func exchangeReadingPositions() {
+        model.exchangeReadingPositions { list, reader in
+            sync.exchange(with: list, readerName: reader, library: library.books)
+        }
+    }
 
     private func open(_ book: LibraryBook) {
 #if os(macOS)

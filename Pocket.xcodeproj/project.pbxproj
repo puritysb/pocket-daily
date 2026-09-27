@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01350DEC54E38B1639531575 /* libc++.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D46C68C6D1477B48D78B01C /* libc++.tbd */; };
+		01E9D5D84BF3B5FC1D0D0BA2 /* SyncChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CD34B492D9F53B4A13338F /* SyncChannels.swift */; };
 		0368E20577EA2F31604B9D73 /* DeviceCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94228C0DAE5C814F046A408A /* DeviceCore.swift */; };
 		0462505E5B0B2BA933F5F86A /* UITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F754005EB0757A58C712E1A2 /* UITestSupport.swift */; };
 		0486779CEBCC91832FDE97F1 /* FirmwareReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCDD2BBCA86C499E96F9D5A0 /* FirmwareReleaseTests.swift */; };
@@ -47,6 +48,7 @@
 		2BCD25F75B0F3037FA119A46 /* FirmwareGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */; };
 		30B2B007EF0A9D5944224B71 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A90DAA8205C09A1AC46687 /* LibraryView.swift */; };
 		329FE3A9A5DA0A0D8C8FA2CE /* ContentDeployment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5CDB7619C59CB8CC6E9426 /* ContentDeployment.swift */; };
+		34404410D714BBAC388E6646 /* PocketSyncEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1E07955E72F9E6C577C3A6 /* PocketSyncEndToEndTests.swift */; };
 		34ACE3CB623B589288BB20DC /* WeatherSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB205ED7484E5711C0DC7E /* WeatherSnapshot.swift */; };
 		365A9A927566A2B5CD6FAA61 /* ContentManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C7EEC1D8C95E385ECAF439 /* ContentManifest.swift */; };
 		374169613A2E5437B2A68A8E /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
@@ -91,6 +93,7 @@
 		643A2CE7F639882AE77EC2F8 /* HostRendererBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 197D11D851B078BA98D06299 /* HostRendererBridge.swift */; };
 		65367F232A6E8FFBCF65A327 /* ContentCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35E5C23903D153A5C1161EE /* ContentCard.swift */; };
 		654F5F25CAE6B7B217850523 /* GlanceSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B0CF837DBD209DE07EED763 /* GlanceSettings.swift */; };
+		676CFDFB01C1A311303B9390 /* SyncChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CD34B492D9F53B4A13338F /* SyncChannels.swift */; };
 		677EADB49600A4441B0D9138 /* ContentStateReceipt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AAC7D167DC4796E9883FA0B /* ContentStateReceipt.swift */; };
 		68B775E824A762E3BB247813 /* ContentPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1988366ACAAA3D45E411A30 /* ContentPresentation.swift */; };
 		6A1BD5C811438399B452357D /* DeviceCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94228C0DAE5C814F046A408A /* DeviceCore.swift */; };
@@ -302,6 +305,7 @@
 		3857985EFC80A72BE576D61E /* ArticleLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleLibraryView.swift; sourceTree = "<group>"; };
 		3CA5D4636B2C951D33693CD2 /* ReaderContentPullTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentPullTests.swift; sourceTree = "<group>"; };
 		3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		3F1E07955E72F9E6C577C3A6 /* PocketSyncEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketSyncEndToEndTests.swift; sourceTree = "<group>"; };
 		41ABC3BF054B35E39136926A /* EPUBExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBExporter.swift; sourceTree = "<group>"; };
 		41BE8DAC4DDD08FCA8D8093E /* ContentDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftStoreTests.swift; sourceTree = "<group>"; };
 		44CDA4E1D2DEE4CF278CFBCB /* PocketUIHost.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PocketUIHost.xcframework; path = Support/PocketUIHost/PocketUIHost.xcframework; sourceTree = "<group>"; };
@@ -342,6 +346,7 @@
 		809991352AE65E48551D2B98 /* ArticleExtraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleExtraction.swift; sourceTree = "<group>"; };
 		81BD6A1CC19A2912FC45E9B2 /* GlanceControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlanceControls.swift; sourceTree = "<group>"; };
 		84C7EEC1D8C95E385ECAF439 /* ContentManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentManifest.swift; sourceTree = "<group>"; };
+		84CD34B492D9F53B4A13338F /* SyncChannels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncChannels.swift; sourceTree = "<group>"; };
 		84EC7E6A5EC6FB2CD0E50B89 /* ReaderEngine */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ReaderEngine; path = Support/ReaderEngine; sourceTree = SOURCE_ROOT; };
 		889CB474FC9CA5B5FC625B47 /* ContentDraftUndoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftUndoTests.swift; sourceTree = "<group>"; };
 		88B26787B372A6EDDCC0D7C4 /* SyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSettingsView.swift; sourceTree = "<group>"; };
@@ -507,6 +512,7 @@
 				AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */,
 				FB09B9253893CEDE90FD4DF7 /* PocketReaderTests.swift */,
 				6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */,
+				3F1E07955E72F9E6C577C3A6 /* PocketSyncEndToEndTests.swift */,
 				F754005EB0757A58C712E1A2 /* UITestSupport.swift */,
 			);
 			path = UITests;
@@ -617,6 +623,7 @@
 				4CF94347921EFECA01FE926E /* KOSyncAccountStore.swift */,
 				93E645047220F94E288E487F /* KOSyncClient.swift */,
 				F71E25A675032249243DE405 /* ReadingSync.swift */,
+				84CD34B492D9F53B4A13338F /* SyncChannels.swift */,
 				88B26787B372A6EDDCC0D7C4 /* SyncSettingsView.swift */,
 			);
 			path = Sync;
@@ -1104,6 +1111,7 @@
 				DAB40B7AE8CBD718636413AB /* ReadingSync.swift in Sources */,
 				293B3AE16C4238A579F40061 /* ReorderableList.swift in Sources */,
 				B149C2C5BFF841CD876C51AA /* ScreenPresentation.swift in Sources */,
+				676CFDFB01C1A311303B9390 /* SyncChannels.swift in Sources */,
 				478650881A11E971D82A229D /* SyncSettingsView.swift in Sources */,
 				3DEE488A728B0785B9DB49C9 /* TextDocument.swift in Sources */,
 				83EB8D8894A18AD60D70208D /* TextDocumentComposer.swift in Sources */,
@@ -1196,6 +1204,7 @@
 				2BC17D2D3793FF5CF8F06540 /* ReadingSync.swift in Sources */,
 				C67C2E63158E3AA2132090E2 /* ReorderableList.swift in Sources */,
 				0C42F4A00F10A35B41A825F8 /* ScreenPresentation.swift in Sources */,
+				01E9D5D84BF3B5FC1D0D0BA2 /* SyncChannels.swift in Sources */,
 				2A2FAB6889CB589761FBC5F3 /* SyncSettingsView.swift in Sources */,
 				050D7D9B7A9351EB05D2A227 /* TextDocument.swift in Sources */,
 				8A860E5EFAF75E927E9358C9 /* TextDocumentComposer.swift in Sources */,
@@ -1220,6 +1229,7 @@
 				A3C1DD8F0DC1C0E5968DE765 /* PocketFlowTests.swift in Sources */,
 				5031638530A05ACC06BC51DD /* PocketReaderTests.swift in Sources */,
 				99F8E48A3902BF0E3DE6D172 /* PocketScreenshotTests.swift in Sources */,
+				34404410D714BBAC388E6646 /* PocketSyncEndToEndTests.swift in Sources */,
 				0462505E5B0B2BA933F5F86A /* UITestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

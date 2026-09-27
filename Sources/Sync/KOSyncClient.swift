@@ -14,14 +14,15 @@ struct KOSyncServer: Equatable, Sendable {
     init(validating text: String) throws {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard var components = URLComponents(string: trimmed),
-              components.scheme?.lowercased() == "https",
+              let scheme = components.scheme?.lowercased(),
               let host = components.host, !host.isEmpty,
+              scheme == "https" || Self.allowsDevelopmentHTTP(host: host, scheme: scheme),
               components.user == nil, components.password == nil,
               components.query == nil, components.fragment == nil
         else {
             throw KOSyncError.invalidServerURL
         }
-        components.scheme = "https"
+        components.scheme = scheme
         var path = components.percentEncodedPath
         while path.hasSuffix("/") {
             path.removeLast()
@@ -31,6 +32,16 @@ struct KOSyncServer: Equatable, Sendable {
             throw KOSyncError.invalidServerURL
         }
         baseURL = url
+    }
+
+    /// Debug builds accept plain HTTP only on this machine, for the local
+    /// development server (scripts/kosync_dev_server.py). Release builds never do.
+    private static func allowsDevelopmentHTTP(host: String, scheme: String) -> Bool {
+#if DEBUG
+        scheme == "http" && ["127.0.0.1", "localhost"].contains(host.lowercased())
+#else
+        false
+#endif
     }
 
     private init(checkedBaseURL: URL) {
@@ -208,6 +219,17 @@ final class KOSyncClient: Sendable {
         let request = try makeRequest(path: "/users/auth", method: "GET", credentials: credentials, body: nil)
         let (_, status) = try await send(request)
         try Self.check(status)
+    }
+
+    /// `GET /healthcheck`: succeeds when the server answers `{"state":"OK"}`.
+    func healthcheck() async throws {
+        let request = try makeRequest(path: "/healthcheck", method: "GET", credentials: nil, body: nil)
+        let (data, status) = try await send(request)
+        try Self.check(status)
+        struct Health: Decodable { let state: String }
+        guard (try? JSONDecoder().decode(Health.self, from: data))?.state == "OK" else {
+            throw KOSyncError.invalidResponse
+        }
     }
 
     /// Returns nil when the server has no usable record for the document.

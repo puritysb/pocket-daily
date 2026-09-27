@@ -23,9 +23,13 @@ save an article from Safari's share sheet and read it under **Articles**. On
 Mac, a book opens in its own window. No account, network or hardware is needed
 for reading.
 
-**Sync** (the circular-arrows button in the Library) is optional KOReader sync.
-It needs an account on a KOReader sync server; reviewers can create one from the
-Sync sheet on the default public server or skip it. Reading is fully functional
+**Sync** (the circular-arrows button in the Library) shows three ways to keep a
+reading position: iCloud key-value storage between the user's own Apple
+devices (on by default, no setup), exchange with a connected X3/X4 reader over
+the local connection, and optional KOReader sync.
+KOReader sync needs an account on a KOReader sync server; reviewers can create
+one from the Sync sheet on the default public server or skip it. The public
+server has outages; the sheet then says so and reading is unaffected. Reading is fully functional
 without it.
 
 The companion has an explicit, local demo mode for review without a reader:
