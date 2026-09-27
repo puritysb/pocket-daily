@@ -4,7 +4,22 @@
 X3/X4 컴패니언이다.** 결정·계약: [READER_EXPANSION.md](READER_EXPANSION.md), 헌법: `AGENTS.md`.
 푸시·태그·GitHub 릴리스·스토어 제출은 하지 않았고, 이번 변경은 아직 커밋하지 않았다.
 
-## 9월 27일 리더 확장 (앱, 미커밋)
+## 9월 27일 2차: 서버 없는 이어 읽기와 직접 검증 (앱 `feat/reader-expansion`)
+
+- 공개 KOSync 서버 `sync.koreader.rocks`가 HTTP 522(Cloudflare→원서버 연결 실패)로 응답하지 않음을 확인.
+  과거에도 반복된 장애다. Sync 화면은 `/healthcheck`로 먼저 확인하고 장애를 장애로 안내한다.
+- 서버 없는 경로: iCloud 키-값(같은 Apple ID, 기본 켬)과 리더 직접 교환(펌웨어 `readingProgress: 1`,
+  계약 [READING_PROGRESS.md](READING_PROGRESS.md)). 앱 측 구현·단위 시험 완료, 펌웨어 측은 진행 중.
+  iCloud KVS 엔타이틀먼트 추가 — 서명 빌드 전에 계정 소유자가 App ID의 iCloud 기능을 켜야 한다.
+- 직접 검증(하드웨어 없이 가능한 범위, computer use 도구는 이 세션에 없어 XCTest로 대체):
+  - `scripts/e2e_sync.sh`: 공식 컨트롤러를 따르는 로컬 KOSync 대역(`scripts/kosync_dev_server.py`)으로
+    iPhone 17 Pro에서 계정 생성·장 이동·업로드 → iPad Pro 11에서 로그인(402 후 sign in)·제안·이동·같은 장 도착 통과.
+  - Mac 리더 오프스크린 시험: 렌더·넘김·즉시 이동. 여기서 **넘김 직후 이동이 조용히 무시되는 버그**를 찾아 수정.
+  - 실제 책(구텐베르크 EPUB3 이미지 25 MB·EPUB2, Standard Ebooks, 한국어 이모지 샘플) 가져오기·렌더·
+    중간 이동·XPointer만으로 복원이 모두 같은 XPointer로 복원됨.
+- 단위 411개 통과, iOS/macOS 빌드 통과. 공개 서버 왕복과 실기기는 여전히 미검증.
+
+## 9월 27일 리더 확장 (앱, 커밋됨)
 
 - 첫 화면이 Library다(iPhone 탭: Library · Customize reader · Reader, 넓은 화면: Library · Customize reader).
   첫 실행 시 원본 안내 책(`WelcomeBook`)을 만든다. Articles는 Library의 선반으로 옮겼고

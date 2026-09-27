@@ -6,6 +6,14 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-27 Sync without a server: the public KOSync server returned HTTP
+  522 (known recurring outages), so iCloud key-value storage (same Apple ID)
+  and direct reader exchange (docs/READING_PROGRESS.md, firmware
+  `readingProgress: 1`) carry KOSync v1 records too; KOSync stays optional.
+  Verification without hardware: scripts/e2e_sync.sh (local KOSync double,
+  two simulators) and Mac off-screen reader tests incl. real EPUBs. foliate's
+  100 ms turn lock silently dropped jumps right after a turn; the bridge now
+  serializes turns before navigation.
 - 2026-09-27 Product direction changed (user decision): Pocket Daily is a
   standalone, account-free e-book reader AND the X3/X4 companion; Library is
   the first screen. Renderer: pinned foliate-js subset in Support/ReaderEngine
