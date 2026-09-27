@@ -1,8 +1,30 @@
-# 현재 통합 상태
+# 현재 상태 (2026-09-28)
 
-기준: 2026-09-27. **제품 방향이 바뀌었다: Pocket Daily는 기기 없이도 쓰는 집중형 전자책 리더이자
-X3/X4 컴패니언이다.** 결정·계약: [READER_EXPANSION.md](READER_EXPANSION.md), 헌법: `AGENTS.md`.
-푸시·태그·GitHub 릴리스·스토어 제출은 하지 않았고, 이번 변경은 아직 커밋하지 않았다.
+이 절만 현재 사실이다. 아래 "이력"은 당시 상태 기록이며, 그 안의 "미커밋"·KOSync 관련 서술은
+지금 유효하지 않다(KOSync는 제거됨, 모든 변경은 커밋됨). 이력을 근거로 삭제된 기능을 되살리지 않는다.
+
+- 제품: 기기 없이 쓰는 집중형 리더 + X3/X4 컴패니언([READER_EXPANSION.md](READER_EXPANSION.md)).
+  Library 첫 화면, EPUB/TXT/MD(변환 EPUB는 내용 기반 식별자·고정 시각으로 기기마다 같은 바이트),
+  Articles, 책 파일 공유(서재 → Share book file), foliate-js 리더.
+- 이어 읽기: iCloud 키-값(기기별 레코드 `position.v2.<책>.<기기>`)과 연결된 리더 직접 교환만.
+  KOReader 동기화는 이번 버전 제외·비노출. 제안은 "다른 기기가 더 최근에 읽은 곳(앞·뒤 모두)" 우선,
+  없으면 "더 멀리 읽은 곳". 자동 이동 없음. 리더 교환은 성공 시에만 기록, 실패 시 3회까지 지연 재시도,
+  Continue Reading의 "Exchange positions now"로 수동 실행. iCloud 외부 변경 시 열린 책이 다시 확인한다.
+  계약: [READING_PROGRESS.md](READING_PROGRESS.md), 펌웨어 `docs/reading-progress-v1.md`.
+- 외부에서 연 파일: 가져오기 성공 후 앱의 Documents/Inbox 직속 임시 사본만 삭제한다.
+- 브랜치: 앱 `feat/reader-expansion`, 펌웨어 `feat/reader-support`. 푸시·릴리스 안 함.
+- X3(`5B09AF70`) 설치 펌웨어: `1.7.0-dev-feat-reader-support-13d46fa7`. 멈춤·검은 팝업·4장 색인 실패 해결 확인.
+  진행 중: 페이지 넘김 성능(`readerPerf` 텔레메트리와 최적화) — 끝나면 바로 스테이징(사용자 요청).
+- 남은 검증(실기기·서명 필요):
+  1. 위치 왕복 정확도: 같은 책에서 X3 → iPhone → X3 후 화면 첫 문장 차이(긴 한글 문단, 삽화,
+     글자 크기 변경 포함). 펌웨어는 긴 문단 안 위치를 페이지 수·문단 길이로 추정하므로 문자열
+     호환(258/258) 이상은 아직 보장하지 않는다. 장기적으로 페이지 캐시에 원문 위치를 직접 보존 검토.
+  2. 서명된 빌드로 Apple 기기 간 iCloud 이어 읽기(App ID iCloud 기능 활성화 필요).
+  3. 니체 「인간적인 너무나 인간적인」(59% 부근 스크롤 불가 보고)과 SD의 `crash_report.1/3.txt`.
+- 이 Mac은 Python의 LAN 접근이 막혀 있다. 펌웨어 스테이징은 `/usr/bin/curl`로 `/upload` 후
+  `/api/pocket/v1/commit`(아래 4차 이력 참고).
+
+# 이력 (당시 상태, 최신순)
 
 ## 9월 28일: X3 실기기 결과 (펌웨어 `feat/reader-support`)
 

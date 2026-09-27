@@ -14,12 +14,23 @@ percentage, device, device_id, timestamp)를 쓴다.
 
 ## iCloud 키-값 레코드
 
-- `NSUbiquitousKeyValueStore`, 키 `position.v1.<document>`, 값은 사전
+- `NSUbiquitousKeyValueStore`, 키 `position.v2.<document>.<device_id>`(기기마다 한 레코드), 값은 사전
   `{progress, percentage, device, device_id, timestamp}`. 책 파일·제목은 저장하지 않는다.
-- 1 MB·1024키 한도: 최근 갱신 순으로 최대 800권을 유지하고 오래된 키부터 지운다.
-- iCloud 계정이 없거나 꺼져 있으면 조용히 건너뛴다. 사용자는 Library → Sync에서 끌 수 있다.
+  한 기기가 앞부분을 읽어도 다른 기기의 레코드를 덮어쓰지 않는다.
+- 1 MB·1024키 한도: 최근 갱신 순으로 최대 800개를 유지하고 오래된 키부터 지운다.
+- 다른 기기에서 값이 바뀌면(`didChangeExternallyNotification`) 열린 책이 제안을 다시 확인한다.
+- iCloud 계정이 없거나 꺼져 있으면 조용히 건너뛴다. 사용자는 Library → Continue Reading에서 끌 수 있다.
 - 엔타이틀먼트 `com.apple.developer.ubiquity-kvstore-identifier`. 계정 소유자가 App ID의 iCloud
   기능을 켜야 서명 빌드에서 동작한다(스토어 제출 전 확인).
+
+## 제안 규칙
+
+1. 이 기기에서 마지막으로 읽은 뒤 다른 기기가 더 최근에 읽은 곳(앞이든 뒤든, 다시 읽기 포함) → "마지막으로 읽은 곳".
+2. 없으면 다른 기기가 더 멀리 읽은 곳 → "더 멀리 읽은 곳".
+3. 0.4% 이내 차이, 이 기기 자신의 레코드, 이미 닫은 제안은 제외. 페이지는 묻지 않고 옮기지 않는다.
+- 리더는 신뢰할 시계가 없어, 교환에서 위치가 바뀐 것을 처음 본 시각을 그 위치의 시각으로 쓴다.
+- 같은 책 식별값이 필요하다: 기기마다 같은 파일(서재의 Share book file). TXT/MD 변환은 내용 기반
+  식별자와 고정 시각으로 기기마다 같은 EPUB 바이트를 만든다(파일명이 같을 때).
 
 ## 리더 직접 교환 (reading-progress v1)
 
@@ -42,6 +53,8 @@ percentage, device, device_id, timestamp)를 쓴다.
   현재 진행도를 즉시 바꾸지 않는다.
 - 앱: 연결 후 목록을 받아 서재와 문서 식별값으로 맞추고, 리더의 위치를 기기별 후보로 저장한다
   (책을 열 때 제안). 앱이 더 앞선 책은 대기 위치로 보낸다. 설정 "연결 시 리더와 위치 교환"(기본 켬).
+  교환은 수신·송신이 모두 끝난 뒤에만 "마지막 교환"으로 기록하고, 실패는 이유를 보여 준다.
+  같은 연결에서 실패하면 10·20초 뒤 최대 3회 재시도하며, "Exchange positions now"로 즉시 다시 할 수 있다.
 
 ### 펌웨어 구현과의 차이 (2026-09-27, 펌웨어 `d9a8e0f5`)
 
