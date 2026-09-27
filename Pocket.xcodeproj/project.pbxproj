@@ -72,6 +72,7 @@
 		4CF8D4056513B87B732EF3EF /* PocketDevicePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */; };
 		4DA17B5656864277C148A061 /* ContentCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35E5C23903D153A5C1161EE /* ContentCard.swift */; };
 		4EB6223E991F88B72608FC1D /* ContentStudioSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DCF4874386633399B3E1EE2 /* ContentStudioSupport.swift */; };
+		4FE8262F7F07D37E69BE406D /* PocketMacReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E822A7A862B9E6419AEFACB1 /* PocketMacReaderTests.swift */; };
 		5031638530A05ACC06BC51DD /* PocketReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09B9253893CEDE90FD4DF7 /* PocketReaderTests.swift */; };
 		50BC11B3111CB74258A626D7 /* NearbySyncProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED14B15E886AE48D45407B10 /* NearbySyncProtocol.swift */; };
 		52CEB90FB7E884A52E806D93 /* ReaderEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE183592B1BB611EEC932E59 /* ReaderEngineTests.swift */; };
@@ -399,6 +400,7 @@
 		E1988366ACAAA3D45E411A30 /* ContentPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPresentation.swift; sourceTree = "<group>"; };
 		E35E5C23903D153A5C1161EE /* ContentCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentCard.swift; sourceTree = "<group>"; };
 		E79D36C5515C97C20FE566EF /* ReaderDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderDisplayStateTests.swift; sourceTree = "<group>"; };
+		E822A7A862B9E6419AEFACB1 /* PocketMacReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMacReaderTests.swift; sourceTree = "<group>"; };
 		E973586E1694A7601665230C /* ContentImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentImage.swift; sourceTree = "<group>"; };
 		E9D87C009E70F5E9A8868771 /* ContentRevisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRevisionTests.swift; sourceTree = "<group>"; };
 		EAE0C268F1C01D32A9B6CCF7 /* ContentPreviewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewModelTests.swift; sourceTree = "<group>"; };
@@ -693,6 +695,7 @@
 		C53B112E27B9E83780B3AC7F /* MacTests */ = {
 			isa = PBXGroup;
 			children = (
+				E822A7A862B9E6419AEFACB1 /* PocketMacReaderTests.swift */,
 				5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */,
 				5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */,
 			);
@@ -1217,6 +1220,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4FE8262F7F07D37E69BE406D /* PocketMacReaderTests.swift in Sources */,
 				1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */,
 				0C0EDE732303CD3786BC50C7 /* PocketParityTests.swift in Sources */,
 			);

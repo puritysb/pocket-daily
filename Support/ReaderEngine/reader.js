@@ -174,6 +174,19 @@ const locationMessage = rendered => {
     }
 }
 
+// foliate holds a turn lock for 100 ms after a page turn and silently drops
+// navigation meanwhile, so every turn goes through here and navigation waits.
+let turning = null
+const turn = action => {
+    if (!view) return
+    const current = Promise.resolve(action()).finally(() => { if (turning === current) turning = null })
+    turning = current
+    return current
+}
+const settled = async () => {
+    while (turning) await turning.catch(() => {})
+}
+
 const tap = (doc, event) => {
     if (event.defaultPrevented || event.target.closest?.('a[href]')) return
     const selection = doc.defaultView.getSelection()
@@ -183,8 +196,8 @@ const tap = (doc, event) => {
     const width = innerWidth || 1
     const zone = x < width * 0.3 ? 'left' : x > width * 0.7 ? 'right' : 'center'
     if (zone === 'center') post({ type: 'tap' })
-    else if (zone === 'left') view.goLeft()
-    else view.goRight()
+    else if (zone === 'left') turn(() => view.goLeft())
+    else turn(() => view.goRight())
 }
 
 const keydown = event => {
@@ -192,11 +205,11 @@ const keydown = event => {
     switch (event.key) {
         case 'ArrowRight': case 'PageDown': case ' ': case 'ArrowDown':
             event.preventDefault()
-            if (event.key === 'ArrowRight') view?.goRight(); else view?.next()
+            turn(() => event.key === 'ArrowRight' ? view.goRight() : view.next())
             break
         case 'ArrowLeft': case 'PageUp': case 'ArrowUp':
             event.preventDefault()
-            if (event.key === 'ArrowLeft') view?.goLeft(); else view?.prev()
+            turn(() => event.key === 'ArrowLeft' ? view.goLeft() : view.prev())
             break
         case 'Escape':
             post({ type: 'escape' })
@@ -207,19 +220,21 @@ addEventListener('keydown', keydown)
 
 const navigate = async target => {
     if (!view) return false
+    await settled()
     if (target?.xpointer) {
         const parsed = XPointer.parse(target.xpointer)
         if (parsed && parsed.sectionIndex < view.book.sections.length) {
-            let exact = true
+            let resolved = null
             await view.renderer.goTo({
                 index: parsed.sectionIndex,
                 anchor: doc => {
-                    const resolved = XPointer.toRange(doc, parsed)
-                    exact = resolved.exact
+                    resolved = XPointer.toRange(doc, parsed)
                     return resolved.range
                 },
             })
-            return exact || typeof target.fraction !== 'number' ? true : navigate({ fraction: target.fraction })
+            if (resolved?.exact) return true
+            if (typeof target.fraction === 'number') return navigate({ fraction: target.fraction })
+            return resolved != null
         }
     }
     if (target?.cfi) {
@@ -277,12 +292,12 @@ globalThis.PocketReader = {
         appearance = { ...appearance, ...next }
         applyAppearance()
     },
-    next: () => view?.next(),
-    prev: () => view?.prev(),
-    goLeft: () => view?.goLeft(),
-    goRight: () => view?.goRight(),
+    next: () => turn(() => view.next()),
+    prev: () => turn(() => view.prev()),
+    goLeft: () => turn(() => view.goLeft()),
+    goRight: () => turn(() => view.goRight()),
     goTo: target => navigate(target),
-    goToHref: href => view?.goTo(href),
+    goToHref: async href => { await settled(); return view?.goTo(href) },
 }
 
 applyAppearance()

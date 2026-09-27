@@ -31,8 +31,9 @@ final class PocketSyncEndToEndTests: XCTestCase {
         app.openShelf("Books")
         app.buttons["library-sync"].tap()
         let signOut = app.buttons["Sign out"]
-        if signOut.waitForExistence(timeout: 3) {
+        if app.staticTexts["Account"].waitForExistence(timeout: 3) {
             // An account from an earlier run points at a server that is gone.
+            reveal(signOut, in: app)
             signOut.tap()
             let confirm = app.sheets.buttons["Sign out"]
             XCTAssertTrue(confirm.waitForExistence(timeout: 5))
@@ -40,22 +41,32 @@ final class PocketSyncEndToEndTests: XCTestCase {
         }
         attach(app, "sync-sheet")
         let username = app.textFields["sync-username"]
-        for _ in 0..<5 where !username.isHittable { app.swipeDown() }
+        reveal(username, in: app)
         username.tap()
         username.typeText(environment["KOSYNC_E2E_USER"]!)
         let password = app.secureTextFields["sync-password"]
         password.tap()
         password.typeText(environment["KOSYNC_E2E_PASSWORD"]!)
         let create = app.buttons["sync-create"]
-        for _ in 0..<5 where !create.isHittable { app.swipeUp() }
+        reveal(create, in: app)
         create.tap()
-        if !signOut.waitForExistence(timeout: 10) {
+        if !app.staticTexts["Account"].waitForExistence(timeout: 10) {
             // Already registered by the other device: sign in instead.
             app.buttons["sync-sign-in"].tap()
         }
-        XCTAssertTrue(signOut.waitForExistence(timeout: 10), "The account was not accepted")
+        XCTAssertTrue(app.staticTexts["Account"].waitForExistence(timeout: 10), "The account was not accepted")
         attach(app, "sync-connected")
         app.buttons["Done"].tap()
+    }
+
+    /// The sign-in form is lazy and re-renders after signing out, so the field
+    /// may be above or below the visible part of the sheet.
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        let form = app.collectionViews.containing(.staticText, identifier: "Your X3/X4 reader").firstMatch
+        let surface = form.exists ? form : app
+        for _ in 0..<4 where !(element.exists && element.isHittable) { surface.swipeUp() }
+        for _ in 0..<8 where !(element.exists && element.isHittable) { surface.swipeDown() }
+        XCTAssertTrue(element.waitForExistence(timeout: 5))
     }
 
     private func openGuide(_ app: XCUIApplication) -> XCUIElement {
