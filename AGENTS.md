@@ -200,6 +200,10 @@ expectations:
   `./scripts/capture_screenshots.sh`, which needs no special permissions.
 - App Store metadata, screenshots, icons, privacy, or support changes: run
   `./scripts/validate_app_store.sh` and inspect the changed artifacts.
+- Reading-position or sync changes: run `./scripts/e2e_sync.sh`, which starts
+  the local KOSync test double (`scripts/kosync_dev_server.py`) and checks
+  continuity from one simulator to another. The public KOReader server has
+  outages; a local pass is not evidence of public-server behavior.
 - Documentation-only changes: check links and run `git diff --check`.
 
 Real Bluetooth pairing, temporary Wi-Fi association, local-network transfer,
