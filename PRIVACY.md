@@ -2,8 +2,32 @@
 
 Effective date: 2026-09-27
 
-Pocket Daily is an account-free, local-first companion application. It does not
-include advertising, analytics, tracking SDKs, or a Pocket Daily cloud service.
+Pocket Daily is an account-free, local-first e-book reader and companion
+application for compatible X3/X4 readers. It does not include advertising,
+analytics, tracking SDKs, or a Pocket Daily cloud service.
+
+## Your library and reading
+
+Books you add (EPUB, and text or Markdown converted to EPUB), their covers, and
+your reading position and text settings are stored only in the app's local
+Application Support container. The reader engine runs inside the app, does not
+run scripts from books, and does not load anything from the network. Links in a
+book open in your browser only after you confirm. Removing a book deletes its
+local copy; deleting the app deletes the library.
+
+## Optional KOReader sync
+
+KOReader sync is off until you sign in or create an account on a KOReader sync
+server of your choice (the public KOReader server is suggested by default).
+When it is on, Pocket Daily sends that server, for each book you open: a
+fingerprint of the book file (a partial MD5 hash, or of its file name if you
+choose), your position in the book and your overall progress, this device's
+name, and a random identifier created for this installation. It also sends your
+username and a key derived from your password with every request. Book
+contents, notes and the rest of your library are never sent. Your password is
+not stored; the derived key is kept in the device's Keychain. The server is
+operated by its own operator under its own privacy practices, not by the
+developer. Sign out in Library → Sync to stop syncing and remove the key.
 
 ## Data the app handles
 
@@ -56,7 +80,8 @@ No article is sent to the developer or an extraction service.
 
 Pocket Daily does not send saved reading files, diagnostics, calendar events,
 or device activity to the developer or to third parties. Article retrieval
-sends the selected URL to its publisher as described above. Direct
+sends the selected URL to its publisher, and optional KOReader sync sends
+reading positions to the server you chose, as described above. Direct
 transfers stay on the local Bluetooth/Wi-Fi connection selected by the user.
 Weather requests carry only the chosen city's coordinates to Apple WeatherKit
 and Apple's geocoder, operated by Apple under its own privacy policy. Firmware
@@ -85,5 +110,5 @@ privacy practices.
 Questions or deletion requests can be filed through the public support tracker:
 <https://github.com/puritysb/pocket-daily/issues>
 
-This policy will be updated before a release that adds accounts, cloud relay,
-analytics, or any new category of data collection.
+This policy will be updated before a release that adds Pocket Daily accounts,
+cloud relay, analytics, or any new category of data collection.

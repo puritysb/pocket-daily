@@ -2,8 +2,9 @@
 
 ## Product identity
 
-Pocket Daily is an independent, account-free companion for X3/X4 hardware that
-has Pocket Daily or compatible CrossPoint-based firmware installed. It is not an
+Pocket Daily is an independent, account-free e-book reader for iPhone, iPad and
+Mac, and the companion for X3/X4 hardware that has Pocket Daily or compatible
+CrossPoint-based firmware installed. Reading needs no hardware. It is not an
 official Xteink or CrossPoint Reader application, does not support the
 manufacturer's factory firmware or cloud service, and does not use manufacturer
 logos, product photography, manuals, application assets, or firmware binaries.
@@ -14,9 +15,22 @@ sponsorship, or endorsement.
 
 ## Review setup
 
-The app opens on **Home & Sleep**. It has an explicit, local demo mode for
-review without an account or reader: open **Reader** (a tab on iPhone, the
-panel on the right on iPad and Mac) and choose **Try demo**. Home & Sleep then
+The app opens on the **Library**, which already holds a short original guide,
+"Welcome to Pocket Daily". Tap it to read: tap the right or left side of the
+page to turn, the middle for controls (Contents, Aa text and page settings,
+Library). Add more DRM-free EPUB, TXT or Markdown files with **+** (Files), or
+save an article from Safari's share sheet and read it under **Articles**. On
+Mac, a book opens in its own window. No account, network or hardware is needed
+for reading.
+
+**Sync** (the circular-arrows button in the Library) is optional KOReader sync.
+It needs an account on a KOReader sync server; reviewers can create one from the
+Sync sheet on the default public server or skip it. Reading is fully functional
+without it.
+
+The companion has an explicit, local demo mode for review without a reader:
+open **Reader** (a tab on iPhone; on iPad and Mac the panel on the right of
+**Customize reader**) and choose **Try demo**. **Customize reader** then
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
 from a device. Switch between the Home and Sleep screens above the preview;
@@ -65,6 +79,22 @@ The reader validates the image again and requires its own explicit installation
 confirmation. No automatic flashing follows transport completion.
 Metadata requests send no reader identity or content to GitHub. A private direct
 reader connection is not used for internet release checks or downloads.
+
+## Reading and KOReader sync
+
+The reader renders books with a bundled open-source engine (foliate-js, MIT)
+inside a web view that loads only the app's own files and the open book through
+a private URL scheme; scripts inside books never run and nothing is fetched from
+the network. Links in a book open in the browser only after confirmation.
+DRM-protected books are detected and refused.
+
+KOReader sync is off by default. When the user signs in, the app sends the
+chosen server a partial MD5 fingerprint of the book file, the position and
+overall progress, the device name and a random installation ID, with the
+username and an MD5 key of the password (the protocol's own scheme). Book
+contents are never sent; the password is not stored and the key is kept in the
+Keychain. The server is chosen by the user and operated by a third party, not
+the developer; the app never moves the page to a synced position without asking.
 
 ## Weather and calendar
 

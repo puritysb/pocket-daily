@@ -1,22 +1,22 @@
-Pocket Daily is a private, local-first studio for a compatible pocket e-paper reader.
+Pocket Daily is a calm, private e-book reader for iPhone, iPad and Mac, and the companion for compatible X3/X4 pocket e-paper readers.
 
-Shape your reader's Home and Sleep screens
-Choose which Home pages appear and in what order (continue reading, your own cards, the daily word), place the weather panel, and compose the Daily Brief the reader shows while asleep. Weather for a city you choose comes from Apple Weather, and today's events can come from your calendars; the app sends both to the reader. The preview is drawn by the reader's own layout code with your cards and sample content, and one Apply saves the layout, your cards and reader settings, including what the side buttons do, without reinstalling firmware.
+A quiet place to read
+Open DRM-free EPUB books in a paper-like reader that stays out of the way. Pages turn instantly, like e-paper. Tap the sides to turn, tap the middle for controls, or use a keyboard or Bluetooth page turner. Choose the text size, font, line spacing, margins, and a Paper, White or Night page. No feeds, badges or pop-ups.
 
-Your own cards, with QR codes
-Write up to three cards (a reading goal, a question, contact details in case the reader is lost) and add an image, a QR code made from a link or text, or an image from a link. The first card can stay on the sleep screen. If you lose your local copy, load the cards back from the reader.
+Your library, your files
+Add EPUB books from Files, or drop them on the Mac window. Plain text and Markdown files become books when you add them. Save articles from the share sheet while browsing and read them later, here or on your reader. A short guide is included, so you can start reading right away.
 
-Send what you want to read
-Send books (EPUB, TXT, Markdown, XTC), Pocket Daily study packs, or text you type or paste, over a direct local connection. On Mac, you can also copy files to an SD card. Transfers do not pass through a Pocket Daily cloud service.
+Continue where you left off
+Optional KOReader sync keeps your place in step across Pocket Daily on your other devices, an X3/X4 reader, and KOReader on other e-readers, through a KOReader sync server you choose. When another device has read further, Pocket Daily offers to jump there; it never moves your page without asking.
 
-Safer device management
-Firmware updates are checked once when the app opens. See the latest release date and whether your reader has an update available. Choose Update to download and send the official release after a compatibility notice, or Cancel to stop. The reader asks before it installs anything.
+Companion for your X3/X4 reader
+Choose which Home pages the reader shows and in what order, place the weather panel, and compose the Daily Brief it shows while asleep. The preview is drawn by the reader's own layout code. Write up to three cards with images or QR codes. Send books, articles and typed text over a direct local connection, or copy files to an SD card on Mac. Firmware updates show the latest official release and install only after you confirm on the reader.
 
 Private by design
-No Pocket Daily account. No ads. No analytics. No cloud relay. Discovery and transfer use Bluetooth and the local network. Files and calendar events stay between your Apple device, your reader, and storage you choose; weather requests send only the chosen city to Apple Weather, and a firmware update you start downloads the official release from GitHub.
+No Pocket Daily account. No ads. No analytics. No cloud relay. Your library stays on your device. Discovery and transfer use Bluetooth and the local network. Weather requests send only the chosen city to Apple Weather. KOReader sync, if you turn it on, sends a book fingerprint and your position to the server you chose, never the book.
 
-Try before connecting
-Built-in demo mode shows the editors with labeled sample content and no reader hardware. Demo mode never sends files or changes a device.
+Try the companion before connecting
+Demo mode shows the reader editors with labeled sample content and never sends files or changes a device.
 
 Compatibility notice
-A separately obtained X3/X4-class reader running Pocket Daily or compatible CrossPoint-based firmware is required for live transfer and settings; Home and Sleep editing needs Pocket Daily firmware that stores these settings. Factory firmware and manufacturer cloud services are not supported. Pocket Daily is an independent open-source project and is not affiliated with, sponsored by, or endorsed by any reader manufacturer or the CrossPoint Reader project.
+Reading needs no extra hardware. The companion features need a separately obtained X3/X4-class reader running Pocket Daily or compatible CrossPoint-based firmware; Home and Sleep editing needs Pocket Daily firmware. Factory firmware, manufacturer cloud services and DRM-protected books are not supported. Pocket Daily is an independent open-source project and is not affiliated with, sponsored by, or endorsed by any reader manufacturer, the CrossPoint Reader project or KOReader.
