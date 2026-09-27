@@ -1,0 +1,10 @@
+{
+  "name": "PocketSymbols_12.cpfont",
+  "purpose": "Glyph-fallback font the reader borrows emoji and symbols from; installed at /.fonts/PocketSymbols/",
+  "firmwareRepository": "https://github.com/puritysb/pocket-daily-firmware",
+  "firmwareCommit": "82854673c928bc7ddedccffc969ac2c257dcbffa",
+  "firmwarePath": "assets/fonts/PocketSymbols/PocketSymbols_12.cpfont",
+  "sha256": "8c2481b50661c532daf4de528504a163ffc6ca903fe7cc2e76afc1fae009d138",
+  "bytes": 413062,
+  "license": "SIL OFL 1.1 (derived from Noto Emoji 3.002, Noto Sans Symbols 2 2.008, Noto Sans Math 3.000; no Reserved Font Names); unmodified OFL texts alongside"
+}

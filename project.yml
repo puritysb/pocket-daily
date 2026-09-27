@@ -30,6 +30,9 @@ targets:
       - path: Support/ReaderEngine
         type: folder
         buildPhase: resources
+      - path: Support/ReaderFonts
+        type: folder
+        buildPhase: resources
     dependencies:
       - target: PocketShare
         embed: true
@@ -105,6 +108,9 @@ targets:
         type: folder
         buildPhase: resources
       - path: Support/ReaderEngine
+        type: folder
+        buildPhase: resources
+      - path: Support/ReaderFonts
         type: folder
         buildPhase: resources
     dependencies:

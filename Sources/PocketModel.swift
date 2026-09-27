@@ -1890,10 +1890,12 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
-    private func destination(for url: URL) -> String {
+    func destination(for url: URL) -> String {
         if ArticleEPUB.isFilename(url.lastPathComponent) { return "/Articles" }
         return switch url.pathExtension.lowercased() {
         case "pdl": "/pocket-daily/learning"
+        // The same family folder the mounted-SD copy uses; the reader finds fonts there at boot.
+        case "cpfont": "/.fonts/" + Self.fontFamily(from: url.deletingPathExtension().lastPathComponent)
         default: "/"
         }
     }

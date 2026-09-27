@@ -28,3 +28,12 @@ copyright 2022 John Factotum) and its vendored build of
 copyright 2023 Gildas Lormeau). The exact commit, file list and license texts
 are in `Support/ReaderEngine/`; the app shows them under About → Reader engine
 notices.
+
+## Reader symbol font
+
+`Support/ReaderFonts/PocketSymbols/PocketSymbols_12.cpfont`, offered for
+installation on a connected reader, is derived from Noto Emoji 3.002, Noto
+Sans Symbols 2 2.008 and Noto Sans Math 3.000, each under the SIL Open Font
+License 1.1 (no Reserved Font Names). The unmodified license texts are bundled
+beside it; provenance is in its `SOURCE.json` and the firmware repository's
+`assets/fonts/PocketSymbols/README.md`.

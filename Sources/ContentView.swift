@@ -536,7 +536,7 @@ struct ProjectInformationSheet: View {
         Link("Privacy policy", destination: PocketLinks.privacy)
         Link("Open-source notices", destination: PocketLinks.notices)
         NavigationLink("Preview font notices") { PreviewFontNotices() }
-        NavigationLink("Reader engine notices") { ReaderEngineNotices() }
+        NavigationLink("Reader engine and font notices") { ReaderEngineNotices() }
         Link("Support", destination: PocketLinks.support)
     }
 }
@@ -564,9 +564,14 @@ private struct ReaderEngineNotices: View {
         guard let root = Bundle.main.url(forResource: "ReaderEngine", withExtension: nil) else {
             return "Reader engine notices are unavailable."
         }
-        let files = [("foliate-js (MIT)", "foliate-js/LICENSE"), ("zip.js (BSD-3-Clause)", "foliate-js/vendor/zip.js.LICENSE")]
-        return files.map { title, path in
-            let text = (try? String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)) ?? "Unavailable."
+        let fonts = root.deletingLastPathComponent().appendingPathComponent("ReaderFonts/PocketSymbols")
+        let files = [("foliate-js (MIT)", root.appendingPathComponent("foliate-js/LICENSE")),
+                     ("zip.js (BSD-3-Clause)", root.appendingPathComponent("foliate-js/vendor/zip.js.LICENSE")),
+                     ("Reader symbol font: Noto Emoji (OFL 1.1)", fonts.appendingPathComponent("NotoEmoji-OFL.txt")),
+                     ("Reader symbol font: Noto Sans Symbols 2 (OFL 1.1)", fonts.appendingPathComponent("NotoSansSymbols2-OFL.txt")),
+                     ("Reader symbol font: Noto Sans Math (OFL 1.1)", fonts.appendingPathComponent("NotoSansMath-OFL.txt"))]
+        return files.map { title, url in
+            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? "Unavailable."
             return "\(title)\n\n\(text)"
         }.joined(separator: "\n\n")
     }
@@ -984,6 +989,7 @@ private struct FilesInspector: View {
             }
             Text("Books, articles and written text are saved on the reader’s SD card. Saved articles and your books are in the Library.")
                 .font(.caption).foregroundStyle(.secondary)
+            if !model.isDemoMode { ReaderSymbolFontOffer(model: model) }
             PreparedTransferQueue(model: model, kind: .content)
         }
     }
