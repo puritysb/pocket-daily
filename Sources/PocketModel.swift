@@ -1274,6 +1274,16 @@ final class PocketModel: ObservableObject, DeviceSession {
         preferencesDirty = false
     }
 
+    /// Stage an explicit offline draft only after connection; unsupported keys stay absent.
+    func stageReadingPreferences(_ draft: ReaderPreferences) {
+        guard let loaded = preferences else { return }
+        var supported = draft
+        if loaded.sideButtons == nil { supported.sideButtons = nil }
+        if loaded.frontButtonsFollowOrientation == nil { supported.frontButtonsFollowOrientation = nil }
+        preferencesDirty = supported != loaded
+        preferences = supported
+    }
+
     func setFontSize(_ size: Int) {
         preferences?.fontSize = size
         preferencesDirty = true

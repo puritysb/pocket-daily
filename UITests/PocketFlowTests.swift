@@ -50,8 +50,30 @@ final class PocketFlowTests: XCTestCase {
         attach(app, "home-sleep-editor")
 
         app.buttons["profile-revert"].tap()
+        app.buttons["Discard edits"].tap()
         XCTAssertFalse(app.buttons["profile-revert"].isEnabled)
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
+    }
+
+    func testReadingSettingsAreEditableOfflineAndDiscardIsExplicit() {
+        let app = XCUIApplication()
+        app.launch()
+        let size = app.buttons["Extra large"]
+        app.revealInStudio(size)
+        XCTAssertTrue(size.isHittable)
+        size.tap()
+        XCTAssertFalse(app.buttons["profile-side-buttons-1"].exists)
+        app.revealCanvas()
+        XCTAssertTrue(app.staticTexts["Text size example · approximate appearance"].exists)
+        XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
+        XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
+        attach(app, "offline-reading-settings")
+        app.buttons["profile-revert"].tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(size.isSelected)
+        app.buttons["profile-revert"].tap()
+        app.buttons["Discard edits"].tap()
+        XCTAssertFalse(app.buttons["profile-revert"].isEnabled)
     }
 
     /// My cards open under their Home page; editing shows the card page.
@@ -326,7 +348,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Exit demo"].exists)
         XCTAssertFalse(app.buttons["files-add"].isEnabled, "Nothing may reach a device")
         // Reader settings are populated in Home & Sleep so they are reviewable...
-        app.open("Home & Sleep")
+        app.open("Customize reader")
         let startup = app.switches["profile-startup"]
         app.revealInStudio(startup)
         XCTAssertTrue(startup.exists)

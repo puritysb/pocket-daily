@@ -72,6 +72,43 @@ final class ReaderPreferencesTests: XCTestCase {
         XCTAssertEqual(model.preferences?.sideButtons, .nextPrevious)
         XCTAssertTrue(model.preferencesDirty)
     }
+    @MainActor
+    func testOfflineReadingEditsMergeWithReaderWithoutOverwritingUntouchedFields() {
+        let editor = ProfileEditorState()
+        editor.reading.fontSize = 3
+        editor.reading.sideButtons = .nextPrevious
+        var loaded = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: true)
+        loaded.sleepTimeoutMinutes = 20
+        editor.syncReading(loaded)
+        XCTAssertEqual(editor.reading.fontSize, 3)
+        XCTAssertEqual(editor.reading.sideButtons, .nextPrevious)
+        XCTAssertEqual(editor.reading.sleepTimeoutMinutes, 20)
+        XCTAssertEqual(editor.reading.frontButtonsFollowOrientation, true)
+        editor.syncReading(nil)
+        XCTAssertTrue(editor.readingDirty)
+        editor.revert()
+        XCTAssertEqual(editor.reading, loaded)
+        XCTAssertFalse(editor.readingDirty)
+    }
+
+    @MainActor
+    func testUnsupportedSettingsAreNotSentAndSavedDraftBecomesBaseline() {
+        let editor = ProfileEditorState()
+        editor.reading.sideButtons = .off
+        editor.syncReading(ReaderPreferences())
+        XCTAssertNil(editor.reading.sideButtons)
+        let model = PocketModel()
+        model.preferences = ReaderPreferences()
+        var draft = ReaderPreferences(sideButtons: .nextPrevious, frontButtonsFollowOrientation: true)
+        draft.fontSize = 2
+        model.stageReadingPreferences(draft)
+        XCTAssertNil(model.preferences?.sideButtons)
+        XCTAssertNil(model.preferences?.frontButtonsFollowOrientation)
+        XCTAssertEqual(model.preferences?.fontSize, 2)
+        editor.acceptReading(model.preferences)
+        XCTAssertFalse(editor.readingDirty)
+    }
+
 }
 
 final class ReaderFileValidationTests: XCTestCase {

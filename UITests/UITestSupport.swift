@@ -70,7 +70,7 @@ extension XCUIApplication {
 
     /// The Home & Sleep canvas once its frame matches the current edit.
     @discardableResult
-    func waitForLayoutPreview(caption: String = "Your cards · sample content", timeout: TimeInterval = 15) -> Bool {
+    func waitForLayoutPreview(caption: String = "Demo cards · example book, weather & schedule", timeout: TimeInterval = 15) -> Bool {
         let canvas = descendants(matching: .any)["profile-canvas"]
         let current = NSPredicate(format: "value == %@", "Current")
         let ready = XCTNSPredicateExpectation(predicate: current, object: canvas)

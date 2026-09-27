@@ -18,6 +18,8 @@ cd "$(dirname "$0")/.."
 IPHONE_NAME="${POCKET_IPHONE_SIMULATOR:-iPhone 17 Pro Max}"
 IPAD_NAME="${POCKET_IPAD_SIMULATOR:-iPad Pro 13-inch (M5)}"
 DERIVED_DATA="${POCKET_SCREENSHOT_DERIVED_DATA:-.build/screenshots}"
+# Allow capture-only runs after functional UI tests have been run separately.
+TEST_TARGET="${POCKET_SCREENSHOT_TEST_TARGET:-PocketUITests}"
 WORK="$(mktemp -d)"
 finish() {
   local status=$?
@@ -45,7 +47,7 @@ capture_ios() {
   xcodebuild test \
     -project Pocket.xcodeproj -scheme Pocket -destination "id=$udid" \
     -derivedDataPath "$DERIVED_DATA" -resultBundlePath "$WORK/$folder.xcresult" \
-    -only-testing:PocketUITests CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
+    -only-testing:"$TEST_TARGET" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -quiet
   xcrun simctl status_bar "$udid" clear >/dev/null
   xcrun simctl shutdown "$udid" >/dev/null
   publish "$folder" "$width" "$height"

@@ -57,10 +57,17 @@ comparison/import and persistent backup browsing are not yet implemented.
 ## Studio layout (all platforms, 2026-09-25)
 
 One studio serves Mac, iPad and iPhone (`ContentView`, `StudioSection`):
-**Home & Sleep** holds everything the reader shows from Pocket Daily (Home
+**Customize reader** holds everything the reader shows from Pocket Daily (Home
 items, **My cards**, weather, sleep screen, and the reader settings "Open
 Pocket Daily when the reader starts", book cover, sleep timeout and text size)
-with one Send. The **Reader** inspector holds the connection, files ("Write
+with one **Apply to reader** action. Screen-specific controls come first. A compact Reading group below them
+contains book/article text size. Button remapping is not exposed in the app;
+existing reader mappings are preserved. Changing text size shows a clearly
+labeled illustrative article in the device preview, with a Back to layout action.
+This example is not the EPUB renderer and does not promise exact fonts or pagination. They can be edited before connecting, in the current app window.
+Connection merges untouched fields from the reader and retains edited fields;
+Reader-only settings, including existing button mappings, retain their loaded values. Nothing is sent until the user
+connects to reader Sync and chooses Apply. The **Reader** inspector holds the connection, files ("Write
 text to read" prepares an EPUB by default, with a plain-text option),
 troubleshooting (folded) and About & Privacy.
 Wide windows (at least 920 pt) show the header with the reader state beside a
@@ -71,12 +78,14 @@ My cards), the theme-metric inspector, the reader-screen capture download and
 live-frame fetching (no view showed them), the LIVE/POLL badge, JSON card
 import/export and Auto-send.
 
-Send (`PocketModel.sendReaderLayout`) posts the profile and reader settings in
+Apply to reader (`PocketModel.sendReaderLayout`) posts the profile and reader settings in
 one reader work item, only the parts that changed, then applies My cards
 through the content lane when their revision differs from the reader's
-(`readerContentRevision`, read once per connection). Revert restores the
-profile and settings last loaded; cards are local drafts (Load from reader
-restores them).
+(`readerContentRevision`, read once per connection). **Discard edits…** asks for confirmation and restores the
+last loaded layout and reading settings (starting defaults before connecting).
+It does not transmit anything or discard card drafts. Preview captions identify
+example book/weather/schedule data and distinguish demo cards from user drafts;
+the layout preview is explicitly not a live reader screen.
 
 ## My cards (2026-09-25)
 

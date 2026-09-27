@@ -119,6 +119,6 @@ final class PocketProfileTests: XCTestCase {
         XCTAssertFalse(editor.isDirty)
 
         editor.sync(with: nil)
-        XCTAssertEqual(editor.draft, .defaults, "Without a reader the editor starts from the original layout")
+        XCTAssertEqual(editor.draft, editor.base, "Disconnecting retains the last loaded layout for offline editing")
     }
 }

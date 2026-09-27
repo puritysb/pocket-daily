@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 /// settings); the connection and files sit in the inspector (a Reader tab on
 /// iPhone).
 enum StudioSection: String, CaseIterable, Hashable {
-    case layout = "Home & Sleep", reader = "Reader"
+    case layout = "Customize reader", reader = "Reader"
 
     var symbol: String {
         switch self {
@@ -212,9 +212,6 @@ struct ContentView: View {
             HStack(spacing: 14) {
                 PocketMark()
                 Text("Pocket Daily").font(.title3.weight(.semibold))
-                Text(StudioSection.layout.rawValue)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
                 Spacer(minLength: 12)
                 ReaderChip(model: model)
             }

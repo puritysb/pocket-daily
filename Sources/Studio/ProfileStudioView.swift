@@ -15,14 +15,41 @@ final class ProfileEditorState: ObservableObject {
     /// unsent edits made against an older base.
     func sync(with reader: ReaderProfileState?) {
         // Daemon-fed items are dropped on load, so they never count as edits.
-        let incoming = (reader?.profile ?? .defaults).withoutRetiredItems
-        guard reader?.generation != baseGeneration || incoming != base else { return }
+        guard let reader else { return }
+        let incoming = reader.profile.withoutRetiredItems
+        guard reader.generation != baseGeneration || incoming != base else { return }
         if !isDirty || draft == incoming { draft = incoming }
         base = incoming
-        baseGeneration = reader?.generation
+        baseGeneration = reader.generation
     }
 
-    func revert() { draft = base }
+    @Published var reading = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false)
+    @Published private(set) var readingBase = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false)
+    var readingDirty: Bool { reading != readingBase }
+
+    /// Adopt untouched fields, retaining edits made before connecting.
+    func syncReading(_ loaded: ReaderPreferences?) {
+        guard let loaded else { return }
+        var merged = loaded
+        if reading.startupApp != readingBase.startupApp { merged.startupApp = reading.startupApp }
+        if reading.pocketDailySleepCover != readingBase.pocketDailySleepCover { merged.pocketDailySleepCover = reading.pocketDailySleepCover }
+        if reading.sleepTimeoutMinutes != readingBase.sleepTimeoutMinutes { merged.sleepTimeoutMinutes = reading.sleepTimeoutMinutes }
+        if reading.fontSize != readingBase.fontSize { merged.fontSize = reading.fontSize }
+        if loaded.sideButtons != nil, reading.sideButtons != readingBase.sideButtons { merged.sideButtons = reading.sideButtons }
+        if loaded.frontButtonsFollowOrientation != nil, reading.frontButtonsFollowOrientation != readingBase.frontButtonsFollowOrientation {
+            merged.frontButtonsFollowOrientation = reading.frontButtonsFollowOrientation
+        }
+        readingBase = loaded
+        reading = merged
+    }
+
+    func acceptReading(_ saved: ReaderPreferences?) {
+        guard let saved else { return }
+        readingBase = saved
+        reading = saved
+    }
+
+    func revert() { draft = base; reading = readingBase }
 }
 
 /// Home & Sleep editor, organized around the reader's two Pocket Daily screens.
@@ -30,7 +57,7 @@ final class ProfileEditorState: ObservableObject {
 /// user's own cards and sample content (an outline when that renderer is
 /// unavailable); the controls beside it (below when `stacked`) edit only that
 /// screen. Its pages or sections are modules switched on and dragged into
-/// order, and My cards live inside Home. Reader-wide settings sit underneath,
+/// order, and My cards live inside Home. Reading size follows screen settings,
 /// and one Apply sends everything that changed.
 struct ProfileStudioView: View {
     @ObservedObject var model: PocketModel
@@ -51,7 +78,8 @@ struct ProfileStudioView: View {
     @State private var cardsError: String?
     @State private var selectedCardID: String?
     @State private var editingCards: Bool
-    @State private var showsReaderSettings = false
+    @State private var confirmingDiscard = false
+    @State private var showsReadingSample = false
     @State private var drag: ReorderDrag?
     /// Where Weather returns when switched back on.
     @State private var weatherWhenOn: PocketProfile.WeatherPanel = .bottom
@@ -99,9 +127,26 @@ struct ProfileStudioView: View {
         }
         .onAppear {
             editor.sync(with: model.readerProfile)
+            if !model.preferencesDirty { editor.syncReading(model.preferences) }
             if editor.draft.home.weather != .off { weatherWhenOn = editor.draft.home.weather }
         }
+        .onChange(of: model.preferences) { _, preferences in
+            if !model.preferencesDirty { editor.syncReading(preferences) }
+        }
+        .onChange(of: model.preferencesDirty) { wasDirty, dirty in
+            if wasDirty && !dirty { editor.acceptReading(model.preferences) }
+        }
+        .alert("Discard layout and reading-setting edits?", isPresented: $confirmingDiscard) {
+            Button("Discard edits", role: .destructive) {
+                editor.revert()
+                model.revertPreferences()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Restores the last loaded layout and reading settings, or their starting defaults before connecting. Card edits stay. Nothing is sent to the reader.")
+        }
         .onChange(of: model.readerProfile) { _, reader in editor.sync(with: reader) }
+        .onChange(of: editor.draft) { _, _ in showsReadingSample = false }
         .onChange(of: editor.draft.home.weather) { _, weather in if weather != .off { weatherWhenOn = weather } }
         .task(id: model.isDemoMode) { await openCards() }
         .task(id: previewKey) {
@@ -170,13 +215,14 @@ struct ProfileStudioView: View {
         preview == .card ? cardPreview.image != nil : layoutRequest != nil && layout.image != nil
     }
     private var canvasImage: CGImage? {
+        if showsReadingSample { return ImageRenderer(content: readingSample).cgImage }
         if preview == .card { return cardPreview.image }
         return showsRender ? layout.image : schematic
     }
 
     private var canvas: some View {
         VStack(spacing: 10) {
-            Picker("Screen", selection: Binding(get: { screen }, set: { preview = $0 == .home ? .home : .sleep })) {
+            Picker("Screen", selection: Binding(get: { screen }, set: { showsReadingSample = false; preview = $0 == .home ? .home : .sleep })) {
                 ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -191,14 +237,19 @@ struct ProfileStudioView: View {
                 .accessibilityLabel(canvasLabel)
                 .accessibilityValue(canvasIsCurrent ? "Current" : "Updating")
                 .accessibilityIdentifier("profile-canvas")
+            Text(showsReadingSample ? "Text size example · approximate appearance" : "Layout preview · not a live reader screen")
+                .font(.caption.weight(.medium)).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .help(preview == .card ? "The card as the reader draws it when opened." :
-                          showsRender ? "Drawn by the reader's own layout code with your cards and sample content. Your reader shows its own books and weather." : "")
+                          showsRender ? "Preview uses your card drafts plus an example book, weather and schedule. It is not a live image of your reader." : "")
                     .accessibilityIdentifier("profile-canvas-caption")
-                if preview == .card {
+                if showsReadingSample {
+                    Button("Back to layout") { showsReadingSample = false }
+                        .font(.caption2).accessibilityIdentifier("profile-back-to-layout")
+                } else if preview == .card {
                     Button("Show Home") { preview = .home }
                         .buttonStyle(.borderless)
                         .font(.caption2)
@@ -210,7 +261,9 @@ struct ProfileStudioView: View {
     }
 
     @ViewBuilder private var canvasOverlay: some View {
-        if preview == .card, selectedCard == nil {
+        if showsReadingSample {
+            EmptyView()
+        } else if preview == .card, selectedCard == nil {
             Text("Add a card to see it here").font(.caption)
                 .padding(10).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         } else if preview == .card, cardPreview.image == nil, let error = cardPreview.error {
@@ -221,12 +274,14 @@ struct ProfileStudioView: View {
     }
 
     private var canvasIsCurrent: Bool {
+        if showsReadingSample { return true }
         if preview == .card { return cardPreview.image != nil || cardRequest == nil }
         return layoutRequest == nil || layout.renderedRequest == layoutRequest
     }
 
     private var canvasLabel: String {
-        switch preview {
+        if showsReadingSample { return "Reading example, text size \(editor.reading.fontSize + 1) of 4" }
+        return switch preview {
         case .card: selectedCard.map { "Card \($0.title)" } ?? "No card"
         case .home, .sleep:
             showsRender ? "Pocket Daily \(preview.rawValue.lowercased()) with sample content"
@@ -235,8 +290,12 @@ struct ProfileStudioView: View {
     }
 
     private var canvasCaption: String {
+        if showsReadingSample { return "Example article · actual font and pages depend on the book" }
         if preview == .card { return "Card page" }
-        if showsRender { return draftCards.cards.isEmpty ? "Sample content" : "Your cards · sample content" }
+        if showsRender {
+            if model.isDemoMode { return "Demo cards · example book, weather & schedule" }
+            return draftCards.cards.isEmpty ? "Example book, weather & schedule" : "Your cards · example book, weather & schedule"
+        }
         if layoutRequest != nil, layout.error != nil { return "Layout outline · preview unavailable" }
         return "Layout outline"
     }
@@ -269,11 +328,14 @@ struct ProfileStudioView: View {
     }
 
     private var profileDirty: Bool { model.canEditReaderProfile && editor.isDirty }
-    private var anythingDirty: Bool { profileDirty || model.preferencesDirty || cardsDirty }
+    private var anythingDirty: Bool { profileDirty || editor.readingDirty || model.preferencesDirty || cardsDirty }
 
     private var status: (text: String, symbol: String, color: Color) {
         if model.isDemoMode { return ("Demo · nothing is sent", "info.circle", .secondary) }
-        if model.readerStatus == nil { return ("Connect a reader to apply changes", "info.circle", .secondary) }
+        if model.readerStatus == nil { return ("Editing in the app · connect to reader Sync to apply", "info.circle", .secondary) }
+        if editor.readingDirty && model.preferences == nil {
+            return ("Reconnect to reader Sync to load settings before applying", "info.circle", .orange)
+        }
         if let error = editor.draft.validationError ?? cardsValidation { return (error, "exclamationmark.triangle", .red) }
         if case let .sending(step) = cardStatus { return ("\(step)…", "arrow.triangle.2.circlepath", .secondary) }
         if model.profileSend == .sending { return ("Applying on the reader…", "arrow.triangle.2.circlepath", .secondary) }
@@ -288,7 +350,7 @@ struct ProfileStudioView: View {
         case .failed where cardsDirty: return ("Cards not applied · \(model.message)", "xmark.octagon", .red)
         default: break
         }
-        if anythingDirty { return ("Changes not applied", "circle.dashed", .orange) }
+        if anythingDirty { return ("Edits in the app · not yet applied to reader", "circle.dashed", .orange) }
         if case .storedNotShown = cardStatus { return (cardStatus.label, cardStatus.symbol, .orange) }
         if !model.canEditReaderProfile && editor.isDirty {
             return ("This reader's firmware can't store Home & Sleep yet", "exclamationmark.triangle", .orange)
@@ -325,6 +387,7 @@ struct ProfileStudioView: View {
 
     private var canApply: Bool {
         model.readerStatus != nil && !model.isDemoMode && !model.isWorking && anythingDirty &&
+            (!editor.readingDirty || model.preferences != nil) &&
             editor.draft.validationError == nil && (cardsValidation == nil || !cardsDirty)
     }
 
@@ -364,14 +427,12 @@ struct ProfileStudioView: View {
     }
 
     @ViewBuilder private var applyControls: some View {
-        Button("Revert") {
-            editor.revert()
-            model.revertPreferences()
-        }
-        .disabled(!(editor.isDirty || model.preferencesDirty) || model.isWorking)
-        .help("Back to what the reader has. Your cards stay as they are.")
+        Button("Discard edits…") { confirmingDiscard = true }
+        .disabled(!(editor.isDirty || editor.readingDirty || model.preferencesDirty) || model.isWorking)
+        .help("Discard layout and reading-setting edits. Card edits stay; nothing is sent to the reader.")
         .accessibilityIdentifier("profile-revert")
-        Button("Apply") {
+        Button("Apply to reader") {
+            if editor.readingDirty { model.stageReadingPreferences(editor.reading) }
             model.sendReaderLayout(profile: profileDirty ? editor.draft : nil,
                                    cards: cardsDirty ? cardsRevision : nil, show: screenToShow)
         }
@@ -391,12 +452,14 @@ struct ProfileStudioView: View {
                 set: { editor.draft[keyPath: key] = $0; preview = surface })
     }
 
-    /// Reader settings (applied with the same Apply); shown once loaded.
+    /// Locally editable reader settings, staged only by Apply.
     private func setting<Value>(_ get: @escaping (ReaderPreferences) -> Value,
-                                _ set: @escaping (Value) -> Void, on surface: PreviewSurface? = nil) -> Binding<Value>? {
-        guard let preferences = model.preferences else { return nil }
-        return Binding(get: { get(model.preferences ?? preferences) },
-                       set: { set($0); if let surface { preview = surface } })
+                                _ set: @escaping (inout ReaderPreferences, Value) -> Void,
+                                on surface: PreviewSurface? = nil) -> Binding<Value>? {
+        Binding(get: { get(editor.reading) }, set: { value in
+            set(&editor.reading, value)
+            if let surface { showsReadingSample = false; preview = surface }
+        })
     }
 
     private var homeItems: Set<PocketProfile.HomeItem> {
@@ -410,10 +473,11 @@ struct ProfileStudioView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 22) {
             switch screen {
-            case .home: homeControls
+            case .home:
+                homeControls
+                readerSettings
             case .sleep: sleepControls
             }
-            readerSettings
             Button("Reset to default layout") { editor.draft = .defaults }
                 .buttonStyle(.borderless)
                 .font(.caption)
@@ -441,7 +505,7 @@ struct ProfileStudioView: View {
             .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 10))
             .overlay { RoundedRectangle(cornerRadius: 10).stroke(PocketPalette.line) }
         }
-        if let startup = setting({ $0.startupApp == 1 }, model.setStartupPocketDaily, on: .home) {
+        if let startup = setting({ $0.startupApp == 1 }, { $0.startupApp = $1 ? 1 : 0 }, on: .home) {
             Toggle("Open Pocket Daily when the reader starts", isOn: startup)
                 .accessibilityIdentifier("profile-startup")
         }
@@ -628,7 +692,7 @@ struct ProfileStudioView: View {
                             .padding(.bottom, 10)
                     }
                     if section == .reading, editor.draft.sleep.sections.contains(.reading),
-                       let cover = setting({ $0.pocketDailySleepCover }, model.setPocketDailySleepCover, on: .sleep) {
+                       let cover = setting({ $0.pocketDailySleepCover }, { $0.pocketDailySleepCover = $1 }, on: .sleep) {
                         Toggle("Book cover", isOn: cover)
                             .font(.caption)
                             .padding(.leading, 30)
@@ -639,7 +703,7 @@ struct ProfileStudioView: View {
                 }
             }
         }
-        if let timeout = setting({ $0.sleepTimeoutMinutes }, model.setSleepTimeout, on: .sleep) {
+        if let timeout = setting({ $0.sleepTimeoutMinutes }, { $0.sleepTimeoutMinutes = $1 }, on: .sleep) {
             // The reader accepts 1-30 minutes; 31 means it never sleeps on its own.
             Stepper(timeout.wrappedValue >= ReaderPreferences.neverSleepMinutes
                         ? "Never sleep on its own" : "Sleep after \(timeout.wrappedValue) min",
@@ -655,60 +719,45 @@ struct ProfileStudioView: View {
         return sections.contains(.weather) ? .weather : sections.contains(.today) ? .today : nil
     }
 
-    /// Settings for the whole reader rather than one screen; folded by default.
-    @ViewBuilder private var readerSettings: some View {
-        if let preferences = model.preferences {
-            DisclosureGroup(isExpanded: $showsReaderSettings) {
-                VStack(alignment: .leading, spacing: 10) {
-                    if let size = setting({ $0.fontSize }, model.setFontSize) {
-                        LabeledContent("Text size") {
-                            Picker("Text size", selection: size) {
-                                Text("S").tag(0); Text("M").tag(1); Text("L").tag(2); Text("XL").tag(3)
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(maxWidth: 200)
-                        }
-                        .accessibilityIdentifier("profile-text-size")
-                    }
-                    if preferences.hasButtonSettings,
-                       let side = setting({ $0.sideButtons ?? .previousNext }, model.setSideButtons),
-                       let follow = setting({ $0.frontButtonsFollowOrientation ?? false },
-                                            model.setFrontButtonsFollowOrientation) {
-                        LabeledContent("Side buttons") {
-                            Picker("Side buttons", selection: side) {
-                                ForEach(ReaderPreferences.SideButtons.allCases, id: \.self) { Text($0.title).tag($0) }
-                            }
-                            .labelsHidden()
-                            .fixedSize()
-                        }
-                        .help("Page turns with the side buttons while reading")
-                        .accessibilityIdentifier("profile-side-buttons")
-                        Toggle("Front buttons follow screen rotation", isOn: follow)
-                            .help("When the book is upside down or turned left, the front buttons swap to match")
-                            .accessibilityIdentifier("profile-front-buttons")
-                    } else {
-                        Text("Button settings need a newer reader firmware.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.top, 8)
-            } label: {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Reader settings").font(.headline)
-                    Text(readerSummary(preferences)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
+    private var readerSettings: some View {
+        ControlGroup(title: "Reading", note: "Books & saved articles") {
+            Picker("Text size", selection: Binding(get: { editor.reading.fontSize }, set: { editor.reading.fontSize = $0; showsReadingSample = true })) {
+                Text("Small").tag(0)
+                Text("Medium").tag(1)
+                Text("Large").tag(2)
+                Text("Extra large").tag(3)
             }
-            .accessibilityIdentifier("profile-reader-settings")
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("profile-text-size")
+            HStack {
+                Text("Changes book text, not Home or Sleep.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Button("Preview") { showsReadingSample = true }
+                    .font(.caption).accessibilityIdentifier("profile-preview-reading")
+            }
         }
     }
 
-    private func readerSummary(_ preferences: ReaderPreferences) -> String {
-        let size = ["S", "M", "L", "XL"].indices.contains(preferences.fontSize)
-            ? ["S", "M", "L", "XL"][preferences.fontSize] : "\(preferences.fontSize)"
-        var parts = ["Text \(size)"]
-        if let side = preferences.sideButtons { parts.append("Side: \(side.title.lowercased())") }
-        return parts.joined(separator: " · ")
+    /// An illustrative size comparison, never presented as the EPUB renderer.
+    private var readingSample: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            Text("SAVED ARTICLE").font(.system(size: 16, weight: .medium))
+            Divider().overlay(.black)
+            Text("A little time to read").font(.system(size: 30, weight: .bold, design: .serif))
+            Text("Save an article when it catches your eye. Read it later on your reader, away from the busy screen.\n\nA few quiet minutes are enough to enjoy a good story. Choose a text size that feels comfortable, then keep reading at your own pace.\n\nYour saved articles will be waiting whenever you return.")
+                .font(.system(size: CGFloat(22 + editor.reading.fontSize * 5), design: .serif))
+                .lineSpacing(7)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
+            Divider().overlay(.black)
+            Text("TEXT SIZE EXAMPLE").font(.system(size: 14))
+        }
+        .padding(30)
+        .frame(width: 480, height: 800)
+        .foregroundStyle(.black)
+        .background(.white)
+        .environment(\.colorScheme, .light)
     }
 
     // MARK: Cards and schematic

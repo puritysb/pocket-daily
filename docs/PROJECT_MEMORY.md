@@ -37,15 +37,17 @@ with a dated note below.
   canvas picks the screen; its modules (Home pages, sleep sections) are switched
   on with a switch and dragged into order (`ModuleList`, `ReorderableList.swift`,
   one shared drag record so lists never reorder each other). My cards open
-  under their Home page as a draggable card list. Reader-wide settings (text
-  size, side buttons, front buttons follow rotation) are folded underneath.
-  The single action is **Apply** (`profile-apply`). Reader panel shows only the
-  actions for its state (session actions in a ⋯ menu); Files has one Add menu
-  (choose, write text, Mac SD copy). Button settings use the additive
-  preferences keys `sideButtonLayout` (0-2) and `frontButtonFollowOrientation`
-  (sibling docs/nearby-sync-v1.md, firmware 3de13206); readers that omit them
-  get no button controls. Sync Home/Sleep presentation is now implemented
-  (sibling docs/pocket-screen-present-v1.md), with X3 wa4be8509 returning
+  under their Home page as a draggable card list. Updated 2026-09-27:
+  Home controls come first, then compact book/article text size with an
+  illustrative reading preview. Button mapping is not exposed; loaded values
+  are preserved. Offline drafts survive disconnect and merge untouched fields
+  on connection. Apply to reader sends explicitly; Discard edits confirms local
+  layout/reading reset while retaining card edits. The logo header has no
+  redundant Home & Sleep label. Connection/files remain in Reader; Prepare
+  content replaces Add. Current screenshots cover iPhone/iPad/Mac. Related
+  tests 15 unit + 1 UI pass; both platform builds and store validation pass.
+  Sync Home/Sleep presentation is implemented (sibling
+  docs/pocket-screen-present-v1.md), with X3 wa4be8509 returning
   rendered three times and user screen confirmation. Sync covers are deliberate
   placeholders. X4/direct hardware acceptance remains open.
 - 2026-09-27 Firmware UI: once-per-launch GitHub metadata check outside demo
