@@ -452,7 +452,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                                                                   host: host, port: port) }))
             guard attempt == connectionAttempt else { return }
             screenShow = .shown(screen, generation: generation)
-            post("Applied. The reader shows \(name) now; press Back on the reader to return to Sync.", tone: .success)
+            post("Applied. The reader shows \(name). Book covers use placeholders in Sync. Press Back on the reader to return to Sync.", tone: .success)
         } catch {
             guard attempt == connectionAttempt, !(error is CancellationError) else { return }
             screenShow = .failed(screen, error.localizedDescription)

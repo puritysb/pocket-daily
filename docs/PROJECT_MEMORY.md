@@ -6,6 +6,10 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-27 Host renderer imported from the reviewed sibling source snapshot
+  (see Support/PocketUIHost/PROVENANCE.json and PIN.json). Includes shared
+  Home/Brief font fixes. Artifact verification, renderer tests and both
+  platform builds pass; provenance records the build-time dirty source hash.
 - 2026-09-27 Articles and EPUB: browser sharing → local review/edit → EPUB
   preparation → explicit SD transfer → reader library and user-controlled
   deletion. iOS share extension uses an App Group; macOS has the in-app library.
@@ -31,9 +35,11 @@ with a dated note below.
   actions for its state (session actions in a ⋯ menu); Files has one Add menu
   (choose, write text, Mac SD copy). Button settings use the additive
   preferences keys `sideButtonLayout` (0-2) and `frontButtonFollowOrientation`
-  (sibling docs/nearby-sync-v1.md, firmware 3de13206); readers that omit them get no button controls. Home and Sleep still
-  appear on the reader only when Sync ends; drawing them inside Sync is the
-  proposed, unimplemented sibling contract docs/pocket-screen-present-v1.md.
+  (sibling docs/nearby-sync-v1.md, firmware 3de13206); readers that omit them
+  get no button controls. Sync Home/Sleep presentation is now implemented
+  (sibling docs/pocket-screen-present-v1.md), with X3 wa4be8509 returning
+  rendered three times and user screen confirmation. Sync covers are deliberate
+  placeholders. X4/direct hardware acceptance remains open.
 - 2026-09-26 Update reader (FirmwareReleaseSource): only on tap, never in
   demo or a direct session, the app reads GitHub's latest release of
   puritysb/pocket-daily-firmware, downloads firmware.bin from that repo's
