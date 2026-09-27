@@ -28,9 +28,9 @@ enum WelcomeBook {
                     "No reader yet? That is fine. Everything in the Library works on its own.",
                 ]),
                 .init(title: "Keep your place everywhere", paragraphs: [
-                    "Pocket Daily keeps your place without an account. Your iPhone, iPad and Mac stay in step through your own iCloud, and a connected X3 or X4 reader exchanges positions over the same local connection that sends books.",
+                    "Pocket Daily keeps your place with no Pocket Daily account or server to set up. Your iPhone, iPad and Mac stay in step through your own iCloud, and a connected X3 or X4 reader exchanges positions over the same local connection that sends books. Each device needs the same book file; share it from the Library.",
                     "Only a fingerprint of the book and your place in it are shared. The book itself never leaves your devices.",
-                    "When another device has read further, Pocket Daily offers to jump there. It never moves your page without asking.",
+                    "When another device read more recently, or got further, Pocket Daily offers to jump there. It never moves your page without asking.",
                     "Happy reading.",
                 ]),
             ],

@@ -115,6 +115,7 @@ struct BookReaderView: View {
         .onChange(of: session.phase) { _, phase in
             if phase == .ready { Task { await checkRemote() } }
         }
+        .onChange(of: sync.remoteRevision) { _, _ in Task { await checkRemote() } }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { Task { await leave(pushing: true) } }
             else { Task { await checkRemote() } }
@@ -253,7 +254,9 @@ struct BookReaderView: View {
         HStack(spacing: 12) {
             Image(systemName: "arrow.triangle.2.circlepath")
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(suggestion.device) is at \(percent(suggestion.position.fraction))")
+                Text(suggestion.kind == .lastRead
+                     ? "\(suggestion.device) last read at \(percent(suggestion.position.fraction))"
+                     : "\(suggestion.device) read further, to \(percent(suggestion.position.fraction))")
                     .font(.subheadline.weight(.semibold))
                 Text("You're at \(percent(session.position?.fraction ?? book.progress)) here.")
                     .font(.caption)

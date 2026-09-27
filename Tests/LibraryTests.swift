@@ -99,6 +99,18 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(document.chapters.last?.paragraphs, ["Beta", "Gamma"])
     }
 
+    func testConvertedTextIsTheSameBookOnEveryDevice() async throws {
+        let text = "첫 문단입니다.\n\n둘째 문단입니다."
+        let first = try await EPUBExporter.write(BookLibrary.document(title: "소설", text: text, markdown: false),
+                                                 to: root.appendingPathComponent("a"))
+        let second = try await EPUBExporter.write(BookLibrary.document(title: "소설", text: text, markdown: false),
+                                                  to: root.appendingPathComponent("b"))
+        XCTAssertEqual(try Data(contentsOf: first), try Data(contentsOf: second), "Same text converts to the same bytes")
+        XCTAssertEqual(try KOReaderDocumentDigest.partialMD5(of: first), try KOReaderDocumentDigest.partialMD5(of: second))
+        XCTAssertNotEqual(BookLibrary.stableIdentifier(title: "소설", text: text, markdown: false),
+                          BookLibrary.stableIdentifier(title: "소설", text: text + "\n\n셋째", markdown: false))
+    }
+
     func testImportRejectsUnsupportedAndEmptyFiles() async throws {
         let library = BookLibrary(root: root.appendingPathComponent("lib"))
         let pdf = root.appendingPathComponent("paper.pdf")

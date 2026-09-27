@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// A position that survives different screens, fonts and devices: an XPointer
@@ -222,12 +223,27 @@ actor BookLibrary {
         return text
     }
 
+    /// Fixed publication time for converted text: with the identifier derived
+    /// from the content, the same file converts to the same EPUB bytes on every
+    /// device, so its sync fingerprint matches everywhere.
+    static let convertedModified = Date(timeIntervalSince1970: 946_684_800)
+
+    static func stableIdentifier(title: String, text: String, markdown: Bool) -> UUID {
+        var bytes = Array(SHA256.hash(data: Data("pocket-daily-text-v1\n\(markdown)\n\(title)\n\(text)".utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+
     /// Markdown `#`/`##` headings start chapters; other text keeps its paragraphs.
     static func document(title: String, text: String, markdown: Bool) -> EPUBDocument {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Reading" : title
+        let identifier = stableIdentifier(title: name, text: normalized, markdown: markdown)
         guard markdown else {
-            return EPUBDocument(title: name, chapters: [.init(title: name, paragraphs: paragraphs(normalized))])
+            return EPUBDocument(title: name, chapters: [.init(title: name, paragraphs: paragraphs(normalized))],
+                                identifier: identifier, modified: convertedModified)
         }
         var chapters: [EPUBDocument.Chapter] = []
         var heading = name
@@ -247,7 +263,7 @@ actor BookLibrary {
         }
         flush()
         if chapters.isEmpty { chapters = [.init(title: name, paragraphs: [name])] }
-        return EPUBDocument(title: name, chapters: chapters)
+        return EPUBDocument(title: name, chapters: chapters, identifier: identifier, modified: convertedModified)
     }
 
     private static func paragraphs(_ text: String) -> [String] {

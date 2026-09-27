@@ -27,9 +27,11 @@ protocol UbiquitousValues: AnyObject {
 extension NSUbiquitousKeyValueStore: UbiquitousValues {}
 
 /// Positions for the same Apple ID's devices through iCloud key-value storage.
+/// Each device keeps its own record per book (`position.v2.<book>.<device>`),
+/// so a device reading an earlier part never overwrites another's place.
 /// Only the book fingerprint and position are stored; no title or file.
 final class ICloudProgressStore {
-    static let prefix = "position.v1."
+    static let prefix = "position.v2."
     static let capacity = 800
 
     private let values: UbiquitousValues
@@ -38,26 +40,38 @@ final class ICloudProgressStore {
         self.values = values
     }
 
-    func record(for document: String) -> PositionRecord? {
-        guard KOReaderDocumentDigest.isDigest(document),
-              let raw = values.dictionary(forKey: Self.prefix + document),
-              let progress = raw["progress"] as? String, progress.hasPrefix("/body/DocFragment["),
+    static func key(document: String, deviceID: String) -> String { prefix + document + "." + deviceID }
+
+    /// Every device's record for a book, own included.
+    func records(for document: String) -> [PositionRecord] {
+        guard KOReaderDocumentDigest.isDigest(document) else { return [] }
+        let bookPrefix = Self.prefix + document + "."
+        return values.dictionaryRepresentation.compactMap { key, value in
+            guard key.hasPrefix(bookPrefix), let raw = value as? [String: Any] else { return nil }
+            return Self.decode(raw, document: document)
+        }
+    }
+
+    private static func decode(_ raw: [String: Any], document: String) -> PositionRecord? {
+        guard let progress = raw["progress"] as? String, progress.hasPrefix("/body/DocFragment["),
               let percentage = (raw["percentage"] as? NSNumber)?.doubleValue, percentage.isFinite,
-              let device = raw["device"] as? String, !device.isEmpty else { return nil }
+              let device = raw["device"] as? String, !device.isEmpty,
+              let deviceID = raw["device_id"] as? String, !deviceID.isEmpty else { return nil }
         return PositionRecord(document: document, progress: progress, percentage: min(max(percentage, 0), 1),
-                              device: device, deviceID: raw["device_id"] as? String ?? "",
+                              device: device, deviceID: deviceID,
                               timestamp: (raw["timestamp"] as? NSNumber)?.intValue)
     }
 
     func save(_ record: PositionRecord, now: Date = Date()) {
-        guard KOReaderDocumentDigest.isDigest(record.document) else { return }
+        guard KOReaderDocumentDigest.isDigest(record.document), !record.deviceID.isEmpty,
+              !record.deviceID.contains(".") else { return }
         values.set([
             "progress": record.progress,
             "percentage": record.percentage,
             "device": record.device,
             "device_id": record.deviceID,
             "timestamp": Int(now.timeIntervalSince1970),
-        ], forKey: Self.prefix + record.document)
+        ], forKey: Self.key(document: record.document, deviceID: record.deviceID))
         trim()
         values.synchronize()
     }

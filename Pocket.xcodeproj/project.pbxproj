@@ -29,6 +29,7 @@
 		122D68C2A2FCE4CD9B9229AF /* ContentPreparationReceiptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFA45A839623104E41E721EB /* ContentPreparationReceiptTests.swift */; };
 		132A82FA02B4F85DF5D4A7DD /* ReaderFonts in Resources */ = {isa = PBXBuildFile; fileRef = 02991BB12646486CA5805F7F /* ReaderFonts */; };
 		136F7173D3544851F4C78858 /* CrossPointClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */; };
+		137A320981393E848AA32D67 /* ReadingSync+Reader.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5A1A9FDBBE5C5732806B5B /* ReadingSync+Reader.swift */; };
 		155AFF494DFA0F44C318B8D1 /* PocketDevicePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */; };
 		155D53ACA2BAE90AFC65D350 /* KOReaderDocumentDigestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17315F0BDA2C370AC1F56ACA /* KOReaderDocumentDigestTests.swift */; };
 		171283C86780C07B71127814 /* ArticleLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3857985EFC80A72BE576D61E /* ArticleLibraryView.swift */; };
@@ -81,6 +82,7 @@
 		546BFF999C233A64517E8145 /* PocketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78DAF0568606DE01F034EB9F /* PocketApp.swift */; };
 		572796AF75FF75C044A5A2D3 /* PocketShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7627FFD7ED810F4685D869BE /* PocketShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		57D04674F495AE1D6321B9E8 /* LiveSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A3EFDC948E33F6D7D82B42 /* LiveSyncClient.swift */; };
+		5BC82A68B594BCA37F5D6C09 /* ReadingSync+Reader.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5A1A9FDBBE5C5732806B5B /* ReadingSync+Reader.swift */; };
 		5C742F3F0B3408A7282836A8 /* ReaderGlance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C0A7EAFBFF2EAB15D727E7 /* ReaderGlance.swift */; };
 		5E7C869BF34E189DD309EA82 /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C062285D3BE2BA1C263D923 /* LibraryModel.swift */; };
 		5EBC5F1D6BC644A32CE605E5 /* ArticleExtraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 809991352AE65E48551D2B98 /* ArticleExtraction.swift */; };
@@ -404,6 +406,7 @@
 		E9D87C009E70F5E9A8868771 /* ContentRevisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRevisionTests.swift; sourceTree = "<group>"; };
 		EAE0C268F1C01D32A9B6CCF7 /* ContentPreviewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewModelTests.swift; sourceTree = "<group>"; };
 		ED14B15E886AE48D45407B10 /* NearbySyncProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncProtocol.swift; sourceTree = "<group>"; };
+		ED5A1A9FDBBE5C5732806B5B /* ReadingSync+Reader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReadingSync+Reader.swift"; sourceTree = "<group>"; };
 		EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSendStatus.swift; sourceTree = "<group>"; };
 		EF248AD34F385ED9F2F09847 /* Pocket.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pocket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EF4E713C4435D5241DC11FD3 /* BookReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookReaderView.swift; sourceTree = "<group>"; };
@@ -623,6 +626,7 @@
 			children = (
 				E4D853E4EB7E4C43B5C9F8E7 /* PositionRecord.swift */,
 				F71E25A675032249243DE405 /* ReadingSync.swift */,
+				ED5A1A9FDBBE5C5732806B5B /* ReadingSync+Reader.swift */,
 				84CD34B492D9F53B4A13338F /* SyncChannels.swift */,
 				88B26787B372A6EDDCC0D7C4 /* SyncSettingsView.swift */,
 			);
@@ -1110,6 +1114,7 @@
 				80608DA7F9DDEA776D473380 /* ReaderStorage.swift in Sources */,
 				3E782A8AB0436D740CC75058 /* ReaderSymbolFont.swift in Sources */,
 				767273389E82E9C88794DF79 /* ReadingDocumentPreparation.swift in Sources */,
+				137A320981393E848AA32D67 /* ReadingSync+Reader.swift in Sources */,
 				DAB40B7AE8CBD718636413AB /* ReadingSync.swift in Sources */,
 				293B3AE16C4238A579F40061 /* ReorderableList.swift in Sources */,
 				B149C2C5BFF841CD876C51AA /* ScreenPresentation.swift in Sources */,
@@ -1203,6 +1208,7 @@
 				8A697CB091BC1C2AEB626F75 /* ReaderStorage.swift in Sources */,
 				8EBA72BE86652B9BE905F570 /* ReaderSymbolFont.swift in Sources */,
 				8E5990E2F0A50BA1F93A030D /* ReadingDocumentPreparation.swift in Sources */,
+				5BC82A68B594BCA37F5D6C09 /* ReadingSync+Reader.swift in Sources */,
 				2BC17D2D3793FF5CF8F06540 /* ReadingSync.swift in Sources */,
 				C67C2E63158E3AA2132090E2 /* ReorderableList.swift in Sources */,
 				0C42F4A00F10A35B41A825F8 /* ScreenPresentation.swift in Sources */,

@@ -28,4 +28,13 @@ final class ReaderSymbolFontTests: XCTestCase {
         XCTAssertEqual(model.destination(for: URL(fileURLWithPath: "/tmp/book.epub")), "/")
         XCTAssertEqual(model.destination(for: URL(fileURLWithPath: "/tmp/words.pdl")), "/pocket-daily/learning")
     }
+
+    func testOnlyThisAppsInboxCopiesAreRemovedAfterImport() throws {
+        let documents = try XCTUnwrap(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first)
+        XCTAssertTrue(ContentView.isOwnInboxCopy(documents.appendingPathComponent("Inbox/book.epub")))
+        XCTAssertFalse(ContentView.isOwnInboxCopy(documents.appendingPathComponent("Inbox/sub/book.epub")))
+        XCTAssertFalse(ContentView.isOwnInboxCopy(URL(fileURLWithPath: "/Users/someone/Inbox/book.epub")))
+        XCTAssertFalse(ContentView.isOwnInboxCopy(documents.appendingPathComponent("Inbox/../book.epub")))
+        XCTAssertFalse(ContentView.isOwnInboxCopy(URL(string: "https://example.com/Inbox/book.epub")!))
+    }
 }

@@ -367,24 +367,48 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// screen being edited: when the reader can draw screens inside Sync, it
     /// draws that one afterwards (and cards are not drawn separately, since
     /// the screen shows them).
-    /// Exchanges reading positions with a reader that offers reading-progress v1,
-    /// once per connection. Quiet on failure: it never blocks the session.
-    func exchangeReadingPositions(_ exchange: @escaping @MainActor (ReaderReadingList, String) -> [PositionRecord]) {
+    var canExchangeReadingPositions: Bool {
+        !isDemoMode && readerStatus?.readingProgress == 1 && readerStatus?.deviceID != nil
+    }
+
+    /// Exchanges reading positions with a reader that offers reading-progress v1:
+    /// once per connection after it succeeds, retried a few times with a delay
+    /// after a failure, or again whenever `force` is set by the user. Never
+    /// blocks the session; the outcome goes to `finish`.
+    func exchangeReadingPositions(force: Bool = false,
+                                  prepare: @escaping @MainActor (ReaderReadingList, String) -> [PositionRecord],
+                                  finish: @escaping @MainActor (String, Int, Error?) -> Void) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, let status = readerStatus,
-              status.readingProgress == 1, let identity = status.deviceID,
-              readingExchangeAttempt != connectionAttempt else { return }
+              status.readingProgress == 1, let identity = status.deviceID else { return }
+        if readingExchange.attempt != connectionAttempt { readingExchange = .init(attempt: connectionAttempt) }
+        guard force || (!readingExchange.done && readingExchange.failures < 3 && Date() >= readingExchange.retryAfter) else {
+            return
+        }
         let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
-        readingExchangeAttempt = attempt
         startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+            var sent = 0
             do {
                 let list = try await client.readingProgress(identity: identity, host: host, port: port)
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
-                for record in exchange(list, status.device).prefix(10) {
+                for record in prepare(list, status.device).prefix(10) {
                     try await client.offerReadingProgress(record, identity: identity, host: host, port: port)
+                    sent += 1
                     guard ownsReaderWork(owner, attempt: attempt) else { return }
                 }
+                readingExchange.done = true
+                finish(status.device, sent, nil)
             } catch {
-                NSLog("Pocket reading-position exchange failed: %@", error.localizedDescription)
+                guard readingExchange.attempt == attempt, !(error is CancellationError) else { return }
+                readingExchange.failures += 1
+                let delay = 10.0 * Double(readingExchange.failures)
+                readingExchange.retryAfter = Date().addingTimeInterval(delay)
+                finish(status.device, sent, error)
+                if readingExchange.failures < 3 {
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(delay))
+                        self?.exchangeReadingPositions(prepare: prepare, finish: finish)
+                    }
+                }
             }
         }
     }
@@ -635,7 +659,13 @@ final class PocketModel: ObservableObject, DeviceSession {
     private let contentTransportFactory: ContentTransportFactory
     private let discoveryIO: any ReaderDiscoveryIO
     private let associationIO: any ReaderAssociationIO
-    private var readingExchangeAttempt: Int?
+    private struct ReadingExchangeState {
+        var attempt: Int?
+        var done = false
+        var failures = 0
+        var retryAfter = Date.distantPast
+    }
+    private var readingExchange = ReadingExchangeState()
     private var activeHost = "192.168.4.1"
     private var activeHTTPPort = 80
     private var heartbeatTask: Task<Void, Never>?

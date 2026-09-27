@@ -78,9 +78,10 @@ struct ContentView: View {
         .onOpenURL { url in
             Task {
                 let book = await library.importFiles([url])
-                // iOS copies documents opened from other apps into Documents/Inbox;
-                // the library keeps its own copy.
-                if url.isFileURL, url.deletingLastPathComponent().lastPathComponent == "Inbox" {
+                // iOS copies documents opened from other apps into this app's
+                // Documents/Inbox. Remove only that temporary copy, and only once the
+                // library holds its own; a failed import keeps it for another try.
+                if book != nil, Self.isOwnInboxCopy(url) {
                     try? FileManager.default.removeItem(at: url)
                 }
                 if let book { open(book) }
@@ -156,10 +157,17 @@ struct ContentView: View {
 
     // MARK: Layouts
 
+    static func isOwnInboxCopy(_ url: URL) -> Bool {
+        guard url.isFileURL,
+              let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return false }
+        let inbox = documents.appendingPathComponent("Inbox", isDirectory: true)
+            .standardizedFileURL.resolvingSymlinksInPath().path + "/"
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        return path.hasPrefix(inbox) && !path.dropFirst(inbox.count).contains("/")
+    }
+
     private func exchangeReadingPositions() {
-        model.exchangeReadingPositions { list, reader in
-            sync.exchange(with: list, readerName: reader, library: library.books)
-        }
+        sync.exchangeWithReader(model: model, library: library)
     }
 
     private func open(_ book: LibraryBook) {

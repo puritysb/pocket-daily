@@ -1,8 +1,11 @@
 import SwiftUI
 
-/// Where your place in a book is kept in step. Both work without an account.
+/// Where your place in a book is kept in step, without a Pocket Daily
+/// account or any server to set up.
 struct SyncSettingsView: View {
     @ObservedObject var sync: ReadingSync
+    @ObservedObject var model: PocketModel
+    @ObservedObject var library: LibraryModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -19,9 +22,21 @@ struct SyncSettingsView: View {
                         .accessibilityIdentifier("sync-reader-exchange")
                     if let last = sync.lastReaderExchange {
                         LabeledContent("Last exchange", value: "\(last.device) · \(last.date.formatted(.relative(presentation: .named)))")
+                            .accessibilityIdentifier("sync-last-exchange")
+                    }
+                    if let error = sync.readerExchangeError {
+                        Label("The last exchange with the reader failed: \(error)", systemImage: "exclamationmark.triangle")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
+                    if sync.readerExchangeEnabled && model.canExchangeReadingPositions {
+                        Button("Exchange positions now") {
+                            sync.exchangeWithReader(model: model, library: library, force: true)
+                        }
+                        .disabled(model.isWorking)
+                        .accessibilityIdentifier("sync-exchange-now")
                     }
                 } footer: {
-                    Text("When another device has read further, Pocket Daily offers to jump there; it never moves your page by itself. Only a fingerprint of the book and your place in it are shared, in your own iCloud or over the local connection to your reader.")
+                    Text("When another device read more recently, or got further, Pocket Daily offers to jump there; it never moves your page by itself. No Pocket Daily account or server setup is needed. Only a fingerprint of the book and your place in it are shared, in your own iCloud or over the local connection to your reader. Each device needs the same book file: share it from the Library.")
                 }
             }
             .formStyle(.grouped)

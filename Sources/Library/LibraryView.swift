@@ -18,6 +18,13 @@ struct LibraryView: View {
     @State private var showingSync = false
     @State private var removing: LibraryBook?
     @State private var targeted = false
+    @State private var sharing: SharedBook?
+
+    struct SharedBook: Identifiable {
+        let id = UUID()
+        let title: String
+        let url: URL
+    }
 
     static let importTypes: [UTType] = [.epub, .plainText, UTType("net.daringfireball.markdown") ?? .plainText]
 
@@ -63,7 +70,19 @@ struct LibraryView: View {
                 case .failure(let error): library.error = error.localizedDescription
                 }
             }
-            .sheet(isPresented: $showingSync) { SyncSettingsView(sync: sync) }
+            .sheet(item: $sharing) { shared in
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(shared.title).font(.headline)
+                    Text("Send this exact file to your other devices and open it there with Pocket Daily. The same file is recognized as the same book, so you can continue where you left off.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    ShareLink(item: shared.url) { Label("Share book file", systemImage: "square.and.arrow.up") }
+                        .buttonStyle(.borderedProminent)
+                    Button("Done") { sharing = nil }
+                }
+                .padding(24)
+                .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showingSync) { SyncSettingsView(sync: sync, model: model, library: library) }
             .confirmationDialog("Remove this book from the library?", isPresented: Binding(
                 get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
                     if let book = removing {
@@ -157,10 +176,19 @@ struct LibraryView: View {
 
     @ViewBuilder private func menu(for book: LibraryBook) -> some View {
         Button("Read", systemImage: "book") { open(book) }
+        Button("Share book file…", systemImage: "square.and.arrow.up") { share(book) }
         Button("Prepare for reader", systemImage: "arrow.up.doc") { prepare(book) }
             .disabled(!model.canPrepareFiles)
         Divider()
         Button("Remove from Library", systemImage: "trash", role: .destructive) { removing = book }
+    }
+
+    /// The exact library file, so another device opens the same book and can continue.
+    private func share(_ book: LibraryBook) {
+        Task {
+            do { sharing = SharedBook(title: book.title, url: try await library.fileURL(for: book)) }
+            catch { library.error = error.localizedDescription }
+        }
     }
 
     /// Queues the exact library file for the reader; sending stays explicit.
