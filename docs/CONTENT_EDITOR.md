@@ -61,7 +61,8 @@ One studio serves Mac, iPad and iPhone (`ContentView`, `StudioSection`):
 items, **My cards**, weather, sleep screen, and the reader settings "Open
 Pocket Daily when the reader starts", book cover, sleep timeout and text size)
 with one Send. The **Reader** inspector holds the connection, files ("Write
-text to read" makes a .txt), troubleshooting (folded) and About & Privacy.
+text to read" prepares an EPUB by default, with a plain-text option),
+troubleshooting (folded) and About & Privacy.
 Wide windows (at least 920 pt) show the header with the reader state beside a
 320 pt inspector; the canvas stays in view while the controls scroll, and
 stacks above them below 720 pt of studio width. Narrower windows (iPhone,
@@ -247,3 +248,13 @@ loads or overwrites the normal saved draft. Recovery is unavailable in demo.
 Conflict comparison and automatic screen confirmation remain pending.
 Unit tests use temporary local files; UI tests edit in demo only. They do not
 validate physical device transfers or filesystem power-loss durability.
+
+
+### Connected Home/Sleep cover display
+
+After Apply, compatible readers can draw the edited Home or Daily Brief while
+Sync remains open. In that mode book covers use a placeholder to avoid cover
+decoding while the radio is active; the Apply success message explains this.
+The regular Home after leaving Sync uses the normal cover-loading path. Book
+metadata, saved cards and available glance data come from the reader, while the
+app's labeled layout preview still uses sample book/weather/event content.
