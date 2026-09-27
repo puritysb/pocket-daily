@@ -9,12 +9,13 @@ X3/X4 컴패니언 기능은 유지·확장하며 폐기하지 않는다. 아직
 
 1. 제품 정체성: 하드웨어 없이도 동작하는 계정 없는 집중형 리더 + X3/X4 컴패니언.
    `AGENTS.md`의 Product identity가 기준이다.
-2. 이어 읽기: KOReader 동기화(KOSync) 서버 연결을 **권장**한다. 기본값은 꺼짐이며
-   사용자가 서버·계정을 입력하거나 등록할 때만 연결한다. 앱 자체는 계정을 요구하지 않는다.
+2. 이어 읽기: **서버 없이** iCloud 키-값(같은 Apple ID)과 연결된 리더 직접 교환으로 한다
+   ([READING_PROGRESS.md](READING_PROGRESS.md)). 2026-09-27 사용자 결정으로 KOReader 동기화(KOSync)
+   연동은 이번 버전에서 제외하고 사용자에게 노출하지 않는다. 구현 이력은 git(`761de09` 이전 커밋)에 있다.
 3. 폰 렌더러: [foliate-js](https://github.com/johnfactotum/foliate-js)(MIT)를
    고정 커밋으로 번들하고 WKWebView에서 실행한다. 펌웨어 EPUB 엔진은 폰 렌더러로 쓰지 않는다.
 4. 위치 형식: KOReader XPointer(`/body/DocFragment[N]/body/…/text()[m].offset`)와
-   전체 진행률(percentage)을 공통 위치로 쓴다. 기기(X3/X4), 앱, KOReader가 같은 형식을 쓴다.
+   전체 진행률(percentage)을 공통 위치로 쓴다. 기기(X3/X4)와 앱이 같은 형식을 쓰며, KOReader와도 호환되는 형식이다.
 5. Android: 지금 구현하지 않는다. 계약(위치·동기화·서재·전송)은 플랫폼 중립으로 문서화하고,
    렌더러는 Android WebView에서 재사용할 수 있는 foliate-js를 택했다.
 
@@ -45,11 +46,10 @@ X3/X4 컴패니언 기능은 유지·확장하며 폐기하지 않는다. 아직
 - 기본: KOReader partial MD5. 파일 오프셋 `0, 1024, 4096, …, 1024 << 20`에서 최대
   1024바이트씩 읽어 MD5. 오프셋이 파일 크기 이상이면 중단한다. 펌웨어
   `lib/KOReaderSync/KOReaderDocumentId.cpp`와 KOReader `util.partialMD5`와 같다.
-- 선택: 파일명 MD5(KOReader/펌웨어의 filename 모드). 기기 설정과 맞춰야 한다.
 - 앱이 기기로 보낸 책은 바이트가 같으므로 식별값이 자동으로 일치한다.
   앱은 서재에 넣은 파일을 수정하지 않는다.
 
-### 진행도 레코드 (KOSync v1)
+### 진행도 레코드
 
 ```json
 {"document":"<32 hex>","progress":"/body/DocFragment[3]/body/p[12]/text().40",
@@ -63,9 +63,6 @@ X3/X4 컴패니언 기능은 유지·확장하며 폐기하지 않는다. 아직
 - `percentage`: 0~1 전체 진행률, **현재 페이지 시작** 기준(KOReader와 같음). foliate의 relocate
   `fraction`은 페이지 끝 기준이고 한 페이지짜리 섹션에서 NaN이 되므로 쓰지 않고, renderer의 섹션 내
   위치와 섹션 크기 비율로 계산한다. XPointer를 해석할 수 없으면 percentage로 이동한다.
-- 서버 API: `POST /users/create`, `GET /users/auth`, `GET /syncs/progress/{document}`,
-  `PUT /syncs/progress`. 헤더 `Accept: application/vnd.koreader.v1+json`,
-  `x-auth-user`, `x-auth-key`(비밀번호 MD5 hex). HTTPS만 허용한다.
 
 ### 이어 읽기 규칙
 
@@ -76,17 +73,15 @@ X3/X4 컴패니언 기능은 유지·확장하며 폐기하지 않는다. 아직
 - 실패는 읽기를 방해하지 않고 설정 화면과 책 화면의 작은 상태로만 알린다.
 - 비밀번호 MD5 키는 Keychain에만 둔다. 로그·진단에 서버 응답 본문이나 키를 남기지 않는다.
 
-### 기기 직접 동기화(후속)
+### 기기 직접 교환
 
-서버 없이 Sync 연결 중 진행도를 교환하는 endpoint는 펌웨어 계약 변경이 필요하다.
-레코드 형식은 위 KOSync v1과 같게 한다. 구현 전까지 기기와의 이어 읽기는
-기기 자체의 KOReader sync 설정(같은 서버·계정)으로 한다.
+reading-progress v1로 구현했다([READING_PROGRESS.md](READING_PROGRESS.md), 펌웨어 `reading-progress-v1.md`).
 
 ## 앱 구조
 
 - `Sources/Library/`: 서재 레코드, 가져오기(파일·Articles·직접 작성), 문서 식별, 서재 화면.
 - `Sources/Reading/`: 렌더러 브리지(WKWebView), 읽기 화면, 모양 설정, 위치 저장.
-- `Sources/Sync/`: KOSync 클라이언트, 계정(Keychain), 이어 읽기 조정.
+- `Sources/Sync/`: 위치 레코드, iCloud·리더 교환, 이어 읽기 제안.
 - 최상위 화면: Library(첫 화면) · Customize reader · Reader(연결·파일·펌웨어).
   넓은 화면은 Library와 기존 스튜디오를 같은 최상위 선택으로 전환한다.
 - 서재의 책은 "리더로 보내기"로 기존 전송 대기열을 사용한다.
@@ -97,19 +92,18 @@ X3/X4 컴패니언 기능은 유지·확장하며 폐기하지 않는다. 아직
 
 - 1단계 완료(로컬 검증): Library 첫 화면, 안내 책, EPUB/TXT/MD 가져오기(CP949 포함), 중복 제거, 리더
   (탭·키보드·목차·모양·2단·Mac 별도 창), 위치 저장·복원, Articles를 서재에서 읽기.
-- 2단계 구현(서버 왕복 미검증): KOSync 로그인/생성·Keychain·업로드·이어 읽기 제안, 연결된 리더에
-  CrossPoint `/api/settings`로 같은 계정 설정.
+- 2단계: iCloud·리더 직접 교환(서버 없음). KOSync 연동은 이번 버전에서 제외.
 - 3단계 진행: 스토어 메타데이터·심사 노트·개인정보·공개 페이지·스크린샷 구성 변경.
-- 남음: 실제 KOSync 서버와 X3/X4 왕복 검증, 기기 직접 진행도 교환(펌웨어 endpoint), iCloud,
+- 남음: X3/X4에서 직접 교환 왕복 검증, iCloud 서명 빌드 확인,
   하이라이트·단어 저장, 책 검색, VoiceOver 읽기 점검, Android.
 
 ## 단계와 완료 기준
 
 1. 정체성·문서 재정렬, 서재·리더 MVP(EPUB, TXT/MD는 EPUB로 변환해 읽기), 로컬 진행도.
-2. KOSync 계정 연결·이어 읽기 제안·업로드. 설정의 권장 안내.
+2. iCloud·리더 직접 교환과 이어 읽기 제안.
 3. 스토어 메타데이터·개인정보·심사 노트·스크린샷 갱신(바이너리에 있는 기능만).
 4. 기기 직접 진행도 교환(펌웨어 계약), iCloud 기기 간 서재, 하이라이트·단어 저장.
 5. Android.
 
 완료로 주장하려면 단위 시험(식별값·XPointer·API 오류)과 iOS/macOS 빌드, 리더 UI 시험,
-실제 KOSync 서버 왕복 결과를 구분해 기록한다. 실기기 X3/X4와의 이어 읽기는 실기기 결과로만 주장한다.
+iCloud·리더 교환 결과를 구분해 기록한다. 실기기 X3/X4와의 이어 읽기는 실기기 결과로만 주장한다.

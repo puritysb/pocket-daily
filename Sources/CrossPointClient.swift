@@ -1014,7 +1014,7 @@ actor CrossPointClient {
     }
 
     /// Offers a position to the reader; it asks before moving when the book opens.
-    func offerReadingProgress(_ record: KOSyncProgress, identity: String, host: String, port: Int) async throws {
+    func offerReadingProgress(_ record: PositionRecord, identity: String, host: String, port: Int) async throws {
         guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/reading") else {
             throw ClientError.invalidAddress
         }
@@ -1029,35 +1029,6 @@ actor CrossPointClient {
         let (data, response) = try await http.data(for: request, session: session)
         if (response as? HTTPURLResponse)?.statusCode == 404 { return }
         try Self.requireSuccess(response, body: data)
-    }
-
-    /// Writes the reader's own KOReader sync settings (CrossPoint `/api/settings`).
-    /// The reader hashes the password itself, so it must be sent as typed; it
-    /// travels only over the current local connection and is not kept by the app.
-    /// Returns false when the firmware does not know these settings.
-    func saveKOReaderSync(server: String, username: String, password: String, matchByContent: Bool,
-                          host: String, port: Int) async throws -> Bool {
-        guard let url = Self.url(host: host, port: port, path: "/api/settings") else {
-            throw ClientError.invalidAddress
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 10
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "koServerUrl": server, "koUsername": username, "koPassword": password,
-            "koMatchMethod": matchByContent ? 1 : 0,
-        ])
-        let (data, response) = try await http.data(for: request, session: session)
-        try Self.requireSuccess(response)
-        return Self.appliedCount(data) >= 4
-    }
-
-    /// Parses CrossPoint's "Applied N setting(s)" reply.
-    static func appliedCount(_ data: Data) -> Int {
-        guard data.count <= 256, let text = String(data: data, encoding: .utf8),
-              let match = text.firstMatch(of: /Applied (\d+) setting/) else { return 0 }
-        return Int(match.1) ?? 0
     }
 
     func readerStorageRequest(endpoint: String, identity: String, host: String, port: Int,

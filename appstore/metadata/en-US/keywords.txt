@@ -1,1 +1,1 @@
-ebook reader,epub,e-ink,e-paper,koreader,sync,read later,articles,x3,x4,home screen,sd card
+ebook reader,epub,e-ink,e-paper,icloud,continue reading,read later,articles,x3,x4,home screen

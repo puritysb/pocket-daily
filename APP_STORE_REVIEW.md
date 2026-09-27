@@ -23,14 +23,10 @@ save an article from Safari's share sheet and read it under **Articles**. On
 Mac, a book opens in its own window. No account, network or hardware is needed
 for reading.
 
-**Sync** (the circular-arrows button in the Library) shows three ways to keep a
-reading position: iCloud key-value storage between the user's own Apple
-devices (on by default, no setup), exchange with a connected X3/X4 reader over
-the local connection, and optional KOReader sync.
-KOReader sync needs an account on a KOReader sync server; reviewers can create
-one from the Sync sheet on the default public server or skip it. The public
-server has outages; the sheet then says so and reading is unaffected. Reading is fully functional
-without it.
+The circular-arrows button in the Library shows **Continue Reading**: iCloud
+key-value storage between the user's own Apple devices (on by default, no
+setup) and exchange with a connected X3/X4 reader over the local connection.
+Neither needs an account.
 
 The companion has an explicit, local demo mode for review without a reader:
 open **Reader** (a tab on iPhone; on iPad and Mac the panel on the right of
@@ -84,7 +80,7 @@ confirmation. No automatic flashing follows transport completion.
 Metadata requests send no reader identity or content to GitHub. A private direct
 reader connection is not used for internet release checks or downloads.
 
-## Reading and KOReader sync
+## Reading and continuing across devices
 
 The reader renders books with a bundled open-source engine (foliate-js, MIT)
 inside a web view that loads only the app's own files and the open book through
@@ -92,13 +88,11 @@ a private URL scheme; scripts inside books never run and nothing is fetched from
 the network. Links in a book open in the browser only after confirmation.
 DRM-protected books are detected and refused.
 
-KOReader sync is off by default. When the user signs in, the app sends the
-chosen server a partial MD5 fingerprint of the book file, the position and
-overall progress, the device name and a random installation ID, with the
-username and an MD5 key of the password (the protocol's own scheme). Book
-contents are never sent; the password is not stored and the key is kept in the
-Keychain. The server is chosen by the user and operated by a third party, not
-the developer; the app never moves the page to a synced position without asking.
+Continuing across devices shares a partial MD5 fingerprint of the book file,
+the position and progress, the device name and a random installation ID,
+only in the user's own iCloud key-value storage or over the local connection
+to the user's reader. Book contents are never sent, and the app never moves
+the page to another device's position without asking.
 
 ## Weather and calendar
 

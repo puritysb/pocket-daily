@@ -1,7 +1,7 @@
 import Foundation
 
-/// A position that survives different screens, fonts and devices: a KOReader
-/// XPointer (shared with X3/X4 firmware and KOReader sync) plus overall
+/// A position that survives different screens, fonts and devices: an XPointer
+/// in the format the X3/X4 firmware shares (crengine-style) plus overall
 /// progress. The CFI is this app's own precise restore point.
 struct ReadingPosition: Codable, Hashable, Sendable {
     var fraction: Double
@@ -25,7 +25,7 @@ struct LibraryBook: Codable, Identifiable, Hashable, Sendable {
     var language: String
     var fileName: String
     var byteCount: Int64
-    /// KOReader partial MD5 of the file bytes; the book's identity for sync.
+    /// Partial MD5 of the file bytes (the reader computes the same); the book's identity for sync.
     var documentDigest: String
     var origin: Origin
     var addedAt: Date

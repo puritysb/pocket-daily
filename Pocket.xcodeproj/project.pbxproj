@@ -15,7 +15,6 @@
 		050C13EBEB9CB6DC62B44254 /* ContentPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C659337A9E03491E0F4C3172 /* ContentPresentationTests.swift */; };
 		050D7D9B7A9351EB05D2A227 /* TextDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = B548CA94B31B2E2454CC13CA /* TextDocument.swift */; };
 		05131232F9D265BE1E4AAC5C /* ContentActivationJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1921597C30EF1ECE33916E94 /* ContentActivationJournal.swift */; };
-		0631640053D16D620BC96256 /* KOSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E645047220F94E288E487F /* KOSyncClient.swift */; };
 		07940820BEB8A8CFF56EECF9 /* EPUBDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B80F48A8C4BDE8FF5F39389 /* EPUBDocument.swift */; };
 		07C2801BF9C5C8FEE95B882B /* HostRendererBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */; };
 		081402BBDCC122316B6C73DD /* ArticleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AF4419B900A0E24B96C73EB /* ArticleTests.swift */; };
@@ -39,7 +38,6 @@
 		1FCABE563A756BAC9E5C5444 /* EPUBPackageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540552AB586FC81B89715EBF /* EPUBPackageReader.swift */; };
 		230CD450C1CF6929F8CC87D0 /* ContentRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FA699FD202B240470E8A0C /* ContentRevision.swift */; };
 		24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
-		277AEF19E9B8A12F2564EFBE /* KOSyncClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B4F5C154BDCE05622497DB /* KOSyncClientTests.swift */; };
 		28D505D7C810F2CE4E5C6406 /* CalendarSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2AB607A0C3CA83EDDCF855 /* CalendarSource.swift */; };
 		293B3AE16C4238A579F40061 /* ReorderableList.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1440C3CC9BDA85B6CDE1968 /* ReorderableList.swift */; };
 		2A2FAB6889CB589761FBC5F3 /* SyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88B26787B372A6EDDCC0D7C4 /* SyncSettingsView.swift */; };
@@ -49,7 +47,6 @@
 		2BCD25F75B0F3037FA119A46 /* FirmwareGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */; };
 		30B2B007EF0A9D5944224B71 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A90DAA8205C09A1AC46687 /* LibraryView.swift */; };
 		329FE3A9A5DA0A0D8C8FA2CE /* ContentDeployment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5CDB7619C59CB8CC6E9426 /* ContentDeployment.swift */; };
-		34404410D714BBAC388E6646 /* PocketSyncEndToEndTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1E07955E72F9E6C577C3A6 /* PocketSyncEndToEndTests.swift */; };
 		34ACE3CB623B589288BB20DC /* WeatherSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB205ED7484E5711C0DC7E /* WeatherSnapshot.swift */; };
 		365A9A927566A2B5CD6FAA61 /* ContentManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C7EEC1D8C95E385ECAF439 /* ContentManifest.swift */; };
 		374169613A2E5437B2A68A8E /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
@@ -59,7 +56,6 @@
 		3E782A8AB0436D740CC75058 /* ReaderSymbolFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95DFD9B2C8A3404229E61545 /* ReaderSymbolFont.swift */; };
 		401516930E36ADE4B4CA568C /* ContentImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E973586E1694A7601665230C /* ContentImage.swift */; };
 		414190AE73C31EAC36A10175 /* HotspotJoiner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */; };
-		42F2E6A2A77DD7B11D1C2EEB /* KOSyncAccountStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72BD9AD6A40F92607E14D583 /* KOSyncAccountStoreTests.swift */; };
 		43BA99135624FB102463734E /* LibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E3422134442A4A01012C7B2 /* LibraryTests.swift */; };
 		43DD925B2250D401E1BFF627 /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = D7D86893F059F05BEB54691B /* libz.tbd */; };
 		440D295EC5A5FBC4CB73C19A /* PocketUIHost.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 44CDA4E1D2DEE4CF278CFBCB /* PocketUIHost.xcframework */; };
@@ -117,6 +113,7 @@
 		788D4EED6684B798538AB59F /* ContentDeploymentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C48A3F763A66DC6549ED067 /* ContentDeploymentTests.swift */; };
 		799A3D8607DB4B5BBC1CFA16 /* GlanceControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BD6A1CC19A2912FC45E9B2 /* GlanceControls.swift */; };
 		79EBD384123505BAF1A93E7F /* ReaderSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFF2877E467EA29AA593B1D1 /* ReaderSession.swift */; };
+		79F9A2CBC8D5E2506C5BB557 /* PositionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D853E4EB7E4C43B5C9F8E7 /* PositionRecord.swift */; };
 		7A662C90014F28B4F1433F8E /* libxml2.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 9F3811FFDEE1D4EA708254B0 /* libxml2.tbd */; };
 		7ADA4110ACED2E32A5262A27 /* ContentDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FF14323D43CE94B45BE8AD2 /* ContentDraftStore.swift */; };
 		7AE55A6545ECA400149410BD /* ReaderContentTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0E3DC4EBC78C9155C40A9D4 /* ReaderContentTransport.swift */; };
@@ -157,6 +154,7 @@
 		AA79057983FE52D7AAC2E7FB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
 		AAE3F7A1ECBDAF5709CC7978 /* ReadingSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E85118B15866F7432A3E56 /* ReadingSyncTests.swift */; };
 		AAFC73CFBB31B0AA86943B30 /* PreviewFont in Resources */ = {isa = PBXBuildFile; fileRef = CAD4426AA02306BFAA855AEC /* PreviewFont */; };
+		AB3036AB91949B5876833B51 /* PositionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4D853E4EB7E4C43B5C9F8E7 /* PositionRecord.swift */; };
 		AD5E7C8D8C81FF0FE64FA616 /* LayoutPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F14A64CE2771C9806D8D1109 /* LayoutPreviewModel.swift */; };
 		AE0834455F19D805D51A9AD3 /* PocketModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05C6F29E0C8324F0EC5130B3 /* PocketModel.swift */; };
 		AE703BCFF23C93CEAB083CEF /* ProfileStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE5A510A17E41D4E44C7DC3C /* ProfileStudioView.swift */; };
@@ -222,10 +220,8 @@
 		E9883E6E71F42D344D105192 /* PocketProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61604ADB60E9E92E71D22DB /* PocketProfileTests.swift */; };
 		EA8EE8788F58F59695288B70 /* PreviewFont in Resources */ = {isa = PBXBuildFile; fileRef = CAD4426AA02306BFAA855AEC /* PreviewFont */; };
 		EAECCFD003478F64F5213612 /* KOReaderDocumentDigest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF8BCB6818636601D3BCF82F /* KOReaderDocumentDigest.swift */; };
-		EB37308758ABAF81B5C09396 /* KOSyncAccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF94347921EFECA01FE926E /* KOSyncAccountStore.swift */; };
 		ECD0B0E9AE1E8B39561F79ED /* ArticleRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = B819B6D7C750AE06D702CF49 /* ArticleRecord.swift */; };
 		EE3ACA5DCB24649B360ACD43 /* EPUBPackageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540552AB586FC81B89715EBF /* EPUBPackageReader.swift */; };
-		EEB7145873C14454CD1D8862 /* KOSyncAccountStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF94347921EFECA01FE926E /* KOSyncAccountStore.swift */; };
 		F0467630F25610778EA380E1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B9C7C8282C265F6B6B6EADC4 /* Assets.xcassets */; };
 		F0C7F070A6367EF79A6A2B10 /* ReaderEngine in Resources */ = {isa = PBXBuildFile; fileRef = 84EC7E6A5EC6FB2CD0E50B89 /* ReaderEngine */; };
 		F607C9E3B6C903E094947518 /* PocketProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160776C46D2E827AC2D35B97 /* PocketProfile.swift */; };
@@ -236,7 +232,6 @@
 		FD2AC3093EE1E6638E02BFAE /* LocalReaderDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98C5706F004643C8427F5DEF /* LocalReaderDiscovery.swift */; };
 		FE4C1EAE207B425F8C039CDB /* ArticleCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B3D6E063C4770170CDAA52D /* ArticleCaptureView.swift */; };
 		FEAC785F7C5914FA98BBB52B /* CrossPointClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */; };
-		FEB5E20E490F8C33CE5917F6 /* KOSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E645047220F94E288E487F /* KOSyncClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -313,7 +308,6 @@
 		3857985EFC80A72BE576D61E /* ArticleLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleLibraryView.swift; sourceTree = "<group>"; };
 		3CA5D4636B2C951D33693CD2 /* ReaderContentPullTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentPullTests.swift; sourceTree = "<group>"; };
 		3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		3F1E07955E72F9E6C577C3A6 /* PocketSyncEndToEndTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketSyncEndToEndTests.swift; sourceTree = "<group>"; };
 		41ABC3BF054B35E39136926A /* EPUBExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBExporter.swift; sourceTree = "<group>"; };
 		41BE8DAC4DDD08FCA8D8093E /* ContentDraftStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftStoreTests.swift; sourceTree = "<group>"; };
 		44CDA4E1D2DEE4CF278CFBCB /* PocketUIHost.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PocketUIHost.xcframework; path = Support/PocketUIHost/PocketUIHost.xcframework; sourceTree = "<group>"; };
@@ -321,7 +315,6 @@
 		4AEBE29A7F5B451E8526132A /* ArticleShareTestHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleShareTestHost.swift; sourceTree = "<group>"; };
 		4B3D6E063C4770170CDAA52D /* ArticleCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleCaptureView.swift; sourceTree = "<group>"; };
 		4C48A3F763A66DC6549ED067 /* ContentDeploymentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDeploymentTests.swift; sourceTree = "<group>"; };
-		4CF94347921EFECA01FE926E /* KOSyncAccountStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KOSyncAccountStore.swift; sourceTree = "<group>"; };
 		4DCF4874386633399B3E1EE2 /* ContentStudioSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentStudioSupport.swift; sourceTree = "<group>"; };
 		4E3422134442A4A01012C7B2 /* LibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryTests.swift; sourceTree = "<group>"; };
 		508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidanceTests.swift; sourceTree = "<group>"; };
@@ -336,7 +329,6 @@
 		5C003D062B19348BF33C8FD8 /* ContentSendStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentSendStatusTests.swift; sourceTree = "<group>"; };
 		5D46C68C6D1477B48D78B01C /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
 		5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFontStore.swift; sourceTree = "<group>"; };
-		64B4F5C154BDCE05622497DB /* KOSyncClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KOSyncClientTests.swift; sourceTree = "<group>"; };
 		6AF4419B900A0E24B96C73EB /* ArticleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleTests.swift; sourceTree = "<group>"; };
 		6C062285D3BE2BA1C263D923 /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
 		6C96AB061106DE9C5EA26485 /* ContentDraftFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftFileTests.swift; sourceTree = "<group>"; };
@@ -344,7 +336,6 @@
 		6CC2F79AA0A081A23FDCDBCE /* EPUBExporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBExporterTests.swift; sourceTree = "<group>"; };
 		6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketDevicePreview.swift; sourceTree = "<group>"; };
 		6FF14323D43CE94B45BE8AD2 /* ContentDraftStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftStore.swift; sourceTree = "<group>"; };
-		72BD9AD6A40F92607E14D583 /* KOSyncAccountStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KOSyncAccountStoreTests.swift; sourceTree = "<group>"; };
 		72C0A7EAFBFF2EAB15D727E7 /* ReaderGlance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderGlance.swift; sourceTree = "<group>"; };
 		753C0E39C665BA17D4B62EBF /* PocketUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PocketUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7627FFD7ED810F4685D869BE /* PocketShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PocketShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -363,7 +354,6 @@
 		8E32A7904290F64ED7F059C2 /* ReadingDocumentPreparationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingDocumentPreparationTests.swift; sourceTree = "<group>"; };
 		8ECD37D9F915D53A73EDFF92 /* ContentPreviewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreviewModel.swift; sourceTree = "<group>"; };
 		92C61AC1FD88CD54C5818106 /* PocketHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketHardware.swift; sourceTree = "<group>"; };
-		93E645047220F94E288E487F /* KOSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KOSyncClient.swift; sourceTree = "<group>"; };
 		94228C0DAE5C814F046A408A /* DeviceCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceCore.swift; sourceTree = "<group>"; };
 		95DFD9B2C8A3404229E61545 /* ReaderSymbolFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSymbolFont.swift; sourceTree = "<group>"; };
 		9854350CD8AEAF6A691B86F1 /* CrossPointClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossPointClient.swift; sourceTree = "<group>"; };
@@ -407,6 +397,7 @@
 		DE183592B1BB611EEC932E59 /* ReaderEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderEngineTests.swift; sourceTree = "<group>"; };
 		E1988366ACAAA3D45E411A30 /* ContentPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPresentation.swift; sourceTree = "<group>"; };
 		E35E5C23903D153A5C1161EE /* ContentCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentCard.swift; sourceTree = "<group>"; };
+		E4D853E4EB7E4C43B5C9F8E7 /* PositionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionRecord.swift; sourceTree = "<group>"; };
 		E79D36C5515C97C20FE566EF /* ReaderDisplayStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderDisplayStateTests.swift; sourceTree = "<group>"; };
 		E822A7A862B9E6419AEFACB1 /* PocketMacReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMacReaderTests.swift; sourceTree = "<group>"; };
 		E973586E1694A7601665230C /* ContentImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentImage.swift; sourceTree = "<group>"; };
@@ -523,7 +514,6 @@
 				AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */,
 				FB09B9253893CEDE90FD4DF7 /* PocketReaderTests.swift */,
 				6C9C2BCF76D2DED6633A95CF /* PocketScreenshotTests.swift */,
-				3F1E07955E72F9E6C577C3A6 /* PocketSyncEndToEndTests.swift */,
 				F754005EB0757A58C712E1A2 /* UITestSupport.swift */,
 			);
 			path = UITests;
@@ -584,8 +574,6 @@
 				FCDD2BBCA86C499E96F9D5A0 /* FirmwareReleaseTests.swift */,
 				5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */,
 				17315F0BDA2C370AC1F56ACA /* KOReaderDocumentDigestTests.swift */,
-				72BD9AD6A40F92607E14D583 /* KOSyncAccountStoreTests.swift */,
-				64B4F5C154BDCE05622497DB /* KOSyncClientTests.swift */,
 				4E3422134442A4A01012C7B2 /* LibraryTests.swift */,
 				C5893AB01049A60E87A4353F /* LiveSyncTests.swift */,
 				16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */,
@@ -633,8 +621,7 @@
 		9515EFD3564D49DEAF8E4915 /* Sync */ = {
 			isa = PBXGroup;
 			children = (
-				4CF94347921EFECA01FE926E /* KOSyncAccountStore.swift */,
-				93E645047220F94E288E487F /* KOSyncClient.swift */,
+				E4D853E4EB7E4C43B5C9F8E7 /* PositionRecord.swift */,
 				F71E25A675032249243DE405 /* ReadingSync.swift */,
 				84CD34B492D9F53B4A13338F /* SyncChannels.swift */,
 				88B26787B372A6EDDCC0D7C4 /* SyncSettingsView.swift */,
@@ -1034,8 +1021,6 @@
 				0486779CEBCC91832FDE97F1 /* FirmwareReleaseTests.swift in Sources */,
 				07C2801BF9C5C8FEE95B882B /* HostRendererBridgeTests.swift in Sources */,
 				155D53ACA2BAE90AFC65D350 /* KOReaderDocumentDigestTests.swift in Sources */,
-				42F2E6A2A77DD7B11D1C2EEB /* KOSyncAccountStoreTests.swift in Sources */,
-				277AEF19E9B8A12F2564EFBE /* KOSyncClientTests.swift in Sources */,
 				43BA99135624FB102463734E /* LibraryTests.swift in Sources */,
 				B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */,
 				894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */,
@@ -1100,8 +1085,6 @@
 				E8F40BB940A4873A273547F8 /* HostRendererBridge.swift in Sources */,
 				414190AE73C31EAC36A10175 /* HotspotJoiner.swift in Sources */,
 				E2929BBCE2170E2A3DD54827 /* KOReaderDocumentDigest.swift in Sources */,
-				EEB7145873C14454CD1D8862 /* KOSyncAccountStore.swift in Sources */,
-				FEB5E20E490F8C33CE5917F6 /* KOSyncClient.swift in Sources */,
 				AD5E7C8D8C81FF0FE64FA616 /* LayoutPreviewModel.swift in Sources */,
 				5E7C869BF34E189DD309EA82 /* LibraryModel.swift in Sources */,
 				CACB160994DFA8D9D9B931CB /* LibraryView.swift in Sources */,
@@ -1115,6 +1098,7 @@
 				D49F1B7D6D53D2705383D9F6 /* PocketHardware.swift in Sources */,
 				B2B491FBBAE92655BD2B6DA0 /* PocketModel.swift in Sources */,
 				F607C9E3B6C903E094947518 /* PocketProfile.swift in Sources */,
+				79F9A2CBC8D5E2506C5BB557 /* PositionRecord.swift in Sources */,
 				A0B124B096476FF24801D135 /* PreviewFontStore.swift in Sources */,
 				C6926A8E76B1E977CE66B1C7 /* ProfileStudioView.swift in Sources */,
 				47D0B8E2D65CE7A605747248 /* ReaderAppearance.swift in Sources */,
@@ -1194,8 +1178,6 @@
 				643A2CE7F639882AE77EC2F8 /* HostRendererBridge.swift in Sources */,
 				B24CAEF1B71AD9BD50DA9B1A /* HotspotJoiner.swift in Sources */,
 				EAECCFD003478F64F5213612 /* KOReaderDocumentDigest.swift in Sources */,
-				EB37308758ABAF81B5C09396 /* KOSyncAccountStore.swift in Sources */,
-				0631640053D16D620BC96256 /* KOSyncClient.swift in Sources */,
 				9BB3E65AD48ECBBD610A5840 /* LayoutPreviewModel.swift in Sources */,
 				6DFF47C2A34A0A14ECBDAE57 /* LibraryModel.swift in Sources */,
 				30B2B007EF0A9D5944224B71 /* LibraryView.swift in Sources */,
@@ -1209,6 +1191,7 @@
 				70C1388C6930C40CA2BFE011 /* PocketHardware.swift in Sources */,
 				AE0834455F19D805D51A9AD3 /* PocketModel.swift in Sources */,
 				6ADF94350ACD700D5480F7F8 /* PocketProfile.swift in Sources */,
+				AB3036AB91949B5876833B51 /* PositionRecord.swift in Sources */,
 				09DD2182BEFDE3ADE4D1BD7D /* PreviewFontStore.swift in Sources */,
 				AE703BCFF23C93CEAB083CEF /* ProfileStudioView.swift in Sources */,
 				A34CDD9ABF00528639DC303B /* ReaderAppearance.swift in Sources */,
@@ -1249,7 +1232,6 @@
 				A3C1DD8F0DC1C0E5968DE765 /* PocketFlowTests.swift in Sources */,
 				5031638530A05ACC06BC51DD /* PocketReaderTests.swift in Sources */,
 				99F8E48A3902BF0E3DE6D172 /* PocketScreenshotTests.swift in Sources */,
-				34404410D714BBAC388E6646 /* PocketSyncEndToEndTests.swift in Sources */,
 				0462505E5B0B2BA933F5F86A /* UITestSupport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

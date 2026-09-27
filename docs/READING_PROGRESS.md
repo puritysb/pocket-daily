@@ -1,21 +1,20 @@
 # 서버 없는 이어 읽기 — 기기 간 진행도 교환
 
-결정일: 2026-09-27. KOReader 공개 서버(`sync.koreader.rocks`)는 과거와 현재(2026-09-27 확인, HTTP 522)
-반복적으로 응답하지 않는다. 서버가 없어도 이어 읽기가 되도록 두 경로를 둔다. 세 경로 모두
-[READER_EXPANSION.md](READER_EXPANSION.md)의 KOSync v1 레코드 형식을 공유한다.
+결정일: 2026-09-27. 이어 읽기는 서버 없이 두 경로로만 한다(KOReader 동기화는 이번 버전 제외,
+사용자에게 노출하지 않음). 두 경로는 같은 위치 레코드(`PositionRecord`: document, progress(XPointer),
+percentage, device, device_id, timestamp)를 쓴다.
 
 | 경로 | 대상 | 전송 | 필요 조건 |
 | --- | --- | --- | --- |
 | iCloud 키-값 저장소 | 같은 Apple ID의 iPhone·iPad·Mac | Apple iCloud (개발자 서버 없음) | iCloud 로그인, 설정에서 켬(기본 켬) |
 | 리더 직접 교환 | 앱 ↔ X3/X4 | 기존 Sync 연결(LAN/직접 연결) | 펌웨어 `readingProgress: 1` |
-| KOReader sync | 앱·X3/X4·KOReader 기기 | 사용자가 고른 KOSync 서버 | 계정 |
 
 공통 규칙: 다른 기기의 더 앞선 위치만 제안하고 페이지를 자동으로 옮기지 않는다.
-문서 식별은 KOReader partial MD5(파일명 모드 선택 가능), 위치는 XPointer + 페이지 시작 기준 진행률.
+문서 식별은 partial MD5(리더도 같은 값), 위치는 XPointer + 페이지 시작 기준 진행률.
 
 ## iCloud 키-값 레코드
 
-- `NSUbiquitousKeyValueStore`, 키 `kosync.v1.<document>`, 값은 사전
+- `NSUbiquitousKeyValueStore`, 키 `position.v1.<document>`, 값은 사전
   `{progress, percentage, device, device_id, timestamp}`. 책 파일·제목은 저장하지 않는다.
 - 1 MB·1024키 한도: 최근 갱신 순으로 최대 800권을 유지하고 오래된 키부터 지운다.
 - iCloud 계정이 없거나 꺼져 있으면 조용히 건너뛴다. 사용자는 Library → Sync에서 끌 수 있다.

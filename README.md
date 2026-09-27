@@ -4,8 +4,8 @@ Pocket Daily is an account-free, distraction-free e-book reader for iPhone,
 iPad and Mac, and the companion for X3/X4 hardware running Pocket Daily or
 compatible CrossPoint-based firmware. Reading works on its own, offline and
 without a device: DRM-free EPUB books (and text or Markdown converted to EPUB)
-open in a paper-like reader with instant page turns. Optional KOReader sync
-keeps your place across the app, an X3/X4 reader and KOReader devices.
+open in a paper-like reader with instant page turns. Your place follows you
+across your Apple devices through iCloud and to a connected X3/X4 reader.
 
 As a companion it does not connect to the manufacturer's factory firmware or
 cloud service. Find on same Wi-Fi searches the current network without
@@ -19,9 +19,9 @@ This first vertical slice includes:
 - a Library (books and saved articles) and an in-app reader built on a pinned
   foliate-js subset: tap or keyboard page turns, contents, text size, fonts,
   spacing, margins and Paper/White/Night pages, with positions saved as
-  KOReader XPointers ([decision record](docs/READER_EXPANSION.md))
-- optional KOReader sync (sign in or create an account on a chosen server) with
-  a "continue on this device" suggestion that never moves the page by itself
+  XPointers shared with the firmware ([decision record](docs/READER_EXPANSION.md))
+- continue reading through iCloud (same Apple ID) and a connected X3/X4 reader,
+  offered as a suggestion that never moves the page by itself
 - iPhone/iPad and macOS SwiftUI targets under one App Store bundle identifier
 - one studio on every platform: a Home & Sleep editor for the reader's Pocket
   Daily profile, reader settings and "My cards" (with QR codes), previewed

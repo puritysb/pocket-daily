@@ -369,7 +369,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// the screen shows them).
     /// Exchanges reading positions with a reader that offers reading-progress v1,
     /// once per connection. Quiet on failure: it never blocks the session.
-    func exchangeReadingPositions(_ exchange: @escaping @MainActor (ReaderReadingList, String) -> [KOSyncProgress]) {
+    func exchangeReadingPositions(_ exchange: @escaping @MainActor (ReaderReadingList, String) -> [PositionRecord]) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, let status = readerStatus,
               status.readingProgress == 1, let identity = status.deviceID,
               readingExchangeAttempt != connectionAttempt else { return }
@@ -387,35 +387,6 @@ final class PocketModel: ObservableObject, DeviceSession {
                 NSLog("Pocket reading-position exchange failed: %@", error.localizedDescription)
             }
         }
-    }
-
-    enum ReaderSyncSetupError: LocalizedError {
-        case unavailable, unsupported
-        var errorDescription: String? {
-            switch self {
-            case .unavailable: "Connect a reader (not demo) and wait for the current task to finish, then try again."
-            case .unsupported: "This reader's firmware does not accept KOReader sync settings. Update the firmware, or enter the account in the reader's settings."
-            }
-        }
-    }
-
-    /// Copies the KOReader sync account to the connected reader so both sync
-    /// with the same server. Only on explicit request; the password is not kept.
-    func configureReaderSync(server: String, username: String, password: String, matchByContent: Bool) async throws {
-        guard !isDemoMode, readerStatus != nil else { throw ReaderSyncSetupError.unavailable }
-        let host = activeHost
-        let port = activeHTTPPort
-        var outcome: Result<Bool, Error> = .failure(ReaderSyncSetupError.unavailable)
-        guard let work = startReaderWork(attempt: connectionAttempt, kind: .settings, operation: { [self] _ in
-            do {
-                outcome = .success(try await client.saveKOReaderSync(server: server, username: username, password: password,
-                                                                     matchByContent: matchByContent, host: host, port: port))
-            } catch {
-                outcome = .failure(error)
-            }
-        }) else { throw ReaderSyncSetupError.unavailable }
-        await work.value
-        guard try outcome.get() else { throw ReaderSyncSetupError.unsupported }
     }
 
     func sendReaderLayout(profile: PocketProfile?, cards: ContentRevision?, show: ReaderScreen? = nil) {

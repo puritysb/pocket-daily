@@ -507,7 +507,7 @@ struct ProjectInformationSheet: View {
                         Text("Pocket Daily is not affiliated with, sponsored by, or endorsed by CrossPoint Reader, Xteink, or any device manufacturer.")
                     }
                     InfoSection(title: "Privacy", symbol: "lock.shield") {
-                        Text("No account, analytics, advertising, or cloud relay. Your library stays on this device. Device discovery and transfer stay on Bluetooth and the local network. Optional KOReader sync sends reading positions only to the server you choose. Pocket Daily does not read your coordinates.")
+                        Text("No account, analytics, advertising, or cloud relay. Your library stays on this device. Device discovery and transfer stay on Bluetooth and the local network. Reading positions stay in your own iCloud and on your reader. Pocket Daily does not read your coordinates.")
                     }
                     InfoSection(title: "Firmware responsibility", symbol: "externaldrive.badge.exclamationmark") {
                         Text("Custom firmware can affect device support or warranty. Pocket Daily offers official firmware updates and requires confirmation on the reader before installation.")

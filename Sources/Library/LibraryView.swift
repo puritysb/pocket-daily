@@ -51,7 +51,7 @@ struct LibraryView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showingSync = true } label: {
-                        Label("Sync", systemImage: sync.hasAnyChannel ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath.circle")
+                        Label("Continue reading", systemImage: "arrow.triangle.2.circlepath.circle")
                     }
                     .accessibilityIdentifier("library-sync")
                 }
@@ -63,7 +63,7 @@ struct LibraryView: View {
                 case .failure(let error): library.error = error.localizedDescription
                 }
             }
-            .sheet(isPresented: $showingSync) { SyncSettingsView(sync: sync, model: model) }
+            .sheet(isPresented: $showingSync) { SyncSettingsView(sync: sync) }
             .confirmationDialog("Remove this book from the library?", isPresented: Binding(
                 get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
                     if let book = removing {
@@ -91,7 +91,7 @@ struct LibraryView: View {
             .accessibilityIdentifier("library-shelf")
             Spacer()
             Button { showingSync = true } label: {
-                Label(sync.hasAnyChannel ? "Sync on" : "Sync", systemImage: "arrow.triangle.2.circlepath")
+                Label("Continue Reading", systemImage: "arrow.triangle.2.circlepath")
             }
             .accessibilityIdentifier("library-sync")
             Button { importing = true } label: { Label("Add books", systemImage: "plus") }
@@ -111,9 +111,6 @@ struct LibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 messages
-                if !sync.isConnected && !sync.hasDismissedRecommendation {
-                    syncRecommendation
-                }
                 if let current = library.continueReading {
                     ContinueReadingCard(book: current, library: library) { open(current) }
                 }
@@ -156,29 +153,6 @@ struct LibraryView: View {
             Text(notice).font(.callout).foregroundStyle(.secondary)
                 .task { try? await Task.sleep(for: .seconds(4)); library.notice = nil }
         }
-    }
-
-    private var syncRecommendation: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "arrow.triangle.2.circlepath").font(.title3)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Keep your place on every device").font(.subheadline.weight(.semibold))
-                Text(sync.isICloudActive
-                     ? "Your Apple devices already stay in step through iCloud, and a connected X3/X4 reader too. Add a free KOReader sync account to continue in KOReader and on your reader away from this app."
-                     : "Turn on iCloud to continue on your other Apple devices, and add a free KOReader sync account to continue in KOReader and on your X3/X4 reader.")
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button("Set up sync") { showingSync = true }
-                        .buttonStyle(.borderedProminent).controlSize(.small)
-                        .accessibilityIdentifier("sync-recommend-setup")
-                    Button("Not now") { sync.hasDismissedRecommendation = true }
-                        .controlSize(.small)
-                }
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 14))
     }
 
     @ViewBuilder private func menu(for book: LibraryBook) -> some View {

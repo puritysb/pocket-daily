@@ -29,8 +29,7 @@ enum WelcomeBook {
                 ]),
                 .init(title: "Keep your place everywhere", paragraphs: [
                     "Pocket Daily keeps your place without an account. Your iPhone, iPad and Mac stay in step through your own iCloud, and a connected X3 or X4 reader exchanges positions over the same local connection that sends books.",
-                    "To continue in KOReader on other e-readers, or on your reader when it is away from the app, add a free KOReader sync account in Library → Sync. We recommend it.",
-                    "Sync shares only a fingerprint of the book, your position in it, and the name of this device. It never sends the book itself.",
+                    "Only a fingerprint of the book and your place in it are shared. The book itself never leaves your devices.",
                     "When another device has read further, Pocket Daily offers to jump there. It never moves your page without asking.",
                     "Happy reading.",
                 ]),

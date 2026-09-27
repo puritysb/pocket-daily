@@ -180,9 +180,6 @@ struct BookReaderView: View {
                 }
                 .tint(theme.foreground.opacity(0.7))
                 .accessibilityLabel("Book position")
-                if let sync = sync.statusLine {
-                    Text(sync).font(.caption2).foregroundStyle(theme.foreground.opacity(0.6))
-                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)

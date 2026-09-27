@@ -61,10 +61,11 @@ manufacturer cloud service.
 - The reader imitates e-paper: instant page turns, minimal chrome, paper, white
   and night pages. Book scripts never run; the engine is the pinned foliate-js
   subset in `Support/ReaderEngine`, served only from the app's own URL scheme.
-- Positions use KOReader XPointers plus overall progress, the format shared
-  with X3/X4 firmware and KOReader. KOReader sync is optional and recommended;
-  it contacts only the server the user chose and never moves the page without
-  asking.
+- Positions use crengine-style XPointers plus start-of-page progress, the
+  format the X3/X4 firmware shares. Continuity runs without a server: iCloud
+  key-value storage between the user's Apple devices and direct exchange with a
+  connected reader (`docs/READING_PROGRESS.md`). It never moves the page
+  without asking. KOReader sync is not part of this version; do not expose it.
 - Current-network discovery never changes the Apple device Wi-Fi. Bluetooth
   pairing and a temporary private Wi-Fi lease provide an explicitly selected
   direct connection that works without a router or internet.
@@ -77,8 +78,7 @@ manufacturer cloud service.
 - Demo mode supports first-run exploration and App Review without a reader, but
   it must not mutate a device, join a network, or perform a transfer.
 - Pocket Hub, AgentDeck, accounts, analytics, and infrastructure Wi-Fi are not
-  prerequisites for the app. A KOReader sync account is an optional,
-  user-chosen service, not a Pocket Daily account.
+  prerequisites for the app.
 - Android is a future target: keep reading, sync, library, and transfer
   contracts platform-neutral and documented; do not start it without a product
   decision.
@@ -119,7 +119,7 @@ Never introduce automatic flashing after transport completion.
 - `MacTests/`: renders the Mac App Store screenshots by hosting the shipping
   views in an off-screen window, so no Accessibility permission is needed.
 - `Sources/Library`, `Sources/Reading`, `Sources/Sync`: the in-app library,
-  reader bridge, and optional KOReader sync.
+  reader bridge, and iCloud/reader position exchange.
 - `Support/`: entitlements and platform support files; `Support/ReaderEngine`
   holds the pinned reader engine (see its `SOURCE.json`).
 - `project.yml`: XcodeGen source of truth.
@@ -200,10 +200,9 @@ expectations:
   `./scripts/capture_screenshots.sh`, which needs no special permissions.
 - App Store metadata, screenshots, icons, privacy, or support changes: run
   `./scripts/validate_app_store.sh` and inspect the changed artifacts.
-- Reading-position or sync changes: run `./scripts/e2e_sync.sh`, which starts
-  the local KOSync test double (`scripts/kosync_dev_server.py`) and checks
-  continuity from one simulator to another. The public KOReader server has
-  outages; a local pass is not evidence of public-server behavior.
+- Reading-position or sync changes: run `ReadingSyncTests`, `ReaderEngineTests` and
+  the Mac cross-check `testFirmwareXPointersResolveToTheSameText` (needs the
+  sibling firmware checkout).
 - Documentation-only changes: check links and run `git diff --check`.
 
 Real Bluetooth pairing, temporary Wi-Fi association, local-network transfer,

@@ -2,15 +2,14 @@ import Foundation
 
 /// Where a position from another device came from.
 enum SyncSource: Codable, Equatable, Sendable {
-    case koreaderServer
     case iCloud
     case reader(String)
 }
 
-/// A KOSync v1 record from any channel, the one format all channels share.
+/// A position record from either channel.
 struct RemotePosition: Equatable, Sendable {
     var source: SyncSource
-    var record: KOSyncProgress
+    var record: PositionRecord
 }
 
 // MARK: iCloud
@@ -30,7 +29,7 @@ extension NSUbiquitousKeyValueStore: UbiquitousValues {}
 /// Positions for the same Apple ID's devices through iCloud key-value storage.
 /// Only the book fingerprint and position are stored; no title or file.
 final class ICloudProgressStore {
-    static let prefix = "kosync.v1."
+    static let prefix = "position.v1."
     static let capacity = 800
 
     private let values: UbiquitousValues
@@ -39,18 +38,18 @@ final class ICloudProgressStore {
         self.values = values
     }
 
-    func record(for document: String) -> KOSyncProgress? {
+    func record(for document: String) -> PositionRecord? {
         guard KOReaderDocumentDigest.isDigest(document),
               let raw = values.dictionary(forKey: Self.prefix + document),
               let progress = raw["progress"] as? String, progress.hasPrefix("/body/DocFragment["),
               let percentage = (raw["percentage"] as? NSNumber)?.doubleValue, percentage.isFinite,
               let device = raw["device"] as? String, !device.isEmpty else { return nil }
-        return KOSyncProgress(document: document, progress: progress, percentage: min(max(percentage, 0), 1),
+        return PositionRecord(document: document, progress: progress, percentage: min(max(percentage, 0), 1),
                               device: device, deviceID: raw["device_id"] as? String ?? "",
                               timestamp: (raw["timestamp"] as? NSNumber)?.intValue)
     }
 
-    func save(_ record: KOSyncProgress, now: Date = Date()) {
+    func save(_ record: PositionRecord, now: Date = Date()) {
         guard KOReaderDocumentDigest.isDigest(record.document) else { return }
         values.set([
             "progress": record.progress,
@@ -125,19 +124,19 @@ final class ReaderPositionStore {
         self.defaults = defaults
     }
 
-    func record(for document: String) -> KOSyncProgress? {
+    func record(for document: String) -> PositionRecord? {
         guard let raw = (defaults.dictionary(forKey: Self.key) as? [String: Data])?[document] else { return nil }
-        return try? JSONDecoder().decode(KOSyncProgress.self, from: raw)
+        return try? JSONDecoder().decode(PositionRecord.self, from: raw)
     }
 
-    func save(_ records: [KOSyncProgress]) {
+    func save(_ records: [PositionRecord]) {
         var all = defaults.dictionary(forKey: Self.key) as? [String: Data] ?? [:]
         for record in records {
             if let data = try? JSONEncoder().encode(record) { all[record.document] = data }
         }
         if all.count > 400 {
             let sorted = all.compactMap { key, value in
-                (try? JSONDecoder().decode(KOSyncProgress.self, from: value)).map { (key, $0.timestamp ?? 0) }
+                (try? JSONDecoder().decode(PositionRecord.self, from: value)).map { (key, $0.timestamp ?? 0) }
             }.sorted { $0.1 < $1.1 }
             for (key, _) in sorted.prefix(all.count - 400) { all[key] = nil }
         }
