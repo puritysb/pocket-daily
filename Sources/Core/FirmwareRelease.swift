@@ -1,7 +1,7 @@
 import Foundation
 
-/// The latest official Pocket Daily firmware release, fetched only when the
-/// user asks to update a connected reader. The app downloads the image and
+/// The latest official Pocket Daily firmware release, checked once per launch.
+/// Only an explicit update action downloads the image and
 /// sends it over the existing transfer path; the reader still validates it
 /// and installs only after its own confirmation. Nothing here runs in the app.
 struct FirmwareRelease: Equatable, Sendable {
@@ -11,6 +11,7 @@ struct FirmwareRelease: Equatable, Sendable {
     /// A GitHub pre-release (for example `v1.7.0-beta.1`); only the beta
     /// channel of development builds ever sees one.
     var isPrerelease = false
+    var publishedAt: Date? = nil
 }
 
 enum FirmwareReleaseError: LocalizedError, Equatable {
@@ -64,6 +65,7 @@ enum FirmwareReleaseSource {
             let size: Int
             let browser_download_url: String
         }
+        let published_at: String?
         let tag_name: String
         let draft: Bool?
         let prerelease: Bool?
@@ -108,7 +110,8 @@ enum FirmwareReleaseSource {
         }
         guard asset.size > 0 else { throw FirmwareReleaseError.malformed }
         guard asset.size <= maximumBytes else { throw FirmwareReleaseError.tooLarge(asset.size) }
-        return FirmwareRelease(version: version, downloadURL: url, byteCount: asset.size, isPrerelease: prerelease)
+        return FirmwareRelease(version: version, downloadURL: url, byteCount: asset.size, isPrerelease: prerelease,
+                               publishedAt: document.published_at.flatMap { ISO8601DateFormatter().date(from: $0) })
     }
 
     static func latest(channel: Channel = .current, session: URLSession = .shared) async throws -> FirmwareRelease {

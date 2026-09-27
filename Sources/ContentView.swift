@@ -22,14 +22,6 @@ struct ContentView: View {
         case sdRoot
     }
 
-    private struct PendingFirmwareTransfer: Identifiable {
-        let id = UUID()
-        let url: URL
-        let action: FileImportAction
-        /// Set for an official release the app downloaded on request.
-        var officialVersion: String? = nil
-    }
-
     /// Wide layouts show the inspector beside the studio; below this the
     /// iPhone-style tabs take over.
     private static let wideWidth: CGFloat = 920
@@ -45,8 +37,9 @@ struct ContentView: View {
     @State private var importing = false
     @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
-    @State private var pendingFirmwareTransfer: PendingFirmwareTransfer?
+    @State private var confirmingFirmwareUpdate = false
     @State private var showingProjectInfo = false
+    @State private var firmwareDownloadTask: Task<Void, Never>?
 
     private let initialPreview: ProfileStudioView.PreviewSurface
 
@@ -79,7 +72,7 @@ struct ContentView: View {
                 guard let url = urls.first else { return }
                 switch importAction {
                 case .wirelessUpload:
-                    prepareTransfer(url, action: .wirelessUpload)
+                    prepareTransfer(url, action: importAction)
                 case .sdSource:
                     prepareTransfer(url, action: .sdSource)
                 case .sdRoot:
@@ -116,27 +109,19 @@ struct ContentView: View {
             }
 #endif
         }
-        .sheet(item: $pendingFirmwareTransfer) { transfer in
-            FirmwareTransferSheet(
-                filename: transfer.url.lastPathComponent,
-                officialVersion: transfer.officialVersion,
-                cancel: {
-                    pendingFirmwareTransfer = nil
-                    if transfer.officialVersion != nil {
-                        try? FileManager.default.removeItem(at: transfer.url.deletingLastPathComponent())
-                    }
-                },
-                continueTransfer: {
-                    pendingFirmwareTransfer = nil
-                    if transfer.officialVersion != nil { model.stageDownloadedFirmware(transfer.url) }
-                    else { performTransfer(transfer.url, action: transfer.action) }
-                }
-            )
+        .alert("Update reader firmware?", isPresented: $confirmingFirmwareUpdate) {
+            Button("Update") { startFirmwareUpdate() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Sends the official Pocket Daily update for a compatible X3/X4 reader. Factory firmware is not supported. Keep a recovery method available; custom firmware may affect device support. Installation starts only after you confirm on the reader.")
         }
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
         }
         .task { model.refreshGlance() }
+        .task(id: model.isDemoMode) {
+            if !model.isDemoMode { await model.checkFirmwareAtLaunch() }
+        }
     }
 
     // MARK: Layouts
@@ -183,7 +168,7 @@ struct ContentView: View {
                         if tab == .layout {
                             // Scrolls on its own so Apply stays pinned above the tab bar.
                             ProfileStudioView(model: model, editor: profileEditor, stacked: true, pinsApplyBar: true,
-                                              header: AnyView(firmwareAdvice), initialPreview: initialPreview)
+                                              initialPreview: initialPreview)
                         } else {
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 14) {
@@ -233,24 +218,6 @@ struct ContentView: View {
                 Spacer(minLength: 12)
                 ReaderChip(model: model)
             }
-            firmwareAdvice
-        }
-    }
-
-    @ViewBuilder private var firmwareAdvice: some View {
-        if let status = model.readerStatus,
-           case let .updateAvailable(current, minimum) = FirmwareGuidance.advise(readerVersion: status.version) {
-            HStack(spacing: 8) {
-                Label("Firmware \(minimum) is available (reader has \(current)).",
-                      systemImage: "arrow.down.circle")
-                    .foregroundStyle(.orange)
-                if model.canUpdateReader, !model.hasDirectSession {
-                    Button("Update reader", action: updateReader).buttonStyle(.borderless)
-                } else {
-                    Link("Release", destination: FirmwareGuidance.releasesPage)
-                }
-            }
-            .font(.caption)
         }
     }
 
@@ -258,14 +225,14 @@ struct ContentView: View {
 
     private var inspector: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ConnectionInspector(model: model, nearby: nearby, onConnect: connect, onUpdateReader: updateReader)
+            ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
             if showsStatus {
                 StatusCallout(message: model.message, tone: model.messageTone)
             }
-            if model.isTransferring {
+            if model.isTransferring, model.activeTransferKind == nil {
                 Button("Pause transfer") { model.pauseTransfer() }
             }
-            if model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
+            if model.activeTransferKind == nil, model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
             FilesInspector(model: model) { urls in
                 if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
             } choose: {
@@ -275,6 +242,8 @@ struct ContentView: View {
                 importAction = .sdSource
                 importing = true
             }
+            FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
+                               update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate)
             if !model.isDemoMode {
                 TroubleshootingInspector(model: model, nearby: nearby)
             }
@@ -304,14 +273,18 @@ struct ContentView: View {
         nearby.disconnect()
     }
 
-    /// Explicit tap only: download the latest official release, then show the
-    /// usual firmware acknowledgement before anything is sent.
-    private func updateReader() {
-        Task {
-            guard let download = await model.downloadLatestFirmware() else { return }
-            pendingFirmwareTransfer = PendingFirmwareTransfer(url: download.file, action: .wirelessUpload,
-                                                              officialVersion: download.version)
+    private func startFirmwareUpdate() {
+        guard firmwareDownloadTask == nil else { return }
+        firmwareDownloadTask = Task {
+            defer { firmwareDownloadTask = nil }
+            await model.updateFirmware()
         }
+    }
+
+    private func cancelFirmwareUpdate() {
+        if let firmwareDownloadTask { firmwareDownloadTask.cancel() }
+        else if model.isTransferring, model.activeTransferKind == .firmware { model.stopAndRemoveTransfer() }
+        else { model.removePreparedFiles(kind: .firmware) }
     }
 
     private func prepareTransfer(_ url: URL, action: FileImportAction) {
@@ -320,10 +293,10 @@ struct ContentView: View {
             return
         }
         if url.pathExtension.lowercased() == "bin" {
-            pendingFirmwareTransfer = PendingFirmwareTransfer(url: url, action: action)
-        } else {
-            performTransfer(url, action: action)
+            model.post("Use Firmware update to get the latest official release. Local firmware files are not supported.", tone: .pending)
+            return
         }
+        performTransfer(url, action: action)
     }
 
     private func performTransfer(_ url: URL, action: FileImportAction) {
@@ -420,76 +393,6 @@ private struct PocketMark: View {
     }
 }
 
-private struct FirmwareTransferSheet: View {
-    let filename: String
-    var officialVersion: String? = nil
-    let cancel: () -> Void
-    let continueTransfer: () -> Void
-
-    var body: some View {
-        ScrollView {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 14) {
-                Image(systemName: "externaldrive.badge.exclamationmark")
-                    .font(.system(size: 28, weight: .medium))
-                    .foregroundStyle(PocketPalette.accent)
-                    .frame(width: 48, height: 48)
-                    .background(PocketPalette.selection, in: RoundedRectangle(cornerRadius: 12))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(officialVersion.map { "Update reader to \($0)?" } ?? "Send custom firmware?")
-                        .font(.title2.weight(.semibold))
-                    Text(officialVersion == nil ? filename
-                         : officialVersion?.contains("-") == true ? "Official Pocket Daily pre-release · firmware.bin"
-                         : "Official Pocket Daily release · firmware.bin")
-                        .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(2)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                SafetyLine(symbol: "checkmark.seal", text: "Pocket validates the ESP32-C3 image structure, checksum, SHA-256 digest, and Nearby Sync identity before staging.")
-                SafetyLine(symbol: "checkmark.shield", text: "Use only Pocket Daily or compatible CrossPoint-based firmware for this reader profile.")
-                SafetyLine(symbol: "building.2.crop.circle", text: "Factory firmware and manufacturer services are not supported by this app.")
-                SafetyLine(symbol: "wrench.and.screwdriver", text: "Custom firmware can affect support or warranty if it causes device damage.")
-                SafetyLine(symbol: "hand.tap", text: "Pocket Daily only sends the file. The reader installs it only after you confirm on the reader.")
-            }
-            .padding(16)
-            .background(PocketPalette.stage, in: RoundedRectangle(cornerRadius: 14))
-
-            Text(officialVersion == nil
-                 ? "Keep a known recovery method available before installing. The selected file remains your responsibility."
-                 : "The app sends the release to the reader now. When you leave the transfer screen, the reader asks before installing it. Keep a known recovery method available.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("I understand · Continue", action: continueTransfer)
-                    .buttonStyle(.borderedProminent)
-                    .tint(PocketPalette.ink)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: 520)
-        }
-#if os(macOS)
-        .frame(minWidth: 420, idealWidth: 480, minHeight: 460)
-#endif
-        .presentationDetents([.medium, .large])
-    }
-}
-
-private struct SafetyLine: View {
-    let symbol: String
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(PocketPalette.ink).frame(width: 20)
-            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
 
 /// Not private: the macOS store-screenshot test renders this sheet offscreen, which
 /// avoids depending on the Accessibility permission a UI-test runner would need.
@@ -519,7 +422,7 @@ struct ProjectInformationSheet: View {
                         Text("No account, analytics, advertising, or cloud relay. Device discovery and transfer stay on Bluetooth and the local network. Pocket Daily does not read your coordinates.")
                     }
                     InfoSection(title: "Firmware responsibility", symbol: "externaldrive.badge.exclamationmark") {
-                        Text("Custom firmware can affect device support or warranty. Pocket Daily sends firmware files you choose but never installs firmware without confirmation on the reader.")
+                        Text("Custom firmware can affect device support or warranty. Pocket Daily offers official firmware updates and requires confirmation on the reader before installation.")
                     }
 
                     ViewThatFits(in: .horizontal) {
@@ -660,7 +563,6 @@ private struct ConnectionInspector: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
     let onConnect: () -> Void
-    let onUpdateReader: () -> Void
     @State private var confirmingDirectConnection = false
     @State private var showingHelp = false
 
@@ -677,7 +579,6 @@ private struct ConnectionInspector: View {
                 if isConnected { sessionMenu }
             }
             actions
-            if model.readerUpdateState != .idle { updateProgress }
             if let lease = nearby.hotspotLease, model.manualHotspotFallback {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))
@@ -770,9 +671,7 @@ private struct ConnectionInspector: View {
                 Button("Reconnect directly", systemImage: "arrow.clockwise") { confirmingDirectConnection = true }
             } else {
                 Button("Reconnect", systemImage: "arrow.clockwise", action: onConnect)
-                Button("Update reader…", systemImage: "arrow.down.circle", action: onUpdateReader)
-                    .disabled(!model.canUpdateReader)
-                    .accessibilityIdentifier("update-reader")
+
             }
             Divider()
             Button("End session", systemImage: "xmark.circle", role: .destructive) {
@@ -788,23 +687,6 @@ private struct ConnectionInspector: View {
         .disabled(model.isWorking)
         .accessibilityLabel("Reader actions")
         .accessibilityIdentifier("reader-actions")
-    }
-
-    /// Update reader (in the ⋯ menu or the firmware notice) downloads the
-    /// latest official firmware only when tapped; the reader still asks before
-    /// installing it. This shows that download.
-    private var updateProgress: some View {
-        HStack {
-            ProgressView().controlSize(.small)
-            switch model.readerUpdateState {
-            case .idle: EmptyView()
-            case .checking: Text("Checking for firmware…")
-            case let .downloading(version): Text("Downloading \(version)…")
-            }
-            Spacer()
-        }
-        .font(.callout)
-        .foregroundStyle(.secondary)
     }
 
     private var detail: String {
@@ -823,7 +705,93 @@ private struct ConnectionInspector: View {
     }
 }
 
-/// Books, study packs and firmware for the reader; prepared files wait here
+/// One update action; transfer bookkeeping is only exposed for recovery.
+struct FirmwareUpdateCard: View {
+    @ObservedObject var model: PocketModel
+    let isUpdating: Bool
+    let update: () -> Void
+    let cancel: () -> Void
+    @State private var confirmingLocalRemoval = false
+
+    private var pending: Bool { model.preparedTransfers.contains { $0.kind == .firmware } }
+    private var sending: Bool { model.isTransferring && model.activeTransferKind == .firmware }
+
+    var body: some View {
+        InspectorCard(title: "FIRMWARE", symbol: "cpu") {
+            if model.isDemoMode {
+                Text("Firmware updates appear when you connect a reader.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                if let release = model.latestFirmwareRelease {
+                    Text("Latest · \(release.version)\(release.isPrerelease ? " (beta)" : "")")
+                        .font(.callout.weight(.medium))
+                    if let date = release.publishedAt {
+                        Text("Released \(date.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if isUpdating || sending {
+                    if sending {
+                        ProgressView(value: model.uploadProgress)
+                        Text(model.uploadProgress >= 1 ? "Saving on reader…" : "Sending · \(Int(model.uploadProgress * 100))%")
+                            .font(.caption)
+                    } else {
+                        ProgressView(model.readerUpdateState == .idle ? "Preparing update…" : "Downloading update…")
+                            .font(.caption)
+                    }
+                    Button("Cancel", action: cancel).accessibilityIdentifier("cancel-firmware-update")
+                } else if pending {
+                    Text("Update interrupted").font(.callout)
+                    HStack {
+                        Button("Resume update") { model.sendPreparedFiles(kind: .firmware) }
+                            .disabled(model.readerStatus == nil || model.isWorking)
+                        Button("Cancel", action: cancel).disabled(model.isWorking)
+                    }
+                    if model.messageTone == .failure {
+                        Text("Reconnect to the same reader to finish cleanup, or forget this update on this device.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("Forget update…") { confirmingLocalRemoval = true }
+                            .font(.caption).disabled(model.isWorking)
+                    }
+                } else if let version = model.firmwareAwaitingInstallation {
+                    Text("\(version) sent · confirm installation on the reader")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if model.isCheckingFirmware {
+                    ProgressView("Checking for updates…").font(.caption)
+                } else if let error = model.firmwareCheckError {
+                    Text(error).font(.caption).foregroundStyle(.secondary)
+                    Button("Try again") { Task { await model.checkFirmwareRelease() } }
+                        .disabled(model.hasDirectSession)
+                } else if model.firmwareUpdateAvailable {
+                    Button("Update available", action: update)
+                        .buttonStyle(.borderedProminent).disabled(!model.canUpdateReader)
+                        .accessibilityIdentifier("update-reader")
+                    Text(model.hasDirectSession ? "Use an internet connection to download the update." : "Confirm installation on the reader after sending.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if model.latestFirmwareRelease != nil, let status = model.readerStatus {
+                    Text(FirmwareGuidance.parse(status.version) == nil ? "Reader version could not be compared." : "No newer update available")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(model.readerStatus == nil ? "Connect a reader to check its version." : "Connect to the internet to check for updates.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if model.latestFirmwareRelease == nil {
+                        Button("Check for updates") { Task { await model.checkFirmwareRelease() } }
+                            .disabled(model.hasDirectSession)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("firmware-update-card")
+        .alert("Forget this update?", isPresented: $confirmingLocalRemoval) {
+            Button("Forget update", role: .destructive) { model.removePreparedFiles(kind: .firmware, localOnly: true) }
+            Button("Keep update", role: .cancel) {}
+        } message: {
+            Text("Removes the local copy only. Temporary data on the reader may remain. Already saved firmware is unchanged.")
+        }
+    }
+}
+
+/// Books and study packs for the reader; prepared files wait here
 /// until a reader is connected.
 private struct FilesInspector: View {
     @ObservedObject var model: PocketModel
@@ -844,7 +812,7 @@ private struct FilesInspector: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(targeted ? "Drop to prepare" : "Books and documents")
                     .font(.callout.weight(.medium))
-                Text("EPUB · TXT · MD · XTC · PDL · BIN").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                Text("EPUB · TXT · MD · XTC · PDL").font(.caption2.monospaced()).foregroundStyle(.secondary)
             }
         }
     }
@@ -872,7 +840,7 @@ private struct FilesInspector: View {
     }
 
     var body: some View {
-        InspectorCard(title: "FILES", symbol: "arrow.up.doc") {
+        InspectorCard(title: "CONTENT · SD CARD", symbol: "sdcard") {
             // The menu moves under the label when the inspector is narrow.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
@@ -906,20 +874,75 @@ private struct FilesInspector: View {
                 Text("Only files already on this device can be prepared while connected directly.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if !model.preparedTransfers.isEmpty, !model.isDemoMode {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Ready to send · \(model.preparedTransfers.count)").font(.subheadline.weight(.semibold))
-                    ForEach(model.preparedTransfers) { item in
-                        Text(item.filename).font(.caption).lineLimit(1)
-                    }
+            Text("Books, articles and written text are saved on the reader’s SD card.")
+                .font(.caption).foregroundStyle(.secondary)
+            PreparedTransferQueue(model: model, kind: .content)
+        }
+    }
+}
+
+/// Categories have independent send/remove actions even when both are pending.
+private struct PreparedTransferQueue: View {
+    @ObservedObject var model: PocketModel
+    let kind: TransferKind
+    @State private var confirmingRemoval = false
+    @State private var confirmingStop = false
+    @State private var confirmingLocalRemoval = false
+    private var items: [PreparedTransfer] { model.preparedTransfers.filter { $0.kind == kind } }
+    private var isActive: Bool { model.isTransferring && model.activeTransferKind == kind }
+    private var sendTitle: String {
+        let verb = items.contains { $0.stagingID != nil } ? "Resume" : "Send"
+        return "\(verb) \(kind.rawValue)"
+    }
+
+    var body: some View {
+        if !items.isEmpty, !model.isDemoMode {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Ready · \(items.count)").font(.subheadline.weight(.semibold))
+                ForEach(items) { item in
+                    Text(item.filename).font(.caption).lineLimit(2)
+                }
+                if isActive {
+                    ProgressView(value: model.uploadProgress)
+                    Text(model.uploadProgress >= 1 ? "Saving on SD card…" : "Sending · \(Int(model.uploadProgress * 100))%")
+                        .font(.caption)
                     HStack {
-                        Button("Send") { model.sendPreparedFiles() }
+                        Button("Pause") { model.pauseTransfer() }
+                        Button("Stop and remove…", role: .destructive) { confirmingStop = true }
+                    }
+                } else {
+                    HStack {
+                        Button(sendTitle) { model.sendPreparedFiles(kind: kind) }
                             .buttonStyle(.borderedProminent)
                             .disabled(model.readerStatus == nil || model.isWorking)
-                        Button("Remove") { model.removePreparedFiles() }
+                        Button(kind == .content ? "Remove content…" : "Remove firmware…") { confirmingRemoval = true }
                             .disabled(model.isWorking)
                     }
+                    if items.contains(where: { $0.stagingID != nil }) {
+                        Text("Paused or interrupted copies are kept for retry. Remove cleans their temporary files on the connected reader.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("Remove only local copies…") { confirmingLocalRemoval = true }
+                            .font(.caption).disabled(model.isWorking)
+                    }
                 }
+            }
+            .alert("Remove prepared \(kind.rawValue)?", isPresented: $confirmingRemoval) {
+                Button("Remove prepared copies", role: .destructive) { model.removePreparedFiles(kind: kind) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Removes this category’s prepared copies and its tracked temporary files on the reader. Original sources and completed reader files stay.")
+            }
+            .alert("Stop and remove this transfer?", isPresented: $confirmingStop) {
+                Button("Stop and remove", role: .destructive) { model.stopAndRemoveTransfer() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Stops this category and cleans its temporary files. If the connection is lost, the queue stays so you can retry cleanup. Already saved files stay.")
+            }
+            .alert("Remove only local copies?", isPresented: $confirmingLocalRemoval) {
+                Button("Remove local copies", role: .destructive) { model.removePreparedFiles(kind: kind, localOnly: true) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The reader is not cleaned up. Its temporary files may remain on SD. Already saved content and firmware are unchanged.")
             }
         }
     }

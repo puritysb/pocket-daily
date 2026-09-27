@@ -887,6 +887,7 @@ final class NearbySyncProtocolTests: XCTestCase {
             let item = try XCTUnwrap(model.preparedTransfers.first)
             XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(item).path))
             model.removePreparedFiles()
+            while model.isWorking { try await Task.sleep(for: .milliseconds(10)) }
             XCTAssertTrue(model.preparedTransfers.isEmpty)
             XCTAssertFalse(FileManager.default.fileExists(atPath: TransferPreparation.file(item).path))
             XCTAssertTrue(model.hasDirectSession)

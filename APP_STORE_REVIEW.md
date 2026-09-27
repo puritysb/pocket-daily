@@ -49,25 +49,22 @@ account is required.
 
 ## Firmware safety boundary
 
-The app does not download or silently install executable code. A firmware file
-must be selected by the user. Before transfer, the app discloses that factory
-firmware is unsupported and that custom firmware can affect device support or
-warranty. The app then stages the file as `/update.bin`; installation requires a
-second explicit confirmation on the reader, which validates the image again.
-Before staging, Pocket Daily rejects an image unless its ESP32-C3 header,
-segments, checksum, SHA-256 trailer when present, and Pocket Nearby Sync product
-identity all validate locally. When the transfer session ends, the reader shows
-its own install prompt; nothing flashes without that confirmation.
+Firmware runs only on the external reader, never in the app. The Firmware card
+checks official GitHub release metadata once per launch outside demo mode and
+shows the publication date and availability against the connected reader.
+Local firmware file import is not offered. The user chooses Update and confirms
+the compatibility/recovery notice before download and local transfer begin.
+Cancel stops the operation and cleans tracked temporary files when the reader
+is reachable; failed cleanup retains a retryable copy. Already published files
+are unchanged.
 
-**Update reader** (Reader panel, or the note shown for older reader firmware)
-runs only when the user taps it and is hidden in demo mode. The app asks the
-developer's public GitHub repository for the latest official Pocket Daily
-firmware release, downloads `firmware.bin` over HTTPS from that repository's
-release path only, applies the same image validation, and shows the firmware
-warning before sending it over the local connection. The firmware runs only on
-the external reader, never in the app; the reader asks before installing it.
-The app sends no personal data to GitHub. Readers with enough memory can also
-check for updates themselves (Pocket Daily → Sync → Check for updates).
+The app downloads `firmware.bin` only from the official repository release path,
+validates size, version, ESP32-C3 structure, checksum, SHA-256 trailer when present
+and Pocket Nearby Sync product identity, then stages it as `/update.bin`.
+The reader validates the image again and requires its own explicit installation
+confirmation. No automatic flashing follows transport completion.
+Metadata requests send no reader identity or content to GitHub. A private direct
+reader connection is not used for internet release checks or downloads.
 
 ## Weather and calendar
 
@@ -87,3 +84,20 @@ to inspect or join nearby Wi-Fi; coordinates are neither read nor transmitted.
 The bundled privacy manifest declares app-only UserDefaults and user-selected
 file-metadata access; the app does not track or collect data. See
 [`PRIVACY.md`](PRIVACY.md).
+
+## Article library development — 2026-09-27
+
+The working tree adds Files → Add → Articles, local article retention, explicit
+EPUB preparation, and an iOS/iPadOS Share → Pocket Daily extension. macOS uses
+Add article to paste a link or text. HTTPS page retrieval is user initiated;
+review the extracted text before saving. Link-only saves cannot be prepared
+until text is added. No reader is needed to save or review articles.
+
+The app and extension require the App Group `group.bound.serendipity.pocket.daily`.
+The extension bundle ID is `bound.serendipity.pocket.daily.share`. Registering
+these capabilities and obtaining matching distribution profiles are authorized
+account-holder actions, still pending; unsigned local builds do not verify them.
+The extension must ship with matching parent version/build and privacy manifest.
+Article sending requires reader `articleLibrary: 1` plus the streaming transport.
+See `docs/ARTICLES.md` (from repository root) for the contract and acceptance gates.
+This is not a new Store submission or a verified physical sharing flow.

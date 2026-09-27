@@ -147,6 +147,7 @@
 		BDD61FA99F30AAAFD0A34BAB /* ContentEditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCEBC2E37191EC4B80D7B4EB /* ContentEditorModel.swift */; };
 		BE722FCEDEB810E435395D0D /* ScreenPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28FC5BB6E5BAF17FBE651A95 /* ScreenPresentationTests.swift */; };
 		C2105243A231BB8EB65D148F /* ContentDraftFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40700F9050393C248572BB7 /* ContentDraftFile.swift */; };
+		C34F11ACA9B78622ED90296C /* TransferSeparationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F39BD4DB8AA2EE88995A6E87 /* TransferSeparationTests.swift */; };
 		C4C665425569754870E021C7 /* FirmwareGuidanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 508896533C4BB1713A464F45 /* FirmwareGuidanceTests.swift */; };
 		C67C2E63158E3AA2132090E2 /* ReorderableList.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1440C3CC9BDA85B6CDE1968 /* ReorderableList.swift */; };
 		C6926A8E76B1E977CE66B1C7 /* ProfileStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE5A510A17E41D4E44C7DC3C /* ProfileStudioView.swift */; };
@@ -346,6 +347,7 @@
 		F03F0B099EADC58A2D91DA7D /* ReadingDocumentPreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingDocumentPreparation.swift; sourceTree = "<group>"; };
 		F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareGuidance.swift; sourceTree = "<group>"; };
 		F14A64CE2771C9806D8D1109 /* LayoutPreviewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutPreviewModel.swift; sourceTree = "<group>"; };
+		F39BD4DB8AA2EE88995A6E87 /* TransferSeparationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferSeparationTests.swift; sourceTree = "<group>"; };
 		F40700F9050393C248572BB7 /* ContentDraftFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentDraftFile.swift; sourceTree = "<group>"; };
 		F754005EB0757A58C712E1A2 /* UITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestSupport.swift; sourceTree = "<group>"; };
 		FCDD2BBCA86C499E96F9D5A0 /* FirmwareReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareReleaseTests.swift; sourceTree = "<group>"; };
@@ -499,6 +501,7 @@
 				CF08AB00EB2736143F58C22A /* ReaderPreferencesTests.swift */,
 				8E32A7904290F64ED7F059C2 /* ReadingDocumentPreparationTests.swift */,
 				28FC5BB6E5BAF17FBE651A95 /* ScreenPresentationTests.swift */,
+				F39BD4DB8AA2EE88995A6E87 /* TransferSeparationTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -911,6 +914,7 @@
 				CD531D9365FAF1CF7E046FE0 /* ReaderPreferencesTests.swift in Sources */,
 				BD1F30510F8FB7B276C1D7D1 /* ReadingDocumentPreparationTests.swift in Sources */,
 				BE722FCEDEB810E435395D0D /* ScreenPresentationTests.swift in Sources */,
+				C34F11ACA9B78622ED90296C /* TransferSeparationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

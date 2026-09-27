@@ -218,7 +218,18 @@ final class PocketFlowTests: XCTestCase {
         app.launch()
         app.open("Reader")
         XCTAssertTrue(filename.waitForExistence(timeout: 10), "Prepared EPUB must survive relaunch")
-        app.buttons["Remove"].tap()
+        let remove = app.buttons["Remove content…"]
+        app.revealInReader(remove)
+        XCTAssertTrue(app.buttons["Send content"].exists)
+        XCTAssertFalse(app.buttons["Send firmware"].exists, "Written text must not become a firmware transfer")
+        XCTAssertFalse(app.buttons["Choose firmware file…"].exists)
+        XCTAssertFalse(app.buttons["Remove firmware…"].exists)
+        attach(app, "content-transfer-queue")
+        remove.tap()
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(filename.exists, "Cancelling removal must preserve the prepared content")
+        remove.tap()
+        app.buttons["Remove prepared copies"].tap()
     }
 
     func testSystemShareExtensionSavesTextIntoAppLibrary() {
@@ -295,7 +306,10 @@ final class PocketFlowTests: XCTestCase {
         let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: saved)
         XCTAssertEqual(XCTWaiter().wait(for: [removed], timeout: 5), .completed)
         app.buttons["Done"].tap()
-        app.buttons["Remove"].tap()
+        let remove = app.buttons["Remove content…"]
+        app.revealInReader(remove)
+        remove.tap()
+        app.buttons["Remove prepared copies"].tap()
     }
 
     /// Demo mode is the path App Review uses without hardware. It must populate

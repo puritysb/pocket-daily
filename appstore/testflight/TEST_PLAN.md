@@ -59,17 +59,18 @@ names one platform. Record Pass, Fail, or Blocked with a short evidence referenc
 9. **Firmware rejection boundary**
    - Select a non-firmware file renamed to `.bin`; confirm local rejection before
      publication.
-   - Select an ESP image for another chip or without Pocket Nearby Sync markers;
-     confirm rejection before publication.
+   - Verify automated FirmwareImageValidator tests reject another chip or missing
+     Pocket Nearby Sync markers. Local firmware import is not offered.
 10. **Valid firmware staging boundary**
-    - Select the exact current firmware artifact whose version is recorded above.
+    - Verify the GitHub release date and update availability after connecting an
+      older reader. Choose Update and acknowledge the notice.
     - Confirm local structure/checksum/digest/identity validation and transfer as
       `/update.bin`, then cancel at the reader confirmation. Do not flash during
       this release test or review recording.
 11. **macOS file and SD access**
     - Select a book with the system file picker and verify the sandboxed app can
       read it for transfer.
-    - With a test SD card mounted, copy the review EPUB and a valid firmware image;
+    - With a test SD card mounted, copy the review EPUB;
       confirm the EPUB lands at the root and is never overwritten, and that the
       firmware is published as `/update.bin` with the "Next: finish on the reader" result (not installed until confirmed on the reader).
 12. **Privacy and network observation**

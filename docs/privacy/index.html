@@ -9,7 +9,7 @@
 </head>
 <body><main>
   <nav><a class="brand" href="../"><span class="mark" aria-hidden="true"></span>Pocket Daily</a><a href="../support/">Support</a></nav>
-  <p class="eyebrow">PRIVACY POLICY · AUGUST 31, 2026</p>
+  <p class="eyebrow">PRIVACY POLICY · SEPTEMBER 27, 2026</p>
   <h1>Local by design.</h1>
   <p class="lead">Pocket Daily does not operate an account system, analytics service, advertising network, or cloud relay. We do not collect data from the app.</p>
 
@@ -19,10 +19,13 @@
   <h2>Bluetooth, local network, and Wi-Fi permission</h2>
   <p>Bluetooth is used to discover and pair with a nearby compatible reader. The local network and a temporary reader Wi-Fi network are used for direct transfer. On supported Apple operating systems, system location permission may be required to configure or join Wi-Fi; Pocket Daily does not read the device's geographic coordinates.</p>
   <p>If the user names a city for weather, Pocket Daily looks up that city with Apple's geocoder and requests its forecast from Apple WeatherKit; only the city's coordinates are sent, and the forecast is stored on the device and sent to the user's reader. If the user turns on calendar events, today's event titles and times are read on the device with the system's permission and sent only to the user's reader over the local connection.</p>
-  <p>Only when the user taps Update reader, Pocket Daily asks GitHub for the latest official Pocket Daily firmware release, downloads that file and sends it to the user's reader. The request carries no personal data; GitHub's privacy statement governs its servers. The downloaded file is deleted after it is sent or the update is cancelled.</p>
+  <p>Outside demo mode, Pocket Daily checks GitHub once per app launch for the latest official firmware version and publication date. The user can retry a failed check. Firmware is downloaded and sent only after the user chooses Update and confirms; installation also requires confirmation on the reader. Requests contain no reader identity or file contents; GitHub receives the device's network address and its privacy statement governs its servers. The downloaded file is deleted after it is sent or the update is cancelled; interrupted transfers remain available for retry or cleanup.</p>
 
   <h2>Files and diagnostics</h2>
   <p>Files are never uploaded to a Pocket Daily server. Prepared files stay in the app until sent successfully or removed from the prepared list. Reader IDs and pending firmware versions are stored locally for retries and installation checks. Reader crash reports may be archived locally for diagnosis and leave the device only when the user explicitly exports them. Removing the app deletes data held in its app container; files already copied to a reader, SD card, or user-selected folder remain under the user's control.</p>
+
+  <h2>Articles saved for later</h2>
+  <p>Sharing a link or choosing Get article text requests the selected HTTPS page and its HTTPS redirects directly from the publisher. The publisher sees your network address and URL. Pocket Daily sends no browser cookies or reader information, executes no page scripts, and fetches no embedded images. You review extracted text before saving; if extraction fails, save the link or paste selected text. Article titles, links and text stay in the app’s local shared container until explicitly deleted. Sending or deleting a reader copy leaves the app copy intact. No extraction service receives your articles.</p>
 
   <h2>Third parties and children</h2>
   <p>Pocket Daily contains no third-party analytics or advertising SDK. The app does not knowingly collect personal information from anyone, including children, because it does not collect information through a developer-operated service.</p>

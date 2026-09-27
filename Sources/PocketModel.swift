@@ -67,11 +67,20 @@ struct SDCopyResult: Equatable, Sendable {
     let firmwareVersion: String?
 }
 
+enum TransferKind: String, CaseIterable, Sendable {
+    case content, firmware
+    var title: String { self == .content ? "Content · SD card" : "Firmware update" }
+}
+
 struct PreparedTransfer: Codable, Identifiable, Equatable, Sendable {
     let id: UUID
     let filename: String
     let firmwareVersion: String?
     var readerID: String?
+    /// Persisted before opening the stream, including readers without resume support.
+    var remoteStagingID: UUID? = nil
+    var stagingID: UUID? { remoteStagingID ?? (readerID == nil ? nil : id) }
+    var kind: TransferKind { filename.lowercased().hasSuffix(".bin") ? .firmware : .content }
 }
 
 /// Files are copied out of cloud/file-provider URLs before changing networks.
@@ -1250,16 +1259,51 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     @Published private(set) var readerUpdateState: ReaderUpdateState = .idle
 
+    @Published private(set) var latestFirmwareRelease: FirmwareRelease?
+    @Published private(set) var isCheckingFirmware = false
+    @Published private(set) var firmwareCheckError: String?
+    private var didCheckFirmwareAtLaunch = false
+
+    var firmwareAwaitingInstallation: String? {
+        firmwareKey.flatMap { UserDefaults.standard.string(forKey: $0) }
+    }
+
+    var firmwareUpdateAvailable: Bool {
+        guard let release = latestFirmwareRelease, let running = readerStatus?.version else { return false }
+        return FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel)
+    }
+
+    /// Metadata only, once per app model lifetime. Failed checks offer an explicit retry.
+    func checkFirmwareAtLaunch() async {
+        guard !didCheckFirmwareAtLaunch, !isDemoMode, !hasDirectSession else { return }
+        didCheckFirmwareAtLaunch = true
+        await checkFirmwareRelease()
+    }
+
+    func checkFirmwareRelease() async {
+        guard !isDemoMode, !hasDirectSession, !isCheckingFirmware, readerUpdateState == .idle else { return }
+        isCheckingFirmware = true
+        firmwareCheckError = nil
+        defer { isCheckingFirmware = false }
+        do {
+            let release = try await releaseSource.latest()
+            try Task.checkCancellation()
+            latestFirmwareRelease = release
+        } catch {
+            firmwareCheckError = "Couldn't check for updates. Try again with an internet connection."
+        }
+    }
+
     /// "Update reader" is offered only for a connected, real reader with no
     /// firmware already waiting, and never in demo mode.
     var canUpdateReader: Bool {
-        canPrepareFiles && readerStatus != nil && readerUpdateState == .idle
+        canPrepareFiles && !hasDirectSession && !isCheckingFirmware && readerStatus != nil && readerUpdateState == .idle
             && !preparedTransfers.contains { $0.filename.lowercased().hasSuffix(".bin") }
     }
 
-    /// Runs only from an explicit tap: asks GitHub for the latest official
-    /// release and, when it is newer than the reader, downloads and validates
-    /// it. Returns the local image for the usual acknowledgement and transfer,
+    /// Runs after an explicit update acknowledgement. Uses launch metadata (or
+    /// looks it up if absent), then downloads and validates an offered release.
+    /// Returns the local image for preparation and transfer,
     /// or nil after posting why nothing is needed or what failed.
     func downloadLatestFirmware() async -> (file: URL, version: String)? {
         guard canUpdateReader, let running = readerStatus?.version else { return nil }
@@ -1267,7 +1311,11 @@ final class PocketModel: ObservableObject, DeviceSession {
         defer { readerUpdateState = .idle }
         post("Checking the latest Pocket Daily firmware…")
         do {
-            let release = try await releaseSource.latest()
+            let release: FirmwareRelease
+            if let cached = latestFirmwareRelease { release = cached }
+            else { release = try await releaseSource.latest() }
+            latestFirmwareRelease = release
+            try Task.checkCancellation()
             guard FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel) else {
                 post("The reader is up to date: it runs \(running) and the latest release is \(release.version).", tone: .success)
                 return nil
@@ -1275,10 +1323,15 @@ final class PocketModel: ObservableObject, DeviceSession {
             readerUpdateState = .downloading(release.version)
             post("Downloading Pocket Daily firmware \(release.version)\(release.isPrerelease ? " (pre-release)" : "")…")
             let file = try await releaseSource.download(release, Self.firmwareDownloads)
+            if Task.isCancelled {
+                try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+                throw CancellationError()
+            }
             post("Firmware \(release.version) was downloaded and verified.")
             return (file, release.version)
         } catch {
-            post(error)
+            if Task.isCancelled { post("Firmware download cancelled. Nothing was sent to the reader.", tone: .pending) }
+            else { post(error) }
             return nil
         }
     }
@@ -1287,16 +1340,55 @@ final class PocketModel: ObservableObject, DeviceSession {
         FileManager.default.temporaryDirectory.appendingPathComponent("PocketFirmware", isDirectory: true)
     }
 
-    /// Prepares a downloaded release like a chosen file, then sends it when
-    /// a reader is still connected. The download folder is removed either way.
+    /// The caller owns cancellation across download, preparation and transfer.
+    func updateFirmware() async {
+        let attempt = connectionAttempt
+        let readerID = readerStatus?.deviceID
+        guard let download = await downloadLatestFirmware() else { return }
+        defer { try? FileManager.default.removeItem(at: download.file.deletingLastPathComponent()) }
+        guard !Task.isCancelled else { return }
+        guard attempt == connectionAttempt, readerStatus?.deviceID == readerID else {
+            post("The reader connection changed. Choose Update again for the connected reader.", tone: .pending)
+            return
+        }
+        let previous = Set(preparedTransfers.map(\.id))
+        guard let preparation = upload(download.file) else { return }
+        await preparation.value
+        guard preparedTransfers.contains(where: { !previous.contains($0.id) && $0.kind == .firmware }) else { return }
+        if Task.isCancelled {
+            removePreparedFiles(kind: .firmware)
+            return
+        }
+        guard attempt == connectionAttempt, readerStatus?.deviceID == readerID else {
+            post("The reader connection changed. The update is kept for an explicit retry.", tone: .pending)
+            return
+        }
+        sendPreparedFiles(kind: .firmware)
+        if let transfer = readerWorkTask {
+            await withTaskCancellationHandler {
+                await transfer.value
+            } onCancel: {
+                transfer.cancel()
+            }
+        }
+        if Task.isCancelled { removePreparedFiles(kind: .firmware) }
+    }
+
+    /// Retained for callers that already validated and acknowledged an image.
     func stageDownloadedFirmware(_ file: URL) {
-        let task = upload(file)
+        let previous = Set(preparedTransfers.map(\.id))
+        guard let task = upload(file) else {
+            try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+            return
+        }
         Task { [weak self] in
-            await task?.value
+            await task.value
             try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
             guard let self, self.readerStatus != nil,
-                  self.preparedTransfers.contains(where: { $0.filename.lowercased().hasSuffix(".bin") }) else { return }
-            self.sendPreparedFiles()
+                  self.preparedTransfers.contains(where: {
+                      !previous.contains($0.id) && $0.kind == .firmware && $0.filename == file.lastPathComponent
+                  }) else { return }
+            self.sendPreparedFiles(kind: .firmware)
         }
     }
 
@@ -1305,7 +1397,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         guard canPrepareFiles else { return nil }
         if url.pathExtension.lowercased() == "bin",
            preparedTransfers.contains(where: { $0.filename.lowercased().hasSuffix(".bin") }) {
-            post("Only one firmware image can be prepared at a time. Remove the pending files to replace it.", tone: .failure)
+            post("An update is already prepared. Resume or cancel it in Firmware before starting another.", tone: .failure)
             return nil
         }
         post("Preparing an offline copy before transfer…")
@@ -1320,16 +1412,20 @@ final class PocketModel: ObservableObject, DeviceSession {
                         ?? preparedTransfers.count
                     preparedTransfers.insert(item, at: index)
                 }
-                post(readerStatus != nil
-                    ? "\(item.filename) is ready. Choose Send prepared files."
-                    : "\(item.filename) is ready offline. Connect, then send prepared files.")
+                if item.kind == .firmware {
+                    post("Firmware is ready to send.")
+                } else {
+                    post(readerStatus != nil
+                        ? "\(item.filename) is ready. Choose Send content."
+                        : "\(item.filename) is ready offline. Connect, then choose Send content.")
+                }
             } catch { post(error) }
         }
     }
 
-    func sendPreparedFiles() {
+    func sendPreparedFiles(kind: TransferKind = .content) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
-              let expectedStatus = readerStatus, !preparedTransfers.isEmpty else { return }
+              let expectedStatus = readerStatus, preparedTransfers.contains(where: { $0.kind == kind }) else { return }
         let host = activeHost
         let port = activeHTTPPort
         let key = firmwareKey
@@ -1345,15 +1441,12 @@ final class PocketModel: ObservableObject, DeviceSession {
                 if let expectedDeviceID, let actual = status.deviceID, expectedDeviceID != actual {
                     throw CrossPointClient.ClientError.unexpectedMessage("The reader does not match the paired identity.")
                 }
-                while var item = preparedTransfers.first {
+                while let index = preparedTransfers.firstIndex(where: { $0.kind == kind }) {
+                    var item = preparedTransfers[index]
                     try Task.checkCancellation()
                     if let bound = item.readerID, bound != status.deviceID {
                         throw CrossPointClient.ClientError.unexpectedMessage("This pending file belongs to another reader. Remove it and prepare it again to change readers.")
                     }
-                    item.readerID = status.deviceID
-                    try JSONEncoder().encode(item).write(to: TransferPreparation.directory
-                        .appendingPathComponent(item.id.uuidString).appendingPathComponent("transfer.json"), options: .atomic)
-                    preparedTransfers[0] = item
                     let url = TransferPreparation.file(item)
                     if ArticleEPUB.isFilename(url.lastPathComponent), status.articleLibrary != 1 || status.uploadStreamPort == nil {
                         throw CrossPointClient.ClientError.unexpectedMessage("Update the reader firmware to use the Articles library. Your prepared article is kept.")
@@ -1364,8 +1457,15 @@ final class PocketModel: ObservableObject, DeviceSession {
                             throw FirmwareValidationError.unsupportedReader(status.device)
                         }
                     }
+                    item.readerID = status.deviceID
+                    item.remoteStagingID = item.remoteStagingID ?? item.id
+                    try JSONEncoder().encode(item).write(to: TransferPreparation.directory
+                        .appendingPathComponent(item.id.uuidString).appendingPathComponent("transfer.json"), options: .atomic)
+                    preparedTransfers[index] = item
+                    activeTransferKind = kind
                     uploadProgress = 0
-                    post("Sending \(item.filename)…")
+                    post(kind == .content ? "Sending content to SD card: \(item.filename)…"
+                         : "Sending firmware to SD card for installation later…")
                     let path = try await client.uploadAtomically(
                         fileURL: url, publishedFilename: isFirmware ? "update.bin" : nil,
                         destination: destination(for: url), host: host, port: port,
@@ -1373,7 +1473,9 @@ final class PocketModel: ObservableObject, DeviceSession {
                         uploadStreamResume: status.uploadStreamResume ?? false,
                         uploadStreamWindow: status.uploadStreamWindow,
                         expectedDeviceID: status.deviceID,
-                        transferID: status.deviceID == nil ? UUID() : item.id,
+                        transferID: item.remoteStagingID ?? item.id,
+                        transferControl: status.transferControl == 1,
+                        transferKind: kind,
                         note: { [weak self] text in Task { @MainActor in
                             guard let self, self.ownsReaderWork(owner, attempt: attempt) else { return }
                             self.post(text)
@@ -1387,40 +1489,79 @@ final class PocketModel: ObservableObject, DeviceSession {
                             self.mirror.apply(.transferProgress(progress))
                         }
                     }
-                    guard ownsReaderWork(owner, attempt: attempt) else { return }
+                    guard readerWorkOwner == owner, attempt == connectionAttempt else { return }
                     uploadProgress = 1
                     mirror.apply(.transferProgress(1))
                     if isFirmware {
                         if let key, let version = item.firmwareVersion { UserDefaults.standard.set(version, forKey: key) }
                         post(Self.stagedFirmwareMessage(version: item.firmwareVersion ?? "unknown version"), tone: .onReader)
                     } else {
-                        post("\(item.filename) was verified and published at \(path).", tone: .success)
+                        post("Content saved on the reader’s SD card: \(path). Open it from the reader’s library.", tone: .success)
                     }
                     try FileManager.default.removeItem(at: url.deletingLastPathComponent())
-                    preparedTransfers.removeFirst()
+                    preparedTransfers.removeAll { $0.id == item.id }
                 }
                 if hasDirectSession { await finishConnection(preserveMessage: true) }
             } catch {
                 guard attempt == connectionAttempt else { return }
-                if Task.isCancelled { post("Transfer paused. Files remain ready offline; reconnect and send to resume.", tone: .pending) }
-                else { post(error) }
+                if Task.isCancelled, preparedTransfers.contains(where: { $0.kind == kind }) { post("Transfer paused. The prepared copy is kept. Resume this category, or remove it to clean up the reader’s temporary file. If saving had already started, check the reader for the completed file.", tone: .pending) }
+                else if !Task.isCancelled { post(error) }
             }
         }
     }
 
-    func removePreparedFiles() {
-        guard !isWorking else { return }
-        do {
-            while let item = preparedTransfers.first {
-                let folder = TransferPreparation.file(item).deletingLastPathComponent()
-                if FileManager.default.fileExists(atPath: folder.path) {
-                    try FileManager.default.removeItem(at: folder)
+    @Published private(set) var activeTransferKind: TransferKind?
+
+    /// A cancelled network task must finish before cleanup opens a new request.
+    func stopAndRemoveTransfer() {
+        guard let kind = activeTransferKind, let task = readerWorkTask, isTransferring else { return }
+        task.cancel()
+        post("Stopping transfer…", tone: .pending)
+        Task { [weak self] in
+            await task.value
+            self?.removePreparedFiles(kind: kind)
+        }
+    }
+
+    func removePreparedFiles(kind: TransferKind = .content, localOnly: Bool = false) {
+        guard !isWorking, !hasReaderWork, !isDemoMode, !isInBackground else { return }
+        let items = preparedTransfers.filter { $0.kind == kind }
+        guard !items.isEmpty else { return }
+        post(localOnly ? "Removing local prepared copies…" : "Cleaning up \(kind.rawValue) transfers…")
+        let host = activeHost
+        let port = activeHTTPPort
+        startReaderWork(attempt: connectionAttempt, kind: .session) { [self] _ in
+            do {
+                for item in items {
+                    if let stagingID = item.stagingID, !localOnly {
+                        guard let bound = item.readerID, let status = readerStatus,
+                              status.deviceID == bound, status.transferControl == 1 else {
+                            throw CrossPointClient.ClientError.unexpectedMessage(
+                                "Reconnect to the same reader to clean up its temporary file. Older firmware cannot confirm cleanup; you can explicitly remove only the local copy.")
+                        }
+                        let current = try await client.status(host: host, port: port)
+                        guard current.deviceID == bound, current.transferControl == 1 else {
+                            throw CrossPointClient.ClientError.unexpectedMessage("The reader changed. Cleanup was not performed.")
+                        }
+                        try await client.controlTransfer(action: "discard", transferID: stagingID,
+                            destination: destination(for: TransferPreparation.file(item)), kind: item.kind,
+                            host: host, port: port)
+                    }
+                    let folder = TransferPreparation.file(item).deletingLastPathComponent()
+                    if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
+                    preparedTransfers.removeAll { $0.id == item.id }
                 }
-                preparedTransfers.removeFirst()
-            }
-            uploadProgress = 0
-            post("Prepared files removed. Choose another file to continue.")
-        } catch { post(error) }
+                uploadProgress = 0
+                if kind == .firmware {
+                    post(localOnly ? "Update forgotten on this device. Reader files were not changed."
+                         : "Update cancelled. Temporary files removed; already saved firmware is unchanged.", tone: .success)
+                } else {
+                    post(localOnly
+                         ? "Local prepared copies removed. Reader files were not changed; temporary data may remain until Sync closes or another transfer cleans it up."
+                         : "Prepared copies and any tracked temporary reader files removed. Original sources and already saved reader files are unchanged.", tone: .success)
+                }
+            } catch { post(error) }
+        }
     }
 
     func resumeDirectConnection() -> Bool {
@@ -1504,6 +1645,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         readerWorkKind = nil
         readerWorkTask = nil
         isWorking = false
+        activeTransferKind = nil
         if resumeTraffic { resumeReaderTraffic(attempt: attempt) }
     }
 

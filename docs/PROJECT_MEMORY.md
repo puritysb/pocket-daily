@@ -40,16 +40,15 @@ with a dated note below.
   (sibling docs/pocket-screen-present-v1.md), with X3 wa4be8509 returning
   rendered three times and user screen confirmation. Sync covers are deliberate
   placeholders. X4/direct hardware acceptance remains open.
-- 2026-09-26 Update reader (FirmwareReleaseSource): only on tap, never in
-  demo or a direct session, the app reads GitHub's latest release of
-  puritysb/pocket-daily-firmware, downloads firmware.bin from that repo's
-  release path (size ≤ 6,553,600, size and version must match, then
-  FirmwareImageValidator), shows the firmware sheet and sends it; the reader's
-  staged prompt installs after Confirm. Chosen because the X3 cannot hold the
-  reader's own HTTPS OTA (sibling PROJECT_MEMORY 2026-09-26). Privacy, review
-  notes and store copy updated; FirmwareGuidance minimum 1.7.0. Mac + X3
-  verified 2026-09-26: Update reader reports "up to date" (reader 1.7.0-dev,
-  latest v1.6.6); a real download→send awaits a release newer than the reader.
+- 2026-09-27 Firmware UI: once-per-launch GitHub metadata check outside demo
+  and direct sessions; release version/date and one explicit update action.
+  Local firmware import is removed. Download, validation and staging are
+  cancellable; content and firmware queues are separate, UUID temporary-file
+  cleanup waits for transfer completion and retains failed cleanup for retry.
+  The reader still confirms installation; release date is not installation date.
+  Contract: docs/TRANSFERS.md. Physical cancellation acceptance remains open.
+  Earlier beta.1 download→app validation→reader installation was reported
+  successful by the previous session; it does not validate the new cancel UI.
 - 2026-09-25 Weather and events from the app (firmware 47a363f8, sibling
   docs/pocket-glance-v1.md; verified on X3 2026-09-26): the firmware dropped the AgentDeck daemon; the app composes ReaderGlance
   (WeatherKit forecast for a user-typed city geocoded with CLGeocoder — no

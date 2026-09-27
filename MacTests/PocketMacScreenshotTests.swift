@@ -23,6 +23,37 @@ final class PocketMacScreenshotTests: XCTestCase {
     }
 
     @MainActor
+    func testRendersFirmwareUpdateCard() async throws {
+        let release = FirmwareRelease(version: "1.8.0", downloadURL: URL(string: "https://example.invalid/firmware.bin")!,
+                                      byteCount: 1, publishedAt: ISO8601DateFormatter().date(from: "2026-09-26T08:00:00Z"))
+        let model = PocketModel(releaseSource: .init(latest: { release }))
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.7.0","device":"X3","deviceID":"QA-CARD","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
+        await model.checkFirmwareAtLaunch()
+        XCTAssertTrue(model.firmwareUpdateAvailable)
+        XCTAssertTrue(model.canUpdateReader)
+        let content = FirmwareUpdateCard(model: model, isUpdating: false, update: {}, cancel: {})
+            .padding(16).frame(width: 360, height: 230).background(PocketPalette.workspace)
+            .preferredColorScheme(.light)
+        let hosting = NSHostingView(rootView: content)
+        let frame = NSRect(x: 0, y: -20_000, width: 360, height: 230)
+        let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = hosting
+        window.setFrame(frame, display: true)
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(300))
+        window.layoutIfNeeded()
+        window.displayIfNeeded()
+        let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        let attachment = XCTAttachment(data: try opaquePNG(rep), uniformTypeIdentifier: "public.png")
+        attachment.name = "firmware-update-available"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
     private func render(name: String, hardware: PocketHardware,
                         preview: ProfileStudioView.PreviewSurface = .home) throws {
         let model = PocketModel()

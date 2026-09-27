@@ -33,8 +33,9 @@ struct CrossPointStatus: Codable, Equatable {
     var pocketGlance: Int? = nil
     /// Draws the saved Home or Daily Brief inside Sync
     /// (sibling docs/pocket-screen-present-v1.md).
-    var articleLibrary: Int? = nil
     var screenPresentation: Int? = nil
+    var transferControl: Int?
+    var articleLibrary: Int? = nil
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -995,6 +996,28 @@ actor CrossPointClient {
         try Self.requireSuccess(response)
     }
 
+    /// Only hidden UUID staging files can be discarded. Published content/update.bin is never a target.
+    func controlTransfer(action: String, transferID: UUID, destination: String,
+                         kind: TransferKind, host: String, port: Int) async throws {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/transfer") else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 10
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "action": action, "kind": kind.rawValue,
+            "staging": Self.join(Self.normalizedDirectory(destination), ".pocket-\(transferID.uuidString.lowercased()).part")
+        ])
+        let (data, response) = try await http.data(for: request, session: session)
+        try Self.requireSuccess(response, body: data)
+        struct Receipt: Decodable { let ok: Bool }
+        guard data.count <= 512, try JSONDecoder().decode(Receipt.self, from: data).ok else {
+            throw ClientError.verificationFailed
+        }
+    }
+
     func uploadAtomically(
         fileURL: URL,
         publishedFilename: String? = nil,
@@ -1007,6 +1030,8 @@ actor CrossPointClient {
         uploadStreamWindow: Int? = nil,
         expectedDeviceID: String? = nil,
         transferID: UUID = UUID(),
+        transferControl: Bool = false,
+        transferKind: TransferKind = .content,
         note: (@Sendable (String) -> Void)? = nil,
         reconnect: (@Sendable () async -> Bool)? = nil,
         progress: @escaping @Sendable (Int64, Int64) -> Void
@@ -1028,6 +1053,10 @@ actor CrossPointClient {
 
         let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
         let total = Int64(values.fileSize ?? 0)
+        if transferControl {
+            try await controlTransfer(action: "prepare", transferID: transferID,
+                destination: normalizedDestination, kind: transferKind, host: host, port: port)
+        }
         let crc32: UInt32
         if let streamPort = uploadStreamPort, streamPort > 0 {
             // The staging name stays fixed across attempts so a reader that
@@ -1058,6 +1087,11 @@ actor CrossPointClient {
                     try await Task.sleep(for: UploadRetryPolicy.delay(afterAttempt: attempt))
                     try await waitForReader(host: host, port: port, expectedDeviceID: expectedDeviceID,
                                             reconnect: reconnect)
+                    // A reader restart loses its display metadata even though the queue survives.
+                    if transferControl {
+                        try await controlTransfer(action: "prepare", transferID: transferID,
+                            destination: normalizedDestination, kind: transferKind, host: host, port: port)
+                    }
                     resume = uploadStreamResume
                 }
             }

@@ -17,7 +17,7 @@
   "age_rating_target": "4+",
   "age_rating_answers": "appstore/age_rating_answers.json",
   "testflight_plan": "appstore/testflight/TEST_PLAN.md",
-  "content_rights": "Pocket Daily contains only original interface and study examples; users provide their own books, study packs, and firmware files.",
+  "content_rights": "Pocket Daily contains only original interface and study examples; users provide their own books and study packs. Official reader firmware updates are fetched from the project repository on request.",
   "copyright": "2026 SeungBeom Choi",
   "privacy_policy_url": "https://puritysb.github.io/pocket-daily/privacy/",
   "support_url": "https://puritysb.github.io/pocket-daily/support/",

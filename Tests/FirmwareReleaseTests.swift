@@ -23,6 +23,51 @@ final class FirmwareReleaseTests: XCTestCase {
         XCTAssertEqual(try FirmwareReleaseSource.parse(document(tag: "2.0.1")).version, "2.0.1")
     }
 
+    func testReleasePublicationDateIsOptionalAndNotAnInstallDate() throws {
+        let json = String(decoding: document(), as: UTF8.self)
+        let dated = json.replacingOccurrences(of: "\"draft\":false", with: "\"published_at\":\"2026-09-26T08:00:00Z\",\"draft\":false")
+        XCTAssertEqual(try FirmwareReleaseSource.parse(Data(dated.utf8)).publishedAt,
+                       ISO8601DateFormatter().date(from: "2026-09-26T08:00:00Z"))
+        XCTAssertNil(try FirmwareReleaseSource.parse(document()).publishedAt)
+        XCTAssertNil(try FirmwareReleaseSource.parse(Data(dated.replacingOccurrences(of: "2026-09-26T08:00:00Z", with: "invalid").utf8)).publishedAt)
+    }
+
+    @MainActor func testLaunchChecksOnceWithoutAReaderAndNeverDownloads() async {
+        let calls = Counter()
+        let release = FirmwareRelease(version: "1.8.0", downloadURL: URL(string: "https://example.invalid")!, byteCount: 1)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), releaseSource: .init(
+            latest: { await calls.add("latest"); return release },
+            download: { _, _ in await calls.add("download"); throw FirmwareReleaseError.unavailable }))
+        await model.checkFirmwareAtLaunch()
+        await model.checkFirmwareAtLaunch()
+        XCTAssertEqual(model.latestFirmwareRelease, release)
+        XCTAssertFalse(model.firmwareUpdateAvailable)
+        let recorded = await calls.values
+        XCTAssertEqual(recorded, ["latest"])
+        model.readerStatus = try? JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.7.0","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
+        XCTAssertTrue(model.firmwareUpdateAvailable)
+    }
+
+    @MainActor func testDemoSkipsLaunchCheckAndFailureNeedsExplicitRetry() async {
+        let calls = Counter()
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), releaseSource: .init(
+            latest: { await calls.add("latest"); throw FirmwareReleaseError.unavailable }))
+        model.enterDemoMode()
+        await model.checkFirmwareAtLaunch()
+        var recorded = await calls.values
+        XCTAssertEqual(recorded, [])
+        model.exitDemoMode()
+        await model.checkFirmwareAtLaunch()
+        await model.checkFirmwareAtLaunch()
+        XCTAssertNotNil(model.firmwareCheckError)
+        await model.checkFirmwareRelease()
+        recorded = await calls.values
+        XCTAssertEqual(recorded, ["latest", "latest"])
+        XCTAssertFalse(model.isCheckingFirmware)
+        XCTAssertNil(model.latestFirmwareRelease)
+    }
+
     func testRejectsUnsafeOrMalformedReleases() {
         XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(url: "https://example.com/firmware.bin"))) {
             XCTAssertEqual($0 as? FirmwareReleaseError, .untrustedLocation)
@@ -143,6 +188,60 @@ final class FirmwareReleaseTests: XCTestCase {
         XCTAssertEqual(model.readerUpdateState, .idle)
         let recorded = await calls.values
         XCTAssertEqual(recorded, ["latest"])
+    }
+
+    @MainActor func testCancellingFirmwareDownloadLeavesNoQueueOrReaderTransfer() async throws {
+        let release = FirmwareRelease(version: "1.8.0", downloadURL: URL(string: "https://example.invalid")!, byteCount: 1)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), releaseSource: .init(
+            latest: { release }, download: { _, _ in
+                try await Task.sleep(for: .seconds(20))
+                throw FirmwareReleaseError.unavailable
+            }))
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.7.0","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
+        let before = model.preparedTransfers
+        let task = Task { await model.downloadLatestFirmware() }
+        for _ in 0..<100 where model.readerUpdateState != .downloading("1.8.0") { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(model.readerUpdateState, .downloading("1.8.0"))
+        task.cancel()
+        let result = await task.value
+        XCTAssertNil(result)
+        XCTAssertEqual(model.readerUpdateState, .idle)
+        XCTAssertEqual(model.preparedTransfers, before)
+        XCTAssertFalse(model.isTransferring)
+        XCTAssertEqual(model.messageTone, .pending)
+    }
+
+    @MainActor func testCancelDuringPreparationCannotSendAndRemovesPreparedCopy() async throws {
+        let downloadFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: downloadFolder, withIntermediateDirectories: true)
+        let download = downloadFolder.appendingPathComponent("firmware.bin")
+        try Data("fixture".utf8).write(to: download)
+        let item = PreparedTransfer(id: UUID(), filename: "firmware.bin", firmwareVersion: "1.8.0", readerID: nil)
+        let preparedFolder = TransferPreparation.file(item).deletingLastPathComponent()
+        defer {
+            try? FileManager.default.removeItem(at: downloadFolder)
+            try? FileManager.default.removeItem(at: preparedFolder)
+        }
+        let release = FirmwareRelease(version: "1.8.0", downloadURL: URL(string: "https://example.invalid")!, byteCount: 7)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), localFiles: .init(prepare: { _ in
+            try await Task.sleep(for: .milliseconds(100))
+            try FileManager.default.createDirectory(at: preparedFolder, withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: TransferPreparation.file(item))
+            return item
+        }), releaseSource: .init(latest: { release }, download: { _, _ in download }))
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.7.0","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
+        let task = Task { await model.updateFirmware() }
+        for _ in 0..<100 where !model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(model.isWorking)
+        task.cancel()
+        await task.value
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertFalse(model.preparedTransfers.contains { $0.id == item.id })
+        XCTAssertFalse(model.isTransferring)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: preparedFolder.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: downloadFolder.path))
     }
 
     @MainActor func testDownloadFailureIsReportedAndLeavesNothingPending() async throws {
