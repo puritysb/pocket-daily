@@ -70,3 +70,6 @@ percentage, device, device_id, timestamp)를 쓴다.
 - 교차 검증: 펌웨어가 앱 XPointer를 해석(한국어 15/15, Frankenstein 114/114 동일 글자),
   앱이 펌웨어 XPointer 258개를 해석(`MacTests` `testFirmwareXPointersResolveToTheSameText`).
   첫 실행에서 펌웨어가 `&apos;`를 6글자로 세어 이후 offset이 5글자 밀리는 버그를 찾아 펌웨어에서 수정했다.
+- 정확한 페이지 위치(2026-09-29, 펌웨어 `feat/exact-page-offsets`, 섹션 캐시 v133): 리더는 페이지
+  첫 글자의 장 텍스트 offset을 기록해 그 글자를 가리키는 XPointer를 만들고, 받은 XPointer는 그 글자가
+  있는 페이지로 연다(이전: 문단 안 비례 추정). 앱 교차 검증은 430/430(기존 258 + offset 172).
