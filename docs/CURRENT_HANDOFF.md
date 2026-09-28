@@ -1,32 +1,25 @@
-# 현재 상태 (2026-09-28)
+# 현재 상태 (2026-09-29, 세션 정리)
 
-이 절만 현재 사실이다. 아래 "이력"은 당시 상태 기록이며, 그 안의 "미커밋"·KOSync 관련 서술은
-지금 유효하지 않다(KOSync는 제거됨, 모든 변경은 커밋됨). 이력을 근거로 삭제된 기능을 되살리지 않는다.
+이 절만 현재 사실이다. 아래 "이력"은 당시 상태 기록이다. 이력을 근거로 삭제된 기능(KOSync)을 되살리지 않는다.
 
 - 제품: 기기 없이 쓰는 집중형 리더 + X3/X4 컴패니언([READER_EXPANSION.md](READER_EXPANSION.md)).
-  Library 첫 화면, EPUB/TXT/MD(변환 EPUB는 내용 기반 식별자·고정 시각으로 기기마다 같은 바이트),
-  Articles, 책 파일 공유(서재 → Share book file), foliate-js 리더.
-- 이어 읽기: iCloud 키-값(기기별 레코드 `position.v2.<책>.<기기>`)과 연결된 리더 직접 교환만.
-  KOReader 동기화는 이번 버전 제외·비노출. 제안은 "다른 기기가 더 최근에 읽은 곳(앞·뒤 모두)" 우선,
-  없으면 "더 멀리 읽은 곳". 자동 이동 없음. 리더 교환은 성공 시에만 기록, 실패 시 3회까지 지연 재시도,
-  Continue Reading의 "Exchange positions now"로 수동 실행. iCloud 외부 변경 시 열린 책이 다시 확인한다.
+  Library 첫 화면, Screens(Home/Sleep·읽기 설정), Device(연결·파일·펌웨어), Weather/Calendar 분리,
+  Articles(RSS/Atom 구독, 로컬 주소 링크 차단), foliate-js 리더(Mac은 창 안에서 열림).
+- 이어 읽기: iCloud 키-값과 리더 교환. 리더 교환은 연결 시 + 같은 Wi-Fi의 마지막 리더(같은 deviceID)와
+  자동(앱 활성화·책 열기/닫기, 1.5초 탐침). 책을 여는 것만으로는 읽은 시각이 바뀌지 않는다.
+  펌웨어는 페이지 첫 글자 기준 정확한 XPointer를 기록·적용한다(섹션 캐시 v133, X3 확인).
   계약: [READING_PROGRESS.md](READING_PROGRESS.md), 펌웨어 `docs/reading-progress-v1.md`.
-- 외부에서 연 파일: 가져오기 성공 후 앱의 Documents/Inbox 직속 임시 사본만 삭제한다.
-- 브랜치: 앱 `feat/reader-expansion`, 펌웨어 `feat/reader-support`. 푸시·릴리스 안 함.
-- X3(`5B09AF70`) 설치 펌웨어: `1.7.0-dev-feat-reader-support-bc158e02`. 멈춤·검은 팝업·4장 색인 실패·
-  하단 CJK 제목 잘림 해결 확인. 페이지 넘김 실측(`/api/status` `readerPerf`, File Transfer 모드):
-  시작 전 평균 약 2.0 s → 일반 넘김 0.8–1.4 s. 큰 장(니체, XHTML 150–250 KB)으로 뒤로 넘김은
-  7.8–9.6 s → 뒤쪽 장 미리 배치로 3 ms(flag 64). 남은 고정 비용: 화면 새로고침 약 445 ms,
-  AA 약 400 ms, 15쪽마다 전체 새로고침 3.2 s(설정으로 조정 가능), 색인 후 전체 새로고침 3.2 s.
-  41aea867은 실기기 회귀였고 a38eca21에서 수정했다(펌웨어 PROJECT_MEMORY 참고).
-- 남은 검증(실기기·서명 필요):
-  1. 위치 왕복 정확도: 같은 책에서 X3 → iPhone → X3 후 화면 첫 문장 차이(긴 한글 문단, 삽화,
-     글자 크기 변경 포함). 펌웨어는 긴 문단 안 위치를 페이지 수·문단 길이로 추정하므로 문자열
-     호환(258/258) 이상은 아직 보장하지 않는다. 장기적으로 페이지 캐시에 원문 위치를 직접 보존 검토.
-  2. 서명된 빌드로 Apple 기기 간 iCloud 이어 읽기(App ID iCloud 기능 활성화 필요).
-  3. 니체 「인간적인 너무나 인간적인」(59% 부근 스크롤 불가 보고)과 SD의 `crash_report.1/3.txt`.
+- main 상태: 앱·펌웨어 모두 main에 병합·푸시. 펌웨어 pre-release `v1.7.0-beta.3`(bc24adb3, CI 통과).
+  App Store 서명 export는 c4eea1a 기준으로 검증됨(업로드 안 함, `appstore/submission.json`).
+- 보류: Bluetooth 자동 이어 읽기(reading-sync-ble-v1)는 양쪽 `feat/ble-reading-sync` 브랜치에만 있다
+  (로컬 브랜치, 원격 미푸시). X3 실측: 창은 열리지만 NimBLE 후 여유 heap 13.5 KB, 최저 6.9 KB/블록 2 KB.
+  마지막 실기기 시험에서 iPhone이 리더를 등록하지 못했다(원인 미확정, 앱 브랜치에 등록 경로 수정과
+  `reading-sync.log` 추적 추가됨). 재개 시 이 브랜치에서 시작하고 heap 여유를 먼저 설계한다.
+- X3(`5B09AF70`): main 빌드 `1.7.0-dev-main-bc24adb3` 스테이징됨(리더에서 설치 확인 필요).
+- 남은 일(나중): App Store Connect 기록·리뷰 연락처(계정 소유자), TestFlight 업로드, 실기기 영상,
+  X4 확인, 니체 책 색인 지연 확인, 출시 후 Bluetooth 동기화·Android.
 - 이 Mac은 Python의 LAN 접근이 막혀 있다. 펌웨어 스테이징은 `/usr/bin/curl`로 `/upload` 후
-  `/api/pocket/v1/commit`(아래 4차 이력 참고).
+  `/api/pocket/v1/commit`(아래 4차 이력 참고). 리더 주소는 서브넷 스캔으로 찾는다(최근 192.168.68.56).
 
 # 이력 (당시 상태, 최신순)
 
