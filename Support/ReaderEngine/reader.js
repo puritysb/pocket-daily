@@ -188,7 +188,7 @@ const settled = async () => {
 }
 
 const tap = (doc, event) => {
-    if (event.defaultPrevented || event.target.closest?.('a[href]')) return
+    if (!view || event.defaultPrevented || event.target.closest?.('a[href]')) return
     const selection = doc.defaultView.getSelection()
     if (selection && !selection.isCollapsed) return
     const frame = doc.defaultView.frameElement
@@ -199,6 +199,10 @@ const tap = (doc, event) => {
     else if (zone === 'left') turn(() => view.goLeft())
     else turn(() => view.goRight())
 }
+
+// Short chapters and wide pages leave space outside the book iframe. Those
+// taps still belong to the reader; iframe clicks do not bubble into this document.
+document.addEventListener('click', event => tap(document, event))
 
 const keydown = event => {
     if (event.metaKey || event.ctrlKey || event.altKey) return

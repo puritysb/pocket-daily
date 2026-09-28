@@ -679,6 +679,12 @@ final class PocketModel: ObservableObject, DeviceSession {
     private var expectedDeviceID: String?
     @Published private(set) var directConnectionRequested = false
     @Published private(set) var preparedTransfers: [PreparedTransfer] = []
+    @Published private(set) var isCancellingConnection = false
+    var isSearchingForReader: Bool { readerWorkKind == .discovery }
+    var canCancelConnection: Bool {
+        !isCancellingConnection && (readerWorkKind == .discovery || readerWorkKind == .connection
+            || (directConnectionRequested && readerStatus == nil && !hasReaderWork))
+    }
     var hasDirectSession: Bool { directConnectionRequested || nearbyLease != nil }
     var canPrepareFiles: Bool { !isDemoMode && !isWorking && !hasReaderWork && !isInBackground }
     var isTransferring: Bool { readerWorkTask != nil && readerWorkKind == .transfer }
@@ -714,6 +720,9 @@ final class PocketModel: ObservableObject, DeviceSession {
         #if DEBUG
         if selectedDiscovery == nil, ProcessInfo.processInfo.arguments.contains("--ui-test-empty-discovery") {
             selectedDiscovery = EmptyReaderDiscoveryIO()
+        }
+        if selectedDiscovery == nil, ProcessInfo.processInfo.arguments.contains("--ui-test-slow-discovery") {
+            selectedDiscovery = EmptyReaderDiscoveryIO(delay: .seconds(30))
         }
         #endif
         self.discoveryIO = selectedDiscovery ?? LiveReaderDiscoveryIO(client: client,
@@ -1008,7 +1017,8 @@ final class PocketModel: ObservableObject, DeviceSession {
                 guard !Task.isCancelled, attempt == connectionAttempt else {
                     // A replacement cannot start until this cleanup returns,
                     // even when both requests name the same SSID.
-                    await associationIO.leave(ssid: lease.ssid)
+                    // Explicit cancellation owns cleanup after this task drains.
+                    if !isCancellingConnection { await associationIO.leave(ssid: lease.ssid) }
                     return
                 }
                 await waitForReader(lease)
@@ -1389,6 +1399,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     @Published private(set) var isCheckingFirmware = false
     @Published private(set) var firmwareCheckError: String?
     private var didCheckFirmwareAtLaunch = false
+    private var firmwareCheckTask: Task<FirmwareRelease, Error>?
 
     var firmwareAwaitingInstallation: String? {
         firmwareKey.flatMap { UserDefaults.standard.string(forKey: $0) }
@@ -1410,15 +1421,26 @@ final class PocketModel: ObservableObject, DeviceSession {
         guard !isDemoMode, !hasDirectSession, !isCheckingFirmware, readerUpdateState == .idle else { return }
         isCheckingFirmware = true
         firmwareCheckError = nil
-        defer { isCheckingFirmware = false }
-        do {
+        let work = Task {
             let release = try await releaseSource.latest()
             try Task.checkCancellation()
+            return release
+        }
+        firmwareCheckTask = work
+        defer { isCheckingFirmware = false; firmwareCheckTask = nil }
+        do {
+            let release = try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
+            try Task.checkCancellation()
+            if work.isCancelled { throw CancellationError() }
             latestFirmwareRelease = release
         } catch {
-            firmwareCheckError = "Couldn't check for updates. Try again with an internet connection."
+            firmwareCheckError = work.isCancelled || Task.isCancelled
+                ? "Update check cancelled. Try again when ready."
+                : "Couldn't check for updates. Try again with an internet connection."
         }
     }
+
+    func cancelFirmwareCheck() { firmwareCheckTask?.cancel() }
 
     /// "Update reader" is offered only for a connected, real reader with no
     /// firmware already waiting, and never in demo mode.
@@ -1717,6 +1739,35 @@ final class PocketModel: ObservableObject, DeviceSession {
         expectedDeviceID = nil
         mirror.apply(.connection(.disconnected))
         post(message, tone: .failure)
+    }
+
+    /// Stop discovery, BLE handoff, or Wi-Fi verification. Reserve the work
+    /// lane while non-cooperative OS requests drain and the lease is released.
+    /// Rotating both tokens prevents late replies and the old defer from
+    /// reconnecting or admitting new work during cleanup.
+    func cancelConnectionAttempt() {
+        guard canCancelConnection else { return }
+        let previous = readerWorkTask
+        previous?.cancel()
+        connectionAttempt += 1
+        heartbeatTask?.cancel()
+        discoveryIO.stop()
+        directConnectionRequested = false
+        let owner = UUID()
+        readerWorkOwner = owner
+        readerWorkKind = .session
+        isCancellingConnection = true
+        isWorking = true
+        post("Stopping connection…", tone: .pending)
+        readerWorkTask = Task {
+            defer {
+                isCancellingConnection = false
+                finishReaderWork(owner: owner, attempt: connectionAttempt)
+            }
+            await previous?.value
+            await finishConnection(preserveMessage: true)
+            post("Connection cancelled. You can try again when ready.", tone: .pending)
+        }
     }
 
     func endConnection() {

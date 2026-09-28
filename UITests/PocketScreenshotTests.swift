@@ -6,8 +6,7 @@ import XCTest
 ///
 /// Reading comes first: the bundled guide open in the reader, then the
 /// Library. The companion follows in demo mode: Home & Sleep, My cards, and
-/// the Reader tab (compact) or the X4 Home (wide, where the Reader controls
-/// already sit beside the studio).
+/// Device management. Wide layouts also show the X4 Home.
 final class PocketScreenshotTests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -22,6 +21,9 @@ final class PocketScreenshotTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["reader-progress"].waitForExistence(timeout: 20), "The reader never opened")
         XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "paper-like")).firstMatch
             .waitForExistence(timeout: 20), "The guide's first page never rendered")
+        let page = app.descendants(matching: .any)["reader-page"]
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Ready"), object: page)
+        XCTAssertEqual(XCTWaiter().wait(for: [ready], timeout: 20), .completed, "The book is still loading")
         try save(name: "01-reading")
         let middle = app.descendants(matching: .any)["reader-page"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         middle.tap()
@@ -31,7 +33,7 @@ final class PocketScreenshotTests: XCTestCase {
         XCTAssertTrue(app.buttons["continue-reading"].waitForExistence(timeout: 10))
         try save(name: "02-library")
 
-        app.open("Customize reader")
+        app.open("Screens")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
         try save(name: "03-home-x3")
 
@@ -42,16 +44,36 @@ final class PocketScreenshotTests: XCTestCase {
         try save(name: "04-cards")
 
         if app.isCompact {
-            app.open("Reader")
+            app.open("Device")
             XCTAssertTrue(app.buttons["Exit demo"].waitForExistence(timeout: 5))
-            try save(name: "05-reader")
+            try save(name: "05-device")
         } else {
             app.terminate()
             let x4 = launch(hardware: "X4")
-            x4.open("Customize reader")
+            x4.open("Screens")
             XCTAssertTrue(x4.waitForLayoutPreview(), "The X4 Home preview never rendered")
             try save(name: "05-home-x4")
+            x4.open("Device")
+            try save(name: "07-device")
         }
+    }
+
+    func testCaptureArticleInbox() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-feeds=store-screenshots-\(UUID().uuidString)", "--ui-test-fresh-library"]
+        app.launch()
+        app.openShelf("Articles")
+        app.openSubscriptions()
+        let input = app.textFields["feed-url"]
+        input.tap(); input.typeText("https://journal.example/feed.xml")
+        app.buttons["feed-subscribe"].tap()
+        XCTAssertTrue(app.buttons["unsubscribe-The Quiet Journal"].waitForExistence(timeout: 15))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["Read The books we return to"].waitForExistence(timeout: 5))
+        app.buttons["article-options-The books we return to"].tap()
+        app.buttons["Save for later"].tap()
+        app.filterArticles("All articles")
+        try save(name: "06-articles")
     }
 
     private func launch(hardware: String) -> XCUIApplication {

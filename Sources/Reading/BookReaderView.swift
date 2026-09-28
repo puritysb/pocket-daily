@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Resolves a library book and presents it full screen (iOS) or in its own
-/// window (macOS).
+/// Resolves a library book for the reading surface in the main app window.
 struct ReaderContainer: View {
     let bookID: UUID
     @ObservedObject var library: LibraryModel
@@ -21,7 +20,7 @@ struct ReaderContainer: View {
                 } description: {
                     Text(failure)
                 } actions: {
-                    Button("Close", action: close)
+                    Button("Back to Library", action: close)
                 }
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -75,6 +74,7 @@ struct BookReaderView: View {
                     .ignoresSafeArea()
                     .opacity(session.phase == .ready ? 1 : 0)
                     .accessibilityIdentifier("reader-page")
+                    .accessibilityValue(session.phase == .ready ? "Ready" : "Loading")
                     .onAppear { updateInsets(proxy) }
                     .onChange(of: proxy.safeAreaInsets) { _, _ in updateInsets(proxy) }
                 phaseOverlay
@@ -137,7 +137,7 @@ struct BookReaderView: View {
         VStack(spacing: 0) {
             HStack(spacing: 18) {
                 Button(action: finish) {
-                    Image(systemName: "chevron.backward").font(.body.weight(.semibold))
+                    Label("Library", systemImage: "chevron.backward").font(.body.weight(.semibold))
                 }
                 .accessibilityLabel("Library")
                 .accessibilityIdentifier("reader-close")
@@ -149,10 +149,11 @@ struct BookReaderView: View {
                 Spacer(minLength: 8)
                 Button { showingContents = true } label: { Image(systemName: "list.bullet") }
                     .accessibilityLabel("Contents")
-                    .disabled(session.toc.isEmpty)
+                    .disabled(session.phase != .ready || session.toc.isEmpty)
                 Button { showingAppearance = true } label: { Image(systemName: "textformat.size") }
                     .accessibilityLabel("Text and page")
                     .accessibilityIdentifier("reader-appearance")
+                    .disabled(session.phase != .ready)
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 20)
@@ -181,12 +182,12 @@ struct BookReaderView: View {
                 }
                 .tint(theme.foreground.opacity(0.7))
                 .accessibilityLabel("Book position")
+                .disabled(session.phase != .ready)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
             .background(theme.background.opacity(0.97))
         }
-        .disabled(session.phase != .ready && !isFailed)
     }
 
     /// While reading, only the progress shows, like a reader's status line.
@@ -221,10 +222,6 @@ struct BookReaderView: View {
         case .ready:
             EmptyView()
         }
-    }
-
-    private var isFailed: Bool {
-        if case .failed = session.phase { true } else { false }
     }
 
     private var contents: some View {

@@ -40,9 +40,11 @@ final class ContentPreviewModelTests: XCTestCase {
         let latest = try image(0x7F)
         await gate.finish("new", image: latest)
         await new.value
+        XCTAssertEqual(model.renderedRequest, request("new"))
         XCTAssertTrue(model.image === latest)
         await gate.finish("old", image: try image(0))
         await old.value
+        XCTAssertEqual(model.renderedRequest, request("new"))
         XCTAssertTrue(model.image === latest)
         XCTAssertFalse(model.isRendering)
     }
@@ -56,6 +58,7 @@ final class ContentPreviewModelTests: XCTestCase {
             if close { model.cancel() } else { task.cancel() }
             await gate.finish("pending", image: try image(0))
             await task.value
+            XCTAssertNil(model.renderedRequest)
             XCTAssertNil(model.image)
             XCTAssertNil(model.error)
             XCTAssertFalse(model.isRendering)
@@ -72,6 +75,7 @@ final class ContentPreviewModelTests: XCTestCase {
         XCTAssertNotNil(model.image)
         await model.update(request("bad"))
         XCTAssertNil(model.image)
+        XCTAssertNil(model.renderedRequest)
         XCTAssertTrue(model.error?.contains("24 UTF-8 bytes") == true)
         XCTAssertFalse(model.isRendering)
     }

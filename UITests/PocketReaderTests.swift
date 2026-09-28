@@ -1,7 +1,7 @@
 import XCTest
 
 /// The in-app reader works without any reader device: the Library opens first,
-/// the bundled guide opens full screen, pages turn from taps, and the text
+/// the bundled guide opens in place, pages turn from taps, and the text
 /// settings apply without leaving the page.
 final class PocketReaderTests: XCTestCase {
     override func setUp() {
@@ -26,6 +26,13 @@ final class PocketReaderTests: XCTestCase {
         let book = app.buttons["book-Welcome to Pocket Daily"]
         XCTAssertTrue(book.waitForExistence(timeout: 15), "The welcome book was not added to the library")
         attach(app, "library")
+        app.buttons["library-options"].tap()
+        let syncSettings = app.buttons["library-sync"]
+        XCTAssertTrue(syncSettings.waitForExistence(timeout: 5))
+        syncSettings.tap()
+        XCTAssertTrue(app.switches["sync-icloud"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(book.waitForExistence(timeout: 5))
         book.tap()
 
         let page = app.descendants(matching: .any)["reader-page"]
@@ -33,6 +40,8 @@ final class PocketReaderTests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Pocket Daily")).firstMatch
             .waitForExistence(timeout: 20), "The first page never rendered")
         attach(app, "reader-first-page")
+        XCTAssertFalse(app.sheets.firstMatch.exists, "Reading belongs in the app, not a sheet")
+        XCTAssertFalse(app.buttons["library-add"].isHittable, "The underlying shelf must not receive reading taps")
 
         XCTAssertFalse(app.buttons["reader-close"].exists, "Books open straight to the page")
         let right = page.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))

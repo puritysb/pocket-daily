@@ -46,16 +46,16 @@ for locale in en-US ko-KR; do
 done
 
 # Every iOS set opens on reading (the bundled guide), then the Library, then the companion:
-# Home, My cards, and the Reader tab (compact) or the X4 Home (iPad, where the Reader controls
-# sit beside the studio). The Mac set is rendered offscreen (Library, Home, a card page, the X4
-# sleep frame); the Mac reader opens in its own window and is not part of that render.
-for section in 01-reading 02-library 03-home-x3 04-cards 05-reader; do
+# Home, My cards and Device; iPad also shows X4 Home. Mac renders Library,
+# Home, a card page, X4 sleep and Device offscreen. Every platform also captures
+# the real Articles UI with local publisher fixtures.
+for section in 01-reading 02-library 03-home-x3 04-cards 05-device 06-articles; do
   check_image "appstore/screenshots/en-US/iphone-6.9/$section.png" 1320 2868
 done
-for section in 01-reading 02-library 03-home-x3 04-cards 05-home-x4; do
+for section in 01-reading 02-library 03-home-x3 04-cards 05-home-x4 06-articles 07-device; do
   check_image "appstore/screenshots/en-US/ipad-13/$section.png" 2064 2752
 done
-for section in 01-library 02-home-x3 03-card-x3 04-sleep-x4; do
+for section in 01-library 02-home-x3 03-card-x3 04-sleep-x4 05-articles 06-device; do
   check_image "appstore/screenshots/en-US/mac-16x10/$section.png" 2880 1800
 done
 
@@ -64,8 +64,8 @@ done
 for dir in appstore/screenshots/en-US/*/; do
   duplicates="$(md5 -q "$dir"*.png | sort | uniq -d)"
   [[ -z "$duplicates" ]] || fail "$dir contains identical screenshots; recapture with scripts/capture_screenshots.sh."
-  expected=5
-  if [[ "$(basename "$dir")" == "mac-16x10" ]]; then expected=4; fi
+  expected=6
+  if [[ "$(basename "$dir")" == "ipad-13" ]]; then expected=7; fi
   actual="$(ls "$dir"*.png | wc -l | tr -d ' ')"
   (( actual == expected )) || fail "$dir has $actual screenshots; expected $expected."
 done

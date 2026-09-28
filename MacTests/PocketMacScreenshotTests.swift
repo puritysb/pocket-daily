@@ -16,11 +16,21 @@ final class PocketMacScreenshotTests: XCTestCase {
     private static let pointSize = NSSize(width: 1440, height: 900)
 
     @MainActor
-    func testRendersStoreScreenshots() throws {
-        try render(name: "01-library", hardware: .x3, section: .library)
-        try render(name: "02-home-x3", hardware: .x3)
-        try render(name: "03-card-x3", hardware: .x3, preview: .card)
-        try render(name: "04-sleep-x4", hardware: .x4, preview: .sleep)
+    func testRendersStoreScreenshots() async throws {
+        try await render(name: "01-library", hardware: .x3, section: .library)
+        try await render(name: "02-home-x3", hardware: .x3)
+        try await render(name: "03-card-x3", hardware: .x3, preview: .card)
+        try await render(name: "04-sleep-x4", hardware: .x4, preview: .sleep)
+        try await render(name: "06-device", hardware: .x3, section: .reader)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("article-preview-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = ArticleFeedPreview.inbox(root: root)
+        try await inbox.subscribe("https://journal.example/feed.xml")
+        if let article = inbox.articles.first(where: { $0.title == "The books we return to" }) {
+            await inbox.setArchived(article, true)
+        }
+        inbox.filter = .all
+        try await render(name: "05-articles", hardware: .x3, section: .library, shelf: .articles, inbox: inbox)
     }
 
     @MainActor
@@ -56,12 +66,13 @@ final class PocketMacScreenshotTests: XCTestCase {
 
     @MainActor
     private func render(name: String, hardware: PocketHardware, section: StudioSection = .layout,
-                        preview: ProfileStudioView.PreviewSurface = .home) throws {
+                        preview: ProfileStudioView.PreviewSurface = .home, shelf: LibraryView.Shelf = .books,
+                        inbox: ArticleInboxModel? = nil) async throws {
         let model = PocketModel()
         model.preferredHardware = hardware
         model.enterDemoMode()
 
-        let content = ContentView(initialSection: section, initialPreview: preview)
+        let content = ContentView(initialSection: section, initialPreview: preview, initialShelf: shelf, inbox: inbox)
             .environmentObject(model)
             .preferredColorScheme(.light)
 
@@ -80,11 +91,9 @@ final class PocketMacScreenshotTests: XCTestCase {
         window.orderFrontRegardless()
         window.layoutIfNeeded()
         window.displayIfNeeded()
-        // Let SwiftUI settle: the studio measures itself with GeometryReader, so its
-        // contents appear one layout pass after the window is sized.
-        // The canvases render the reader frame off the main actor (font load and
-        // native drawing), so give them time to replace the outline.
-        RunLoop.current.run(until: Date().addingTimeInterval(4.0))
+        // Yield the main actor so SwiftUI tasks can publish their rendered frames.
+        // Spinning RunLoop here blocks actor work and captures the initial outline.
+        try await Task.sleep(for: .seconds(4))
         window.displayIfNeeded()
 
         guard let view = window.contentView,

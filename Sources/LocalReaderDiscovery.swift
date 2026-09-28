@@ -37,9 +37,14 @@ final class LiveReaderDiscoveryIO: ReaderDiscoveryIO {
 /// UI automation must never assume that a user's physical LAN has no readers.
 @MainActor
 final class EmptyReaderDiscoveryIO: ReaderDiscoveryIO {
+    let delay: Duration
+    init(delay: Duration = .zero) { self.delay = delay }
     var rememberedHost: String? { nil }
     func candidates() -> [String] { [] }
-    func firstBonjour(timeout: Duration) async -> (host: String, port: Int)? { nil }
+    func firstBonjour(timeout: Duration) async -> (host: String, port: Int)? {
+        try? await Task.sleep(for: delay)
+        return nil
+    }
     func stop() {}
     func status(host: String, port: Int, timeout: TimeInterval) async throws -> CrossPointStatus {
         throw URLError(.cannotConnectToHost)

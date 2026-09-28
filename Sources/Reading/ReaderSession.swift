@@ -248,7 +248,14 @@ final class ReaderSession: NSObject, ObservableObject, WKNavigationDelegate {
                                        updatedAt: Date())
             position = next
             // Ready once a page is on screen, not when the package has parsed.
-            if phase == .loading { phase = .ready }
+            if phase == .loading {
+                phase = .ready
+#if os(macOS)
+                // The reader shares its window with the Library, so arrow keys and the
+                // space bar reach the page only once it holds keyboard focus.
+                webView.window?.makeFirstResponder(webView)
+#endif
+            }
             if let location = message["location"] as? [String: Any],
                let current = (location["current"] as? NSNumber)?.intValue,
                let total = (location["total"] as? NSNumber)?.intValue, total > 0 {

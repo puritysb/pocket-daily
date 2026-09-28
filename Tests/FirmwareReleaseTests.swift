@@ -68,6 +68,26 @@ final class FirmwareReleaseTests: XCTestCase {
         XCTAssertNil(model.latestFirmwareRelease)
     }
 
+    @MainActor func testUpdateCheckCanBeCancelledAndRetried() async throws {
+        let calls = Counter()
+        let release = try FirmwareReleaseSource.parse(document())
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), releaseSource: .init(latest: {
+            await calls.add("latest")
+            if await calls.values.count == 1 { try await Task.sleep(for: .seconds(30)) }
+            return release
+        }))
+        let checking = Task { await model.checkFirmwareRelease() }
+        for _ in 0..<100 where !model.isCheckingFirmware { try await Task.sleep(for: .milliseconds(5)) }
+        model.cancelFirmwareCheck()
+        await checking.value
+        XCTAssertFalse(model.isCheckingFirmware)
+        XCTAssertNil(model.latestFirmwareRelease)
+        XCTAssertEqual(model.firmwareCheckError, "Update check cancelled. Try again when ready.")
+        await model.checkFirmwareRelease()
+        XCTAssertEqual(model.latestFirmwareRelease, release)
+        XCTAssertNil(model.firmwareCheckError)
+    }
+
     func testRejectsUnsafeOrMalformedReleases() {
         XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(url: "https://example.com/firmware.bin"))) {
             XCTAssertEqual($0 as? FirmwareReleaseError, .untrustedLocation)

@@ -42,6 +42,7 @@ private actor ContentPreviewWorker {
 @MainActor
 final class ContentPreviewModel: ObservableObject {
     @Published private(set) var image: CGImage?
+    @Published private(set) var renderedRequest: ContentPreviewRequest?
     @Published private(set) var error: String?
     @Published private(set) var isRendering = false
     private var generation: UInt64 = 0
@@ -63,6 +64,7 @@ final class ContentPreviewModel: ObservableObject {
         generation &+= 1
         let token = generation
         image = nil
+        renderedRequest = nil
         error = nil
         isRendering = true
         do {
@@ -72,6 +74,7 @@ final class ContentPreviewModel: ObservableObject {
             guard token == generation else { return }
             guard !Task.isCancelled else { isRendering = false; return }
             image = rendered
+            renderedRequest = request
             isRendering = false
         } catch {
             guard token == generation else { return }
@@ -91,6 +94,7 @@ final class ContentPreviewModel: ObservableObject {
     func cancel() {
         generation &+= 1
         image = nil
+        renderedRequest = nil
         error = nil
         isRendering = false
     }

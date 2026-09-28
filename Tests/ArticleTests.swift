@@ -34,8 +34,14 @@ final class ArticleTests: XCTestCase {
         for data in [Data([0xff]), Data("<html><body><script>only()</script></body></html>".utf8), Data(repeating: 65, count: ArticleExtraction.maximumBytes + 1)] {
             XCTAssertThrowsError(try ArticleExtraction.parse(data, source: "https://example.org"))
         }
-        for source in ["http://example.org", "https://user:password@example.org", "file:///tmp/file", "javascript:alert(1)"] {
-            XCTAssertThrowsError(try ArticleRecord.sourceURL(source))
+        for source in ["http://example.org", "https://user:password@example.org", "file:///tmp/file", "javascript:alert(1)",
+                       "https://localhost/feed", "https://127.0.0.1/a", "https://10.0.0.2/a", "https://192.168.1.1/",
+                       "https://172.20.1.1/", "https://169.254.169.254/latest", "https://[::1]/a", "https://[fe80::1]/",
+                       "https://router/", "https://printer.local/", "https://2130706433/", "https://nas.home.arpa/"] {
+            XCTAssertThrowsError(try ArticleRecord.sourceURL(source), source)
+        }
+        for source in ["https://example.org/a", "https://8.8.8.8/", "https://172.32.0.1/", "https://news.example.co.kr/rss"] {
+            XCTAssertNoThrow(try ArticleRecord.sourceURL(source), source)
         }
     }
     func testAtomicRecordStorageLinkOnlyAndExplicitRemoval() async throws {

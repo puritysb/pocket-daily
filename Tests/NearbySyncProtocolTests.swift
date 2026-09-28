@@ -825,6 +825,86 @@ final class NearbySyncProtocolTests: XCTestCase {
     }
 
     @MainActor
+    func testUserCancellationDrainsDiscoveryAndRejectsLateEndpoint() async throws {
+        let io = ControlledDiscoveryIO()
+        io.holdBonjour = true
+        io.endpoint = ("late-reader.test", 80)
+        let model = PocketModel(discoveryIO: io)
+        defer { model.pauseForBackground(); io.releaseBonjour() }
+        model.findOnLocalNetwork()
+        for _ in 0..<100 where io.bonjourCalls == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(model.canCancelConnection)
+        model.cancelConnectionAttempt()
+        XCTAssertTrue(model.isWorking)
+        XCTAssertTrue(model.isCancellingConnection)
+        XCTAssertFalse(model.canCancelConnection)
+        model.startConnectionSearch()
+        model.beginDirectConnection()
+        XCTAssertEqual(io.bonjourCalls, 1)
+        XCTAssertFalse(model.directConnectionRequested)
+        io.releaseBonjour()
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertFalse(model.isCancellingConnection)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(io.statusCalls, 0)
+        XCTAssertTrue(model.message.hasPrefix("Connection cancelled"))
+        io.endpoint = nil
+        model.findOnLocalNetwork(retryIfMissing: false)
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(io.bonjourCalls, 2)
+        XCTAssertFalse(model.isWorking)
+    }
+
+    @MainActor
+    func testUserCancellationDrainsLateWiFiJoinAndCleanupBeforeRetry() async throws {
+        let io = HeldAssociationIO()
+        io.holdLeave = true
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), associationIO: io)
+        defer { io.failAll(); model.pauseForBackground() }
+        let lease = try HotspotLease(record: "AP 12ABCDEF Pocket-Test A1B2C3D4E5F6 192.0.2.1 80 0 300")
+        model.beginDirectConnection()
+        model.useNearbyLease(lease)
+        for _ in 0..<100 where io.joinCount == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        model.cancelConnectionAttempt()
+        XCTAssertTrue(model.isCancellingConnection)
+        XCTAssertTrue(model.isWorking)
+        model.useNearbyLease(lease)
+        XCTAssertEqual(io.joinCount, 1)
+        io.succeed(0)
+        for _ in 0..<100 where io.leftSSIDs.isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(model.isWorking, "Keep admission until OS cleanup returns")
+        model.beginDirectConnection()
+        XCTAssertFalse(model.directConnectionRequested)
+        io.releaseLeave()
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertFalse(model.hasDirectSession)
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(io.leftSSIDs, [lease.ssid])
+        XCTAssertTrue(model.message.hasPrefix("Connection cancelled"))
+        model.beginDirectConnection()
+        XCTAssertTrue(model.directConnectionRequested)
+        model.cancelConnectionAttempt()
+    }
+
+    @MainActor
+    func testUserCancellationRevokesPendingBluetoothHandoff() async throws {
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO())
+        model.beginDirectConnection()
+        XCTAssertTrue(model.canCancelConnection)
+        model.cancelConnectionAttempt()
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertFalse(model.hasDirectSession)
+        XCTAssertFalse(model.canCancelConnection)
+        model.directDiscoveryFailed("late BLE failure")
+        XCTAssertTrue(model.message.hasPrefix("Connection cancelled"))
+        model.beginDirectConnection()
+        XCTAssertTrue(model.directConnectionRequested)
+        model.cancelConnectionAttempt()
+    }
+
+    @MainActor
     func testBackgroundCancelsDiscoveryWithoutLateMessage() async throws {
         let io = ControlledDiscoveryIO(delay: .milliseconds(200))
         let model = PocketModel(discoveryIO: io)

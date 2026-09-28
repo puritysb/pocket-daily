@@ -11,10 +11,13 @@ struct LibraryView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var library: LibraryModel
     @ObservedObject var sync: ReadingSync
+    @ObservedObject var inbox: ArticleInboxModel
+    @Binding var shelf: Shelf
+    var showsShelfMenu = true
     let open: (LibraryBook) -> Void
-
-    @State private var shelf: Shelf = .books
     @State private var importing = false
+    @State private var addingArticle = false
+    @State private var managingFeeds = false
     @State private var showingSync = false
     @State private var removing: LibraryBook?
     @State private var targeted = false
@@ -33,36 +36,13 @@ struct LibraryView: View {
             Group {
                 switch shelf {
                 case .books: books
-                case .articles: ArticleShelf(model: model, library: library, read: open)
+                case .articles: ArticleShelf(model: model, library: library, read: open, inbox: inbox,
+                                             adding: $addingArticle, managingFeeds: $managingFeeds)
                 }
             }
-#if os(macOS)
-            .safeAreaInset(edge: .top, spacing: 0) { macHeader }
-#else
-            .navigationTitle("Library")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Shelf", selection: $shelf) {
-                        ForEach(Shelf.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 260)
-                    .accessibilityIdentifier("library-shelf")
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { importing = true } label: { Label("Add books", systemImage: "plus") }
-                        .disabled(library.isWorking)
-                        .accessibilityIdentifier("library-add")
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingSync = true } label: {
-                        Label("Continue reading", systemImage: "arrow.triangle.2.circlepath.circle")
-                    }
-                    .accessibilityIdentifier("library-sync")
-                }
-            }
+            .safeAreaInset(edge: .top, spacing: 0) { header }
+#if os(iOS)
+            .toolbar(.hidden, for: .navigationBar)
 #endif
             .fileImporter(isPresented: $importing, allowedContentTypes: Self.importTypes, allowsMultipleSelection: true) { result in
                 switch result {
@@ -95,34 +75,69 @@ struct LibraryView: View {
         .task { await library.load() }
     }
 
-#if os(macOS)
-    /// Mac windows keep the Library controls in the content, so they read the
-    /// same with or without a window toolbar.
-    private var macHeader: some View {
-        HStack(spacing: 14) {
-            Text("Library").font(.title2.weight(.semibold))
-            Picker("Shelf", selection: $shelf) {
-                ForEach(Shelf.allCases) { Text($0.rawValue).tag($0) }
+    private var header: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                if showsShelfMenu {
+                    Menu {
+                        Picker("Shelf", selection: $shelf) {
+                            ForEach(Shelf.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(shelf.rawValue).font(.largeTitle.bold()).foregroundStyle(.primary)
+                            Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityIdentifier("library-shelf")
+                } else {
+                    Text(shelf.rawValue).font(.largeTitle.bold())
+                }
+                Text(shelf == .books ? "Your own quiet corner." : "Saved for a slower moment.")
+                    .font(.subheadline).foregroundStyle(.secondary)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            Spacer(minLength: 0)
+            if shelf == .books {
+                Button { importing = true } label: {
+                    Image(systemName: "plus").frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                    .accessibilityLabel("Add books")
+                    .disabled(library.isWorking)
+                    .accessibilityIdentifier("library-add")
+            }
+            if shelf == .articles {
+                Menu {
+                    Button("Add article", systemImage: "doc.badge.plus") { addingArticle = true }
+                        .accessibilityIdentifier("article-add")
+                    Button("Subscriptions", systemImage: "dot.radiowaves.left.and.right") { managingFeeds = true }
+                        .accessibilityIdentifier("article-subscriptions")
+                } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .accessibilityLabel("Add to Articles").accessibilityIdentifier("article-add-menu")
+            }
+            Menu {
+                Button { showingSync = true } label: {
+                    Label("Continue Reading", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .accessibilityIdentifier("library-sync")
+            } label: {
+                Image(systemName: "ellipsis.circle").foregroundStyle(.primary).frame(width: 44, height: 44)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden)
             .fixedSize()
-            .accessibilityIdentifier("library-shelf")
-            Spacer()
-            Button { showingSync = true } label: {
-                Label("Continue Reading", systemImage: "arrow.triangle.2.circlepath")
-            }
-            .accessibilityIdentifier("library-sync")
-            Button { importing = true } label: { Label("Add books", systemImage: "plus") }
-                .buttonStyle(.borderedProminent)
-                .disabled(library.isWorking)
-                .accessibilityIdentifier("library-add")
+            .accessibilityLabel("Library options")
+            .accessibilityIdentifier("library-options")
         }
+        .buttonStyle(.plain)
+        .tint(Color.primary)
         .padding(.horizontal, 24)
-        .padding(.vertical, 12)
-        .background(.bar)
+        .padding(.top, 24)
+        .padding(.bottom, 20)
+        .frame(maxWidth: 1100)
+        .frame(maxWidth: .infinity)
     }
-#endif
 
     // MARK: Books
 
@@ -133,6 +148,9 @@ struct LibraryView: View {
                 if let current = library.continueReading {
                     ContinueReadingCard(book: current, library: library) { open(current) }
                 }
+                Text("On your bookshelf")
+                    .font(.headline)
+                    .padding(.top, 4)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 180), spacing: 18, alignment: .top)],
                           alignment: .leading, spacing: 22) {
                     ForEach(library.books.filter { !$0.isArticle }) { book in
@@ -144,12 +162,13 @@ struct LibraryView: View {
                         .contextMenu { menu(for: book) }
                     }
                 }
-                if library.books.isEmpty && !library.isWorking {
+                if !library.books.contains(where: { !$0.isArticle }) && !library.isWorking {
                     Text("Add DRM-free EPUB, TXT or Markdown files to start reading.")
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding()
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
             .frame(maxWidth: 1100, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
@@ -203,7 +222,7 @@ struct LibraryView: View {
                     return
                 }
                 await work.value
-                library.notice = "\(book.title) is ready in Reader → Files. Connect and choose Send."
+                library.notice = "\(book.title) is ready in Device → Files. Connect and choose Send."
             } catch {
                 library.error = error.localizedDescription
             }
@@ -219,7 +238,7 @@ private struct ContinueReadingCard: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 16) {
-                BookCover(book: book, library: library).frame(width: 72, height: 104)
+                BookCover(book: book, library: library, compact: true).frame(width: 72, height: 104)
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Continue reading").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Text(book.title).font(.headline).lineLimit(2)
@@ -263,6 +282,7 @@ private struct BookTile: View {
 struct BookCover: View {
     let book: LibraryBook
     @ObservedObject var library: LibraryModel
+    var compact = false
     @State private var image: CGImage?
 
     var body: some View {
@@ -273,15 +293,16 @@ struct BookCover: View {
                 LinearGradient(colors: [Color(white: 0.93), Color(white: 0.86)], startPoint: .top, endPoint: .bottom)
                 VStack(spacing: 8) {
                     Text(book.title)
-                        .font(.system(.footnote, design: .serif).weight(.semibold))
+                        .font(.system(compact ? .caption2 : .footnote, design: .serif).weight(.semibold))
                         .multilineTextAlignment(.center)
                         .lineLimit(5)
-                    if !book.author.isEmpty {
+                        .minimumScaleFactor(0.7)
+                    if !compact && !book.author.isEmpty {
                         Text(book.author).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                     }
                 }
                 .foregroundStyle(Color(white: 0.15))
-                .padding(10)
+                .padding(compact ? 6 : 10)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 6))

@@ -3,6 +3,22 @@ import XCTest
 
 /// Weather and events composed for the reader (sibling docs/pocket-glance-v1.md).
 final class ReaderGlanceTests: XCTestCase {
+    func testCancelledCityLookupDoesNotResolve() async {
+        let lookup = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                _ = try await WeatherSource.place(named: "Seoul")
+                return false
+            } catch is CancellationError {
+                return true
+            } catch {
+                return false
+            }
+        }
+        let cancelled = await lookup.value
+        XCTAssertTrue(cancelled, "Cancellation must stop before requesting a city lookup")
+    }
+
     private var calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!

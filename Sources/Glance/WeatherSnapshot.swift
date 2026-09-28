@@ -37,21 +37,37 @@ struct WeatherPlace: Codable, Equatable, Sendable {
 
 enum WeatherSource {
     enum Failure: LocalizedError, Equatable {
-        case notFound, unavailable(String)
+        case notFound, lookupUnavailable, unavailable(String)
         var errorDescription: String? {
             switch self {
             case .notFound: "No city matched that name. Try a nearby larger city or add the country."
+            case .lookupUnavailable: "The city could not be looked up right now. Check the internet connection and try again; the current city is kept."
             case let .unavailable(reason): "Apple Weather is unavailable right now (\(reason)). The reader keeps its last weather."
             }
         }
     }
 
     /// Resolves a typed city name; only the city's coordinates are kept.
-    static func place(named name: String) async throws -> WeatherPlace {
+    @MainActor static func place(named name: String) async throws -> WeatherPlace {
         let query = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { throw Failure.notFound }
-        let marks = try? await CLGeocoder().geocodeAddressString(query)
-        guard let mark = marks?.first, let location = mark.location else { throw Failure.notFound }
+        let geocoder = CLGeocoder()
+        let marks: [CLPlacemark]
+        do {
+            marks = try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                return try await geocoder.geocodeAddressString(query)
+            } onCancel: {
+                Task { @MainActor in geocoder.cancelGeocode() }
+            }
+        } catch {
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            if (error as? CLError)?.code == .geocodeFoundNoResult { throw Failure.notFound }
+            throw Failure.lookupUnavailable
+        }
+        try Task.checkCancellation()
+        guard let mark = marks.first, let location = mark.location else { throw Failure.notFound }
         let label = mark.locality ?? mark.name ?? query
         return WeatherPlace(name: label, latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
     }

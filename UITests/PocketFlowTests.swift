@@ -25,14 +25,14 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--hardware=X3"]
         app.launch()
-        app.open("Customize reader")
+        app.open("Screens")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
-        // Weather is a block of the Home list; its switch takes it off the screen.
+        // The daily panel contains weather and the next event as sibling settings.
         let weather = app.switches["profile-home-weather"]
         app.revealInStudio(weather)
         weather.tap()
         XCTAssertTrue(app.waitForLayoutPreview(), "The weather edit was not redrawn")
-        XCTAssertFalse(app.switches["profile-next-event"].exists, "Weather settings fold away with it")
+        XCTAssertFalse(app.switches["profile-next-event"].exists, "Daily panel settings fold away with it")
         XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
         XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
 
@@ -56,10 +56,37 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
     }
 
+    func testScreensSeparateWeatherAndCalendarWithoutRequestingAccessInDemo() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo"]
+        app.launch()
+        app.open("Screens")
+        let event = app.switches["profile-next-event"]
+        app.revealInStudio(event)
+        XCTAssertTrue(event.isHittable)
+        XCTAssertTrue(app.staticTexts["Calendar"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["weather-data-sources"].exists)
+        XCTAssertFalse(app.buttons["glance-events"].exists, "Demo must not offer private Calendar access")
+        attach(app, "daily-panel-sources")
+        event.tap()
+        XCTAssertTrue(app.waitForLayoutPreview())
+        XCTAssertTrue(app.descendants(matching: .any)["weather-data-sources"].exists, "Calendar visibility must not remove Weather attribution")
+        app.openScreen("Sleep")
+        let weather = app.switches["profile-sleep-weather"]
+        app.revealInStudio(weather)
+        weather.tap()
+        let calendar = app.switches["profile-sleep-today"]
+        app.revealInStudio(calendar)
+        XCTAssertTrue(calendar.exists, "Sleep Calendar remains independently selectable")
+        XCTAssertFalse(app.descendants(matching: .any)["weather-data-sources"].exists)
+        XCTAssertFalse(springboard.alerts.firstMatch.exists)
+        attach(app, "separate-weather-calendar")
+    }
+
     func testReadingSettingsAreEditableOfflineAndDiscardIsExplicit() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Customize reader")
+        app.open("Screens")
         let size = app.buttons["Extra large"]
         app.revealInStudio(size)
         XCTAssertTrue(size.isHittable)
@@ -83,7 +110,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("Customize reader")
+        app.open("Screens")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
         app.openCards()
         let title = app.textFields["cards-title"]
@@ -93,7 +120,11 @@ final class PocketFlowTests: XCTestCase {
         title.typeText(" today")
         let edited = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "today"), object: title)
         XCTAssertEqual(XCTWaiter().wait(for: [edited], timeout: 5), .completed, "Demo cards must stay editable")
+        let canvas = app.descendants(matching: .any)["profile-canvas"]
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "today"), object: canvas)
+        XCTAssertEqual(XCTWaiter().wait(for: [updated], timeout: 5), .completed, "The canvas must observe each card edit")
         XCTAssertTrue(app.waitForLayoutPreview(caption: "Card page"), "Editing a card shows its page")
+        XCTAssertTrue(canvas.isHittable, "Keep the preview visible above the keyboard")
         XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
         XCTAssertTrue(app.staticTexts["Demo · cards are not saved"].exists)
         attach(app, "my-cards-demo")
@@ -104,7 +135,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("Customize reader")
+        app.open("Screens")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
         app.openCards()
         let menu = app.buttons["cards-image-menu"]
@@ -141,7 +172,7 @@ final class PocketFlowTests: XCTestCase {
         // Give a prompt time to appear if one were going to.
         XCTAssertFalse(springboard.alerts.firstMatch.waitForExistence(timeout: 3),
                        "A permission prompt appeared at launch: \(springboard.alerts.firstMatch.label)")
-        app.open("Reader")
+        app.open("Device")
         XCTAssertTrue(app.buttons["Find on same Wi-Fi"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Try demo"].exists)
     }
@@ -149,7 +180,7 @@ final class PocketFlowTests: XCTestCase {
     func testDirectConnectionRequiresConfirmationAndOfflinePreparationIsAvailable() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Reader")
+        app.open("Device")
         let add = app.buttons["files-add"]
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         XCTAssertTrue(add.isEnabled, "Files can be prepared before a reader is connected")
@@ -172,7 +203,7 @@ final class PocketFlowTests: XCTestCase {
     func testFilePickerStaysOpenWhileSearching() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Reader")
+        app.open("Device")
         let add = app.buttons["files-add"]
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         add.tap()
@@ -210,7 +241,7 @@ final class PocketFlowTests: XCTestCase {
     func testTypedTextCanBecomeAnOfflineEPUB() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Reader")
+        app.open("Device")
         let add = app.buttons["files-add"]
         app.revealInReader(add)
         add.tap()
@@ -243,7 +274,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
         app.terminate()
         app.launch()
-        app.open("Reader")
+        app.open("Device")
         XCTAssertTrue(filename.waitForExistence(timeout: 10), "Prepared EPUB must survive relaunch")
         let remove = app.buttons["Remove content…"]
         app.revealInReader(remove)
@@ -283,6 +314,7 @@ final class PocketFlowTests: XCTestCase {
         app.openShelf("Articles")
         XCTAssertTrue(app.staticTexts[articleTitle].waitForExistence(timeout: 10))
         attach(app, "article-library-shared")
+        app.buttons["article-options-" + articleTitle].tap()
         app.buttons["Delete"].firstMatch.tap()
         let delete = app.buttons["Delete " + articleTitle]
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
@@ -296,6 +328,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         app.openShelf("Articles")
+        app.buttons["article-add-menu"].tap()
         app.buttons["article-add"].tap()
         let title = app.textFields["article-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
@@ -310,29 +343,37 @@ final class PocketFlowTests: XCTestCase {
 
         app.buttons["Read " + articleTitle].tap()
         XCTAssertTrue(app.staticTexts["reader-progress"].waitForExistence(timeout: 20), "The article never opened")
+        XCTAssertTrue(app.webViews.staticTexts[articleTitle].waitForExistence(timeout: 20), "The article text never rendered")
         attach(app, "article-reading")
         app.descendants(matching: .any)["reader-page"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["reader-close"].waitForExistence(timeout: 5))
         app.buttons["reader-close"].tap()
+        let returned = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: app.staticTexts["reader-progress"])
+        XCTAssertEqual(XCTWaiter().wait(for: [returned], timeout: 10), .completed)
 
+        app.filterArticles("All articles")
         XCTAssertTrue(saved.waitForExistence(timeout: 10))
+        app.buttons["article-options-" + articleTitle].tap()
         app.buttons["Prepare for reader"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Ready in Reader")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Ready in Device")).firstMatch.waitForExistence(timeout: 10))
         attach(app, "article-library-prepared")
-        app.open("Reader")
+        app.open("Device")
         let filename = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "pd-article-", ".epub")).firstMatch
         XCTAssertTrue(filename.waitForExistence(timeout: 10))
         app.terminate()
         app.launch()
         app.openShelf("Articles")
+        app.filterArticles("All articles")
         XCTAssertTrue(saved.waitForExistence(timeout: 5))
+        app.buttons["article-options-" + articleTitle].tap()
         app.buttons["Delete"].firstMatch.tap()
         let confirmDelete = app.buttons["Delete " + articleTitle]
         XCTAssertTrue(confirmDelete.waitForExistence(timeout: 5))
         confirmDelete.tap()
         let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: saved)
         XCTAssertEqual(XCTWaiter().wait(for: [removed], timeout: 5), .completed)
-        app.open("Reader")
+        app.open("Device")
         let remove = app.buttons["Remove content…"]
         app.revealInReader(remove)
         remove.tap()
@@ -344,7 +385,7 @@ final class PocketFlowTests: XCTestCase {
     func testDemoModeIsPopulatedButCannotTransfer() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Reader")
+        app.open("Device")
         let tryDemo = app.buttons["Try demo"]
         XCTAssertTrue(tryDemo.waitForExistence(timeout: 10))
         tryDemo.tap()
@@ -353,14 +394,14 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Exit demo"].exists)
         XCTAssertFalse(app.buttons["files-add"].isEnabled, "Nothing may reach a device")
         // Reader settings are populated in Home & Sleep so they are reviewable...
-        app.open("Customize reader")
+        app.open("Screens")
         let startup = app.switches["profile-startup"]
         app.revealInStudio(startup)
         XCTAssertTrue(startup.exists)
         // ...but Apply stays off.
         XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
 
-        app.open("Reader")
+        app.open("Device")
         let exit = app.buttons["Exit demo"]
         app.revealInReader(exit, upward: true)
         exit.tap()
@@ -374,7 +415,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-empty-discovery"]
         app.launch()
-        app.open("Reader")
+        app.open("Device")
         let find = app.buttons["Find on same Wi-Fi"]
         XCTAssertTrue(find.waitForExistence(timeout: 10))
 
@@ -390,12 +431,65 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertLessThan(elapsed, 10, "Empty discovery did not finish promptly")
     }
 
+    func testConnectionSearchCanBeCancelledAndRetried() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-slow-discovery"]
+        app.launch()
+        app.open("Device")
+        let find = app.buttons["Find on same Wi-Fi"]
+        find.tap()
+        let cancel = app.buttons["cancel-reader-connection"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        let message = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Connection cancelled")).firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(find.isEnabled)
+        find.tap()
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+    }
+
+    func testEmptyArticlesAreCenteredInAvailableSpace() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-feeds=empty-layout-\(UUID().uuidString)", "--ui-test-fresh-library"]
+        app.launch()
+        app.openShelf("Articles")
+        let empty = app.descendants(matching: .any)["article-empty-state"].firstMatch
+        XCTAssertTrue(empty.waitForExistence(timeout: 10))
+        let title = app.staticTexts["Room for a good read"]
+        XCTAssertTrue(title.isHittable)
+        XCTAssertEqual(title.frame.midX, empty.frame.midX, accuracy: 5)
+        XCTAssertEqual(title.frame.midY, empty.frame.midY, accuracy: 80)
+        let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        capture.name = "qa-centered-articles"
+        capture.lifetime = .keepAlways
+        add(capture)
+    }
+
+    func testStudioKeepsPreviewVisibleWhileEditing() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo"]
+        app.launch()
+        app.open("Screens")
+        let canvas = app.descendants(matching: .any)["profile-canvas"]
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
+        let before = canvas.frame
+        app.scrollViews["profile-controls"].swipeUp()
+        XCTAssertTrue(canvas.isHittable)
+        XCTAssertEqual(canvas.frame.minY, before.minY, accuracy: 2)
+        XCTAssertTrue(app.buttons["profile-apply"].isHittable)
+        let capture = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        capture.name = "qa-persistent-preview"
+        capture.lifetime = .keepAlways
+        add(capture)
+    }
+
     /// The independent-project and privacy notices are a submission commitment,
     /// so they must be reachable from the shipping interface.
     func testAboutSheetStatesTheIndependenceAndPrivacyPosition() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Reader")
+        app.open("Device")
         let about = app.buttons["about-privacy"]
         app.revealInReader(about)
         XCTAssertTrue(about.waitForExistence(timeout: 5))

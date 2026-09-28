@@ -1,36 +1,39 @@
 import XCTest
 
 /// Navigation shared by the flow and screenshot tests. The app opens on the
-/// Library. iPhone shows tabs (Library, Customize reader, Reader); wide layouts
-/// show Library and Customize reader, with the Reader inspector beside the
-/// studio. The studio switches between the Home and Sleep screens above its
+/// Library. iPhone shows tabs (Library, Screens, Device); wide layouts
+/// show Books, Articles, Screens and Device in a sidebar. The studio switches between the Home and Sleep screens above its
 /// canvas.
 extension XCUIApplication {
-    /// Only compact layouts give the Reader controls their own tab.
-    var isCompact: Bool { tabBars.firstMatch.buttons["Reader"].exists }
+    /// Compact layouts use tabs instead of the sidebar.
+    var isCompact: Bool { tabBars.firstMatch.buttons["Device"].exists }
 
     /// Shows the Library's Books or Articles shelf.
     func openShelf(_ shelf: String) {
         open("Library")
-        let segment = buttons[shelf].firstMatch
-        XCTAssertTrue(segment.waitForExistence(timeout: 10))
-        segment.tap()
+        let sidebarItem = buttons["navigation-\(shelf)"]
+        if sidebarItem.exists {
+            sidebarItem.tap()
+        } else {
+            let menu = buttons["library-shelf"]
+            XCTAssertTrue(menu.waitForExistence(timeout: 10))
+            menu.tap()
+            let choice = collectionViews.buttons[shelf].firstMatch
+            XCTAssertTrue(choice.waitForExistence(timeout: 5))
+            choice.tap()
+        }
     }
 
-    /// Opens a section tab and waits until it is selected. Wide layouts have
-    /// no Reader tab: the Reader inspector sits beside Customize reader.
+    /// Compact layouts use tabs; wide layouts use the navigation sidebar.
     func open(_ section: String) {
-        // iPad shows its tabs in a top bar that is not exposed as a tab bar.
         let tabs = tabBars.firstMatch
-        let topTab = buttons["Customize reader"].firstMatch
+        let sidebarLabel = section == "Library" ? "Books" : section
+        let sidebarItem = buttons["navigation-\(sidebarLabel)"]
         let shown = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in tabs.exists || topTab.exists }, object: self)
-        _ = XCTWaiter().wait(for: [shown], timeout: 10)
-        let container: XCUIElement = tabs.exists ? tabs : self
-        var target = container.buttons[section].firstMatch
-        if section == "Reader", !target.exists { target = container.buttons["Customize reader"].firstMatch }
-        guard target.exists else { return }
-        // A tap during launch can land before the control is interactive.
+            predicate: NSPredicate { _, _ in tabs.buttons[section].exists || sidebarItem.exists }, object: self)
+        XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 15), .completed)
+        let target = sidebarItem.exists ? sidebarItem : tabs.buttons[section].firstMatch
+        XCTAssertTrue(target.exists, "Missing navigation item: \(section)")
         for _ in 0..<3 where !target.isSelected {
             target.tap()
             _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(
@@ -47,16 +50,24 @@ extension XCUIApplication {
         }
     }
 
-    /// Scrolls the studio (canvas and its controls) until `element` is hittable
+    /// Scrolls the settings pane until `element` is hittable
     /// and clear of the Apply bar pinned at the bottom of compact layouts.
-    func revealInStudio(_ element: XCUIElement, attempts: Int = 8) {
+    func revealInStudio(_ element: XCUIElement, attempts: Int = 16) {
         let apply = buttons["profile-apply"]
+        let controls = scrollViews["profile-controls"]
         func clear() -> Bool {
             guard element.isHittable else { return false }
             guard isCompact, apply.exists else { return true }
             return element.frame.maxY < apply.frame.minY - 24
         }
-        for _ in 0..<attempts where !clear() { swipeUp() }
+        for _ in 0..<attempts where !clear() {
+            // The preview stays fixed. Move only part of the shorter settings
+            // pane, so a quick swipe cannot skip a row entirely.
+            let above = element.exists && !element.frame.isEmpty && element.frame.midY < controls.frame.minY
+            let start = controls.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.3 : 0.7))
+            let end = controls.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.7 : 0.3))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
     }
 
     /// Scrolls the studio back up until the canvas is in view.
@@ -91,5 +102,21 @@ extension XCUIApplication {
             predicate: NSPredicate(format: "label == %@", caption),
             object: descendants(matching: .any)["profile-canvas-caption"])
         return XCTWaiter().wait(for: [ready, captioned], timeout: timeout) == .completed
+    }
+}
+
+
+extension XCUIApplication {
+    func filterArticles(_ title: String) {
+        buttons["article-filter"].tap()
+        let option = collectionViews.buttons[title].firstMatch
+        if option.waitForExistence(timeout: 3) { option.tap() }
+        else { buttons[title].firstMatch.tap() }
+    }
+
+    func openSubscriptions() {
+        buttons["article-add-menu"].tap()
+        buttons["article-subscriptions"].tap()
+        XCTAssertTrue(textFields["feed-url"].waitForExistence(timeout: 5))
     }
 }

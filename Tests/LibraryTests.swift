@@ -127,7 +127,7 @@ final class LibraryTests: XCTestCase {
             _ = try await library.importFile(at: xtc)
             XCTFail("XTC must be rejected")
         } catch {
-            XCTAssertTrue(error.localizedDescription.contains("Reader → Files"))
+            XCTAssertTrue(error.localizedDescription.contains("Device → Files"))
         }
         XCTAssertThrowsError(try BookLibrary.decodeText(Data("  \n ".utf8))) {
             XCTAssertEqual($0 as? LibraryError, .emptyText)

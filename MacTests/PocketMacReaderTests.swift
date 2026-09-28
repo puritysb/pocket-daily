@@ -39,6 +39,12 @@ final class PocketMacReaderTests: XCTestCase {
         attach(image, "mac-reader-first-page")
         XCTAssertTrue(Self.hasInk(image), "The page drew no text")
 
+        // Empty page space belongs to the host document, outside the book iframe.
+        _ = try await session.webView.evaluateJavaScript("document.dispatchEvent(new MouseEvent('click', { clientX: innerWidth / 2, bubbles: true }))")
+        try await waitUntil("controls from a margin tap") { session.chromeVisible }
+        _ = try await session.webView.evaluateJavaScript("document.dispatchEvent(new MouseEvent('click', { clientX: innerWidth / 2, bubbles: true }))")
+        try await waitUntil("controls hidden by a second margin tap") { !session.chromeVisible }
+
         session.next()
         try await waitUntil("a page turn") { (session.position?.fraction ?? 0) > first.fraction }
         let turned = try XCTUnwrap(session.position)
@@ -47,6 +53,42 @@ final class PocketMacReaderTests: XCTestCase {
         try await waitUntil("the jump back (turned \(turned.fraction), now \(session.position?.fraction ?? -1), \(session.position?.xpointer ?? "nil"))") {
             abs((session.position?.fraction ?? 1) - first.fraction) < 0.001
         }
+    }
+
+    /// Reading is part of the root window, and Escape returns to its retained Library.
+    @MainActor
+    func testReadingReturnsToLibraryInTheSameWindow() async throws {
+        await LibraryModel.shared.load()
+        let book = try XCTUnwrap(LibraryModel.shared.books.first { $0.origin == .welcome })
+        let model = PocketModel()
+        model.enterDemoMode()
+        let hosting = NSHostingView(rootView: ContentView(initialBookID: book.id).environmentObject(model))
+        let frame = NSRect(x: 0, y: -20_000, width: 1180, height: 780)
+        let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = hosting
+        window.setFrame(frame, display: true)
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+
+        func reader(in view: NSView) -> WKWebView? {
+            if let webView = view as? WKWebView { return webView }
+            return view.subviews.lazy.compactMap { reader(in: $0) }.first
+        }
+        try await waitUntil("the embedded reader") { reader(in: hosting) != nil }
+        let webView = try XCTUnwrap(reader(in: hosting))
+        XCTAssertTrue(webView.window === window)
+        let deadline = Date().addingTimeInterval(20)
+        var ready = false
+        while Date() < deadline && !ready {
+            ready = (try? await webView.evaluateJavaScript("document.querySelector('foliate-view')?.renderer != null")) as? Bool == true
+            if !ready { try await Task.sleep(for: .milliseconds(100)) }
+        }
+        XCTAssertTrue(ready, "The embedded book did not render")
+        // Exercise the shipping keyboard handler, which calls the root's back action.
+        _ = try await webView.evaluateJavaScript("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))")
+        try await waitUntil("return to the Library") { reader(in: hosting) == nil }
+        XCTAssertTrue(hosting.window === window)
+        XCTAssertTrue(window.isVisible, "Returning from reading must keep the app window open")
     }
 
     /// Real-world books, when `TEST_RUNNER_POCKET_EPUB_SAMPLES` names a folder of

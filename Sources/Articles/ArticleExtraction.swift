@@ -6,19 +6,31 @@ enum ArticleExtraction {
     static let maximumBytes = 4 * 1024 * 1024
 
     static func fetch(_ source: String, configuration: URLSessionConfiguration = .ephemeral) async throws -> ArticleRecord {
+        let result = try await download(source, accept: "text/html, application/xhtml+xml",
+                                        allowedTypes: ["text/html", "application/xhtml+xml"], configuration: configuration)
+        let worker = Task.detached(priority: .userInitiated) {
+            try parse(result.data, source: result.url.absoluteString)
+        }
+        return try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+    }
+
+    /// Bounded, cookie-free transport shared by article and feed retrieval.
+    static func download(_ source: String, accept: String, allowedTypes: Set<String>? = nil,
+                         configuration: URLSessionConfiguration = .ephemeral) async throws -> (data: Data, url: URL) {
         let url = try ArticleRecord.sourceURL(source)
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
+        configuration.urlCredentialStorage = nil
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 45
         let session = URLSession(configuration: configuration, delegate: HTTPSRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         var request = URLRequest(url: url)
-        request.setValue("text/html, application/xhtml+xml", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         let (bytes, response) = try await session.bytes(for: request)
         guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
-              ["text/html", "application/xhtml+xml"].contains(response.mimeType?.lowercased() ?? "") else {
+              allowedTypes == nil || allowedTypes?.contains(response.mimeType?.lowercased() ?? "") == true else {
             throw ArticleError.unreadable
         }
         guard response.expectedContentLength <= Int64(maximumBytes) else { throw ArticleError.tooLarge }
@@ -28,10 +40,7 @@ enum ArticleExtraction {
             data.append(byte)
         }
         try Task.checkCancellation()
-        let worker = Task.detached(priority: .userInitiated) {
-            try parse(data, source: url.absoluteString)
-        }
-        return try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+        return (data, response.url ?? url)
     }
 
     private final class HTTPSRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {

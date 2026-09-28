@@ -1,141 +1,203 @@
 import SwiftUI
 
-/// Where the reader's weather and events come from: a city the user names
-/// (Apple Weather) and, if turned on, today's events from this device's
-/// calendars. Both are sent to a connected reader automatically.
-struct GlanceControls: View {
+/// Weather and Calendar are separate sources even when Home displays them in
+/// one panel. Neither control changes the reader's layout or requests access
+/// until the user explicitly chooses it.
+struct WeatherControls: View {
     @ObservedObject var settings: GlanceSettings
     @ObservedObject var model: PocketModel
     @State private var cityQuery = ""
+    @State private var editingCity = false
     @State private var finding = false
     @State private var findError: String?
-    @State private var calendarNote: String?
-    @State private var attribution: (mark: URL, markDark: URL, legal: URL)?
-    @Environment(\.colorScheme) private var colorScheme
+    @State private var work: Task<Void, Never>?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let place = settings.place {
+        VStack(alignment: .leading, spacing: 10) {
+            if model.isDemoMode {
+                Label("Seoul · example forecast", systemImage: "location.circle")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            } else if let place = settings.place, !editingCity {
                 HStack {
                     Label(place.name, systemImage: "location.circle")
                         .accessibilityIdentifier("glance-city")
                     Spacer()
-                    Button("Change") { settings.setPlace(nil); cityQuery = "" }
-                        .buttonStyle(.borderless)
-                        .font(.caption)
+                    Button("Change") { cityQuery = place.name; editingCity = true }
+                        .buttonStyle(.borderless).font(.caption)
                 }
-                Text(weatherStatus).font(.caption2).foregroundStyle(settings.weatherError == nil ? Color.secondary : .orange)
-                attributionView
+                Text(weatherStatus).font(.caption).foregroundStyle(settings.weatherError == nil ? Color.secondary : .orange)
             } else {
-                HStack {
+                HStack(spacing: 8) {
                     TextField("City for weather", text: $cityQuery)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit(find)
+                        .textFieldStyle(.roundedBorder).onSubmit(find)
                         .accessibilityIdentifier("glance-city-field")
-                    Button(finding ? "Finding…" : "Set", action: find)
-                        .disabled(finding || cityQuery.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .accessibilityIdentifier("glance-city-set")
-                }
-                if let findError { Text(findError).font(.caption).foregroundStyle(.red) }
-            }
-            Toggle("Today's events from Calendar", isOn: Binding(get: { settings.includeEvents }, set: setEvents))
-                .accessibilityIdentifier("glance-events")
-            if let calendarNote { Text(calendarNote).font(.caption).foregroundStyle(.orange) }
-            deliveryStatus
-        }
-        .task(id: settings.place) {
-            guard settings.place != nil else { return }
-            attribution = await WeatherSource.attribution()
-        }
-    }
-
-    /// Weather and events go to the reader on their own (on connection, after
-    /// a refresh, with Apply); this says what happened and offers a retry.
-    @ViewBuilder private var deliveryStatus: some View {
-        if model.readerStatus != nil, !model.isDemoMode, !model.canSendGlance {
-            Label("Weather and events need reader firmware \(FirmwareGuidance.minimumRecommended) or later. Use Update reader in the Reader panel.", systemImage: "exclamationmark.triangle")
-                .font(.caption2).foregroundStyle(.orange)
-                .accessibilityIdentifier("glance-unsupported")
-        } else if model.canSendGlance, settings.isConfigured {
-            HStack {
-                Group {
-                    if let error = model.glanceError {
-                        Text("Not sent · \(error)").foregroundStyle(.orange)
-                    } else if let sent = model.glanceSentAt {
-                        Text("Sent to the reader at \(sent.formatted(date: .omitted, time: .shortened))")
-                            .foregroundStyle(.secondary)
+                    if finding {
+                        ProgressView().controlSize(.small)
+                        Button("Cancel") { work?.cancel() }
+                            .accessibilityIdentifier("glance-city-cancel")
                     } else {
-                        Text("Sent automatically when the reader connects").foregroundStyle(.secondary)
+                        Button("Set", action: find)
+                            .disabled(cityQuery.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .accessibilityIdentifier("glance-city-set")
+                        if editingCity { Button("Cancel") { editingCity = false; findError = nil } }
                     }
                 }
-                .font(.caption2)
-                Spacer()
-                // Delivery is automatic (and part of Apply); a manual send is
-                // only offered to recover from a failed one.
-                if model.glanceError != nil {
-                    Button("Retry") { model.refreshGlance(force: true) }
-                        .buttonStyle(.borderless)
-                        .font(.caption)
-                        .disabled(model.isWorking)
-                        .accessibilityIdentifier("glance-send")
-                }
+                if let findError { Text(findError).font(.caption).foregroundStyle(.red) }
+                Text("Choose a city. Your current location is not used.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
+            WeatherSourceCredit(loadMark: !model.isDemoMode && settings.place != nil)
         }
+        .onDisappear { work?.cancel() }
     }
 
     private var weatherStatus: String {
-        if settings.isRefreshing { return "Updating Apple Weather…" }
+        if settings.isRefreshing { return "Updating forecast…" }
         if let error = settings.weatherError { return error }
-        if let weather = settings.weather {
-            return "Updated \(weather.fetched.formatted(date: .omitted, time: .shortened))"
-        }
+        if let weather = settings.weather { return "Updated \(weather.fetched.formatted(date: .omitted, time: .shortened))" }
         return "Not updated yet"
-    }
-
-    /// Apple requires its Weather mark and a legal link wherever its data is used.
-    @ViewBuilder private var attributionView: some View {
-        if let attribution {
-            HStack(spacing: 8) {
-                AsyncImage(url: colorScheme == .dark ? attribution.markDark : attribution.mark) { image in
-                    image.resizable().scaledToFit()
-                } placeholder: { Text("Apple Weather").font(.caption2) }
-                .frame(height: 12)
-                Link("Data sources", destination: attribution.legal)
-                    .font(.caption2)
-            }
-            .accessibilityElement(children: .combine)
-        }
     }
 
     private func find() {
         let query = cityQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty, !finding else { return }
+        guard !model.isDemoMode, !query.isEmpty, !finding else { return }
         finding = true
         findError = nil
-        Task {
-            defer { finding = false }
+        work = Task {
+            defer { finding = false; work = nil }
             do {
-                settings.setPlace(try await WeatherSource.place(named: query))
+                let place = try await WeatherSource.place(named: query)
+                try Task.checkCancellation()
+                settings.setPlace(place)
+                editingCity = false
                 model.refreshGlance(force: true)
-            } catch { findError = error.localizedDescription }
+            } catch {
+                if !Task.isCancelled { findError = error.localizedDescription }
+            }
         }
+    }
+}
+
+/// Keep the official Weather mark and the legal link together next to the
+/// weather source. The API supplies the mark; never substitute the Weather app
+/// icon. Text and the public legal link remain available before setup/offline.
+private struct WeatherSourceCredit: View {
+    let loadMark: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var attribution: (mark: URL, markDark: URL, legal: URL)?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let attribution {
+                AsyncImage(url: colorScheme == .dark ? attribution.markDark : attribution.mark) { image in
+                    image.resizable().scaledToFit()
+                } placeholder: { Text("Apple Weather").font(.caption) }
+                .frame(width: 92, height: 18)
+                .accessibilityLabel("Apple Weather")
+            } else {
+                Text("Apple Weather").font(.caption)
+            }
+            if let legal = attribution?.legal ?? URL(string: "https://developer.apple.com/weatherkit/data-source-attribution/") {
+                Link("Data sources", destination: legal).font(.caption)
+                    .accessibilityIdentifier("weather-data-sources")
+            }
+        }
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("weather-source-credit")
+        .task(id: loadMark) {
+            guard loadMark else { return }
+            attribution = await WeatherSource.attribution()
+        }
+    }
+}
+
+struct CalendarControls: View {
+    @ObservedObject var settings: GlanceSettings
+    @ObservedObject var model: PocketModel
+    @State private var note: String?
+    @State private var requestingAccess = false
+    @State private var work: Task<Void, Never>?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.isDemoMode {
+                Text("Example events · your calendars are not accessed")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                if settings.includeEvents {
+                    HStack {
+                        Label("Calendar connected", systemImage: "checkmark.circle")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        Spacer()
+                        Menu {
+                            Button("Disconnect Calendar") { setEvents(false) }
+                        } label: { Image(systemName: "ellipsis.circle") }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        .accessibilityLabel("Calendar options")
+                    }
+                } else {
+                    Button("Connect Calendar", systemImage: "calendar.badge.plus") { setEvents(true) }
+                        .disabled(requestingAccess)
+                        .accessibilityIdentifier("glance-events")
+                }
+                Text("Today’s events are shared only with your connected reader.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if requestingAccess { ProgressView("Waiting for Calendar access…").font(.caption) }
+                if let note { Text(note).font(.caption).foregroundStyle(.orange) }
+            }
+        }
+        .onDisappear { work?.cancel() }
     }
 
     private func setEvents(_ on: Bool) {
-        calendarNote = nil
+        guard !model.isDemoMode, !requestingAccess else { return }
+        note = nil
         guard on else {
             settings.setIncludeEvents(false)
             model.pushGlance()
             return
         }
-        Task {
+        requestingAccess = true
+        work = Task {
+            defer { requestingAccess = false; work = nil }
             var granted = CalendarSource.isAuthorized
             if !granted, !CalendarSource.isDenied { granted = await CalendarSource.requestAccess() }
+            guard !Task.isCancelled else { return }
             if granted {
                 settings.setIncludeEvents(true)
                 model.pushGlance()
             } else {
-                calendarNote = "Calendar access is off. Turn it on for Pocket Daily in System Settings › Privacy & Security › Calendars."
+                note = "Calendar access is off. Allow Pocket Daily in Settings → Privacy & Security → Calendars."
+            }
+        }
+    }
+}
+
+/// One delivery status for the panel's sources, outside their individual controls.
+struct GlanceDeliveryStatus: View {
+    @ObservedObject var settings: GlanceSettings
+    @ObservedObject var model: PocketModel
+
+    var body: some View {
+        if model.readerStatus != nil, !model.isDemoMode, !model.canSendGlance {
+            Label("Weather and events need firmware \(FirmwareGuidance.minimumRecommended) or later. Open Device to update.", systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.orange)
+                .accessibilityIdentifier("glance-unsupported")
+        } else if model.canSendGlance, settings.isConfigured {
+            HStack {
+                Group {
+                    if let error = model.glanceError { Text("Not sent · \(error)").foregroundStyle(.orange) }
+                    else if let sent = model.glanceSentAt {
+                        Text("Sent at \(sent.formatted(date: .omitted, time: .shortened))").foregroundStyle(.secondary)
+                    } else { Text("Updates when your reader connects").foregroundStyle(.secondary) }
+                }.font(.caption)
+                Spacer()
+                if model.glanceError != nil {
+                    Button("Retry") { model.refreshGlance(force: true) }
+                        .buttonStyle(.borderless).font(.caption).disabled(model.isWorking)
+                        .accessibilityIdentifier("glance-send")
+                }
             }
         }
     }

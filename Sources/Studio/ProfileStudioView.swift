@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Draft of the Home & Sleep profile. Lives with the app window so switching
 /// tabs keeps unsent edits.
@@ -55,26 +56,20 @@ final class ProfileEditorState: ObservableObject {
 /// Home & Sleep editor, organized around the reader's two Pocket Daily screens.
 /// Pick one and the canvas shows it drawn by the firmware painter with the
 /// user's own cards and sample content (an outline when that renderer is
-/// unavailable); the controls beside it (below when `stacked`) edit only that
+/// unavailable); independently scrolling controls beside or below it edit that
 /// screen. Its pages or sections are modules switched on and dragged into
 /// order, and My cards live inside Home. Reading size follows screen settings,
 /// and one Apply sends everything that changed.
 struct ProfileStudioView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var editor: ProfileEditorState
-    var stacked = false
-    /// Side by side in a fixed-height window: the controls scroll on their own.
-    var scrollsControls = false
-    /// Stacked on a phone: the editor scrolls on its own and the Apply bar
-    /// stays pinned above the tab bar instead of scrolling away.
-    var pinsApplyBar = false
-    /// Shown above the editor when it scrolls on its own (a firmware notice).
-    var header: AnyView? = nil
+    var contentPadding: CGFloat = 0
     @State private var preview: PreviewSurface = .home
     @State private var schematic: CGImage?
     @StateObject private var layout = LayoutPreviewModel()
     @StateObject private var cardPreview = ContentPreviewModel()
     @State private var cards: ContentEditorModel?
+    @State private var observedCards = ContentDraft()
     @State private var cardsError: String?
     @State private var selectedCardID: String?
     @State private var editingCards: Bool
@@ -90,45 +85,42 @@ struct ProfileStudioView: View {
     /// The screens the editor is organized around.
     enum Screen: String, CaseIterable { case home = "Home", sleep = "Sleep" }
 
-    init(model: PocketModel, editor: ProfileEditorState, stacked: Bool = false, scrollsControls: Bool = false,
-         pinsApplyBar: Bool = false, header: AnyView? = nil, initialPreview: PreviewSurface = .home) {
+    init(model: PocketModel, editor: ProfileEditorState, contentPadding: CGFloat = 0,
+         initialPreview: PreviewSurface = .home) {
         self.model = model
         self.editor = editor
-        self.stacked = stacked
-        self.scrollsControls = scrollsControls && !stacked
-        self.pinsApplyBar = pinsApplyBar && stacked
-        self.header = header
+        self.contentPadding = contentPadding
         _preview = State(initialValue: initialPreview)
         _editingCards = State(initialValue: initialPreview == .card)
     }
 
     var body: some View {
-        Group {
-            if pinsApplyBar {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        header
-                        editorColumns
+        GeometryReader { geometry in
+            let sideBySide = geometry.size.width >= 680
+            VStack(spacing: 12) {
+                if sideBySide { applyBar }
+                if sideBySide {
+                    HStack(alignment: .top, spacing: 28) {
+                        canvas(height: min(470, max(140, geometry.size.height - 190)))
+                            .frame(width: min(340, geometry.size.width * 0.43))
+                        editorScroll
                     }
-                    .padding()
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+                } else {
+                    canvas(height: min(240, max(90, geometry.size.height * 0.31)))
+                    Divider()
+                    editorScroll
                     applyBar
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 16) {
-                    applyBar
-                    editorColumns
                 }
             }
+            .padding(contentPadding)
         }
         .onAppear {
             editor.sync(with: model.readerProfile)
             if !model.preferencesDirty { editor.syncReading(model.preferences) }
             if editor.draft.home.weather != .off { weatherWhenOn = editor.draft.home.weather }
+        }
+        .onReceive(cards?.$draft.eraseToAnyPublisher() ?? Just(ContentDraft()).eraseToAnyPublisher()) {
+            if observedCards != $0 { observedCards = $0 }
         }
         .onChange(of: model.preferences) { _, preferences in
             if !model.preferencesDirty { editor.syncReading(preferences) }
@@ -159,27 +151,24 @@ struct ProfileStudioView: View {
         .onDisappear { cardPreview.cancel() }
     }
 
-    /// The canvas and its controls, side by side or stacked.
-    @ViewBuilder private var editorColumns: some View {
-        let columns = stacked ? AnyLayout(VStackLayout(alignment: .center, spacing: 20))
-                              : AnyLayout(HStackLayout(alignment: .top, spacing: 24))
-        columns {
-            canvas
-            if scrollsControls {
-                ScrollView {
-                    controls.padding(.bottom, 24)
-                }
-                .frame(maxWidth: 380, maxHeight: .infinity, alignment: .topLeading)
-                .scrollIndicators(.visible)
-            } else {
+    /// Editing never scrolls the preview or Apply out of sight.
+    private var editorScroll: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
                 controls
-                    .frame(maxWidth: stacked ? .infinity : 360, alignment: .topLeading)
             }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .id(screen)
+        .accessibilityIdentifier("profile-controls")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var screen: Screen { preview == .sleep ? .sleep : .home }
-    private var draftCards: ContentDraft { cards?.draft ?? .init() }
+    private var draftCards: ContentDraft { observedCards }
     private var selectedCard: ContentCard? {
         draftCards.cards.first { $0.id == selectedCardID } ?? draftCards.cards.first
     }
@@ -220,7 +209,7 @@ struct ProfileStudioView: View {
         return showsRender ? layout.image : schematic
     }
 
-    private var canvas: some View {
+    private func canvas(height: CGFloat) -> some View {
         VStack(spacing: 10) {
             Picker("Screen", selection: Binding(get: { screen }, set: { showsReadingSample = false; preview = $0 == .home ? .home : .sleep })) {
                 ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -231,7 +220,7 @@ struct ProfileStudioView: View {
             .accessibilityIdentifier("profile-screen")
             PocketDevicePreview(hardware: model.hardware, status: model.readerStatus, renderedScreen: canvasImage)
                 .frame(maxWidth: 340)
-                .frame(height: 470)
+                .frame(height: height)
                 .overlay { canvasOverlay }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(canvasLabel)
@@ -245,6 +234,8 @@ struct ProfileStudioView: View {
                     .foregroundStyle(.secondary)
                     .help(preview == .card ? "The card as the reader draws it when opened." :
                           showsRender ? "Preview uses your card drafts plus an example book, weather and schedule. It is not a live image of your reader." : "")
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(canvasCaption)
                     .accessibilityIdentifier("profile-canvas-caption")
                 if showsReadingSample {
                     Button("Back to layout") { showsReadingSample = false }
@@ -257,7 +248,8 @@ struct ProfileStudioView: View {
                 }
             }
         }
-        .frame(width: stacked ? nil : 340)
+        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
     }
 
     @ViewBuilder private var canvasOverlay: some View {
@@ -275,7 +267,7 @@ struct ProfileStudioView: View {
 
     private var canvasIsCurrent: Bool {
         if showsReadingSample { return true }
-        if preview == .card { return cardPreview.image != nil || cardRequest == nil }
+        if preview == .card { return cardRequest == nil || cardPreview.renderedRequest == cardRequest }
         return layoutRequest == nil || layout.renderedRequest == layoutRequest
     }
 
@@ -416,7 +408,7 @@ struct ProfileStudioView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(pinsApplyBar ? 0.08 : 0), radius: 8, y: 2)
+        .shadow(color: .black.opacity(contentPadding > 0 ? 0.08 : 0), radius: 8, y: 2)
     }
 
     private var statusLabel: some View {
@@ -471,11 +463,15 @@ struct ProfileStudioView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 24) {
             switch screen {
             case .home:
                 homeControls
                 readerSettings
+                if let startup = setting({ $0.startupApp == 1 }, { $0.startupApp = $1 ? 1 : 0 }, on: .home) {
+                    Toggle("Open Pocket Daily at startup", isOn: startup)
+                        .accessibilityIdentifier("profile-startup")
+                }
             case .sleep: sleepControls
             }
             Button("Reset to default layout") { editor.draft = .defaults }
@@ -488,9 +484,8 @@ struct ProfileStudioView: View {
         .disabled(model.isWorking)
     }
 
-    /// Home top to bottom: the Weather block and the Pages block in screen
-    /// order. Dragging Weather above or below Pages places it; its switch
-    /// removes it. Weather's own settings open inside it.
+    /// Pages and the shared daily panel follow their order on the reader.
+    /// The firmware places weather and the next event in that single panel.
     @ViewBuilder private var homeControls: some View {
         ControlGroup(title: "Home screen", note: "Top to bottom · drag to arrange") {
             VStack(spacing: 0) {
@@ -505,10 +500,7 @@ struct ProfileStudioView: View {
             .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 10))
             .overlay { RoundedRectangle(cornerRadius: 10).stroke(PocketPalette.line) }
         }
-        if let startup = setting({ $0.startupApp == 1 }, { $0.startupApp = $1 ? 1 : 0 }, on: .home) {
-            Toggle("Open Pocket Daily when the reader starts", isOn: startup)
-                .accessibilityIdentifier("profile-startup")
-        }
+
     }
 
     private enum HomeBlock: String { case weather, pages }
@@ -528,9 +520,9 @@ struct ProfileStudioView: View {
 
     private var weatherBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
-            blockHeader("Weather", detail: "Now and five days", identifier: "profile-home-weather-block",
+            blockHeader("Daily panel", detail: "Weather & calendar", identifier: "profile-home-weather-block",
                         draggable: weatherOn) {
-                Toggle("Weather", isOn: Binding(get: { weatherOn },
+                Toggle("Daily panel", isOn: Binding(get: { weatherOn },
                                                 set: { placeWeather($0 ? weatherWhenOn : .off) }))
                     .labelsHidden()
                     .toggleStyle(.switch)
@@ -545,14 +537,29 @@ struct ProfileStudioView: View {
                 }
             }
             if weatherOn {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Next event", isOn: edit(\.home.nextEvent, on: .home))
-                        .accessibilityIdentifier("profile-next-event")
-                    GlanceControls(settings: model.glanceSettings, model: model)
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Weather", systemImage: "cloud.sun").font(.subheadline.weight(.semibold))
+                        WeatherControls(settings: model.glanceSettings, model: model)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("screen-weather-settings")
+                    Divider()
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Calendar", systemImage: "calendar").font(.subheadline.weight(.semibold))
+                        Toggle("Show next event", isOn: edit(\.home.nextEvent, on: .home))
+                            .accessibilityIdentifier("profile-next-event")
+                        if editor.draft.home.nextEvent {
+                            CalendarControls(settings: model.glanceSettings, model: model)
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("screen-calendar-settings")
+                    GlanceDeliveryStatus(settings: model.glanceSettings, model: model)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.leading, 20)
-                .padding(.bottom, 12)
+                .padding(.bottom, 16)
             }
         }
     }
@@ -602,10 +609,10 @@ struct ProfileStudioView: View {
         .accessibilityIdentifier(identifier)
         return Group {
             if draggable {
-                row.reorderable(list: "home-blocks", id: title, order: homeBlocks.map(\.rawValue.capitalized),
+                row.reorderable(list: "home-blocks", id: title, order: homeBlocks.map { $0 == .weather ? "Daily panel" : "Pages" },
                                 drag: $drag) { _, _ in moveWeather() }
                     .contextMenu {
-                        Button(editor.draft.home.weather == .top ? "Move Weather Below Pages" : "Move Weather Above Pages") {
+                        Button(editor.draft.home.weather == .top ? "Move Daily Panel Below Pages" : "Move Daily Panel Above Pages") {
                             moveWeather()
                         }
                     }
@@ -685,11 +692,17 @@ struct ProfileStudioView: View {
                         .accessibilityIdentifier("profile-sleep-edit-cards")
                     }
                 } expansion: { section in
-                    if section == sleepGlanceSection {
-                        GlanceControls(settings: model.glanceSettings, model: model)
-                            .padding(.leading, 30)
-                            .padding(.trailing, 10)
-                            .padding(.bottom, 10)
+                    if editor.draft.sleep.sections.contains(section) {
+                        Group {
+                            if section == .weather {
+                                WeatherControls(settings: model.glanceSettings, model: model)
+                            } else if section == .today {
+                                CalendarControls(settings: model.glanceSettings, model: model)
+                            }
+                        }
+                        .padding(.leading, 30)
+                        .padding(.trailing, 14)
+                        .padding(.bottom, section == .weather || section == .today ? 14 : 0)
                     }
                     if section == .reading, editor.draft.sleep.sections.contains(.reading),
                        let cover = setting({ $0.pocketDailySleepCover }, { $0.pocketDailySleepCover = $1 }, on: .sleep) {
@@ -703,6 +716,10 @@ struct ProfileStudioView: View {
                 }
             }
         }
+        if editor.draft.sleep.mode == .brief,
+           editor.draft.sleep.sections.contains(.weather) || editor.draft.sleep.sections.contains(.today) {
+            GlanceDeliveryStatus(settings: model.glanceSettings, model: model)
+        }
         if let timeout = setting({ $0.sleepTimeoutMinutes }, { $0.sleepTimeoutMinutes = $1 }, on: .sleep) {
             // The reader accepts 1-30 minutes; 31 means it never sleeps on its own.
             Stepper(timeout.wrappedValue >= ReaderPreferences.neverSleepMinutes
@@ -710,13 +727,6 @@ struct ProfileStudioView: View {
                     value: timeout, in: 1...ReaderPreferences.neverSleepMinutes)
                 .accessibilityIdentifier("profile-sleep-timeout")
         }
-    }
-
-    /// The sleep section that carries the city and calendar settings: Weather
-    /// when shown, else Today's schedule.
-    private var sleepGlanceSection: PocketProfile.SleepSection? {
-        let sections = editor.draft.sleep.sections
-        return sections.contains(.weather) ? .weather : sections.contains(.today) ? .today : nil
     }
 
     private var readerSettings: some View {
@@ -810,7 +820,7 @@ private struct ControlGroup<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline)
                 if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
             }

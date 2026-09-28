@@ -65,11 +65,11 @@ final class LibraryModel: ObservableObject {
         return last
     }
 
-    func importArticle(_ id: UUID) async -> LibraryBook? {
+    func importArticle(_ id: UUID, store: ArticleStore = .shared) async -> LibraryBook? {
         isWorking = true
         defer { isWorking = false }
         do {
-            let record = try await ArticleStore.shared.load(id)
+            let record = try await store.load(id)
             let book = try await storage.importArticle(record)
             await refresh()
             return book

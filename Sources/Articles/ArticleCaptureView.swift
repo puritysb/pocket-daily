@@ -5,6 +5,7 @@ struct ArticleCaptureView: View {
     var initialText: String = ""
     var existing: ArticleRecord? = nil
     var initialError: String? = nil
+    var store: ArticleStore = .shared
     let completed: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var source = ""
@@ -72,11 +73,14 @@ struct ArticleCaptureView: View {
     private func save() {
         saving = true
         busy = true; error = nil
-        let article = ArticleRecord(id: identity, title: title.isEmpty ? (URL(string: source)?.host ?? "Article") : title, source: source, text: text, savedAt: existing?.savedAt ?? Date())
+        var article = existing ?? ArticleRecord(id: identity, title: "", source: "", text: "")
+        article.title = title.isEmpty ? (URL(string: source)?.host ?? "Article") : title
+        article.source = source; article.text = text
+        article.downloadError = nil
         work = Task { @MainActor in
             defer { busy = false; saving = false }
             do {
-                try await ArticleStore.shared.save(article)
+                try await store.save(article)
                 dismiss(); completed()
             } catch { self.error = error.localizedDescription }
         }

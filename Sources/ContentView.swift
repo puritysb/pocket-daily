@@ -3,15 +3,15 @@ import UniformTypeIdentifiers
 
 /// The Library (reading on this device) comes first; the reader companion
 /// follows: Home & Sleep (layout, My cards and reader settings), then the
-/// connection and files, which sit in the inspector on wide layouts.
+/// connection, files and firmware in their own Device destination.
 enum StudioSection: String, CaseIterable, Hashable {
-    case library = "Library", layout = "Customize reader", reader = "Reader"
+    case library = "Library", layout = "Screens", reader = "Device"
 
     var symbol: String {
         switch self {
         case .library: "books.vertical"
         case .layout: "rectangle.3.group"
-        case .reader: "dot.radiowaves.left.and.right"
+        case .reader: "externaldrive"
         }
     }
 }
@@ -28,12 +28,8 @@ struct ContentView: View {
         case sdRoot
     }
 
-    /// Wide layouts show the inspector beside the studio; below this the
-    /// iPhone-style tabs take over.
+    /// Wide layouts use a sidebar; compact layouts use tabs.
     private static let wideWidth: CGFloat = 920
-    private static let inspectorWidth: CGFloat = 320
-    /// Main-area width below which the canvas and its controls stack.
-    private static let sideBySideWidth: CGFloat = 720
 
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var model: PocketModel
@@ -41,11 +37,10 @@ struct ContentView: View {
     @StateObject private var profileEditor = ProfileEditorState()
     @ObservedObject private var library = LibraryModel.shared
     @ObservedObject private var sync = ReadingSync.shared
+    @ObservedObject private var inbox: ArticleInboxModel
     @State private var section: StudioSection
     @State private var reading: ReadingTarget?
-#if os(macOS)
-    @Environment(\.openWindow) private var openWindow
-#endif
+    @State private var shelf: LibraryView.Shelf = .books
     @State private var importing = false
     @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
@@ -56,25 +51,36 @@ struct ContentView: View {
     private let initialPreview: ProfileStudioView.PreviewSurface
 
     /// The store screenshots open a given tab and preview surface.
-    init(initialSection: StudioSection = .library, initialPreview: ProfileStudioView.PreviewSurface = .home) {
+    @MainActor
+    init(initialSection: StudioSection = .library, initialPreview: ProfileStudioView.PreviewSurface = .home,
+         initialBookID: UUID? = nil, initialShelf: LibraryView.Shelf = .books, inbox: ArticleInboxModel? = nil) {
+        _inbox = ObservedObject(wrappedValue: inbox ?? .shared)
+        _shelf = State(initialValue: initialShelf)
         _section = State(initialValue: initialSection)
+        _reading = State(initialValue: initialBookID.map { ReadingTarget(id: $0) })
         self.initialPreview = initialPreview
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            if proxy.size.width >= Self.wideWidth {
-                wideLayout(stacked: proxy.size.width - Self.inspectorWidth < Self.sideBySideWidth)
-            } else {
-                compactStudio
+        ZStack {
+            GeometryReader { proxy in
+                if proxy.size.width >= Self.wideWidth {
+                    wideLayout
+                } else {
+                    compactStudio
+                }
+            }
+            // Keep the shelf and its scroll position while reading in this window.
+            .opacity(reading == nil ? 1 : 0)
+            .allowsHitTesting(reading == nil)
+            .accessibilityElement(children: .contain)
+            .accessibilityHidden(reading != nil)
+            if let reading {
+                ReaderContainer(bookID: reading.id, library: library, sync: sync) { self.reading = nil }
+                    .id(reading.id)
             }
         }
         .background(PocketPalette.workspace)
-#if os(iOS)
-        .fullScreenCover(item: $reading) { target in
-            ReaderContainer(bookID: target.id, library: library, sync: sync) { reading = nil }
-        }
-#endif
         .onOpenURL { url in
             Task {
                 let book = await library.importFiles([url])
@@ -129,6 +135,8 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await inbox.activate(allowNetwork: !model.isDemoMode) } }
+            else if phase == .background { inbox.suspend() }
 #if os(iOS)
             if phase == .background {
                 nearby.disconnect()
@@ -151,6 +159,8 @@ struct ContentView: View {
         .onChange(of: model.readerStatus?.deviceID) { _, _ in exchangeReadingPositions() }
         .task { model.refreshGlance() }
         .task(id: model.isDemoMode) {
+            if model.isDemoMode { inbox.cancelRefresh() }
+            await inbox.activate(allowNetwork: !model.isDemoMode)
             if !model.isDemoMode { await model.checkFirmwareAtLaunch() }
         }
     }
@@ -171,103 +181,141 @@ struct ContentView: View {
     }
 
     private func open(_ book: LibraryBook) {
-#if os(macOS)
-        openWindow(id: "reader", value: book.id)
-#else
+        section = .library
         reading = ReadingTarget(id: book.id)
-#endif
     }
 
-    private var libraryView: some View {
-        LibraryView(model: model, library: library, sync: sync, open: open)
+    private func libraryView(showsShelfMenu: Bool = true) -> some View {
+        LibraryView(model: model, library: library, sync: sync, inbox: inbox, shelf: $shelf,
+                    showsShelfMenu: showsShelfMenu, open: open)
     }
 
-    /// Wide windows keep the inspector beside the studio, so the companion is one tab.
-    @ViewBuilder private func wideLayout(stacked: Bool) -> some View {
-#if os(macOS)
-        // The Mac switches sections from the window's own header: a tab view there
-        // renders as a detached segmented strip and cannot host the Library toolbar.
-        VStack(spacing: 0) {
-            Picker("Section", selection: Binding(
-                get: { section == .reader ? .layout : section },
-                set: { section = $0 }
-            )) {
-                Text(StudioSection.library.rawValue).tag(StudioSection.library)
-                Text(StudioSection.layout.rawValue).tag(StudioSection.layout)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .padding(.vertical, 10)
-            .accessibilityIdentifier("app-section")
-            Divider()
-            if section == .library { libraryView } else { desktopStudio(stacked: stacked) }
-        }
-#else
-        TabView(selection: Binding(
-            get: { section == .reader ? .layout : section },
-            set: { section = $0 }
-        )) {
-            libraryView
-                .tabItem { Label(StudioSection.library.rawValue, systemImage: StudioSection.library.symbol) }
-                .tag(StudioSection.library)
-            desktopStudio(stacked: stacked)
-                .tabItem { Label(StudioSection.layout.rawValue, systemImage: StudioSection.layout.symbol) }
-                .tag(StudioSection.layout)
-        }
-#endif
-    }
-
-    private func desktopStudio(stacked: Bool) -> some View {
+    /// One navigation rail replaces the two stacked section pickers.
+    private var wideLayout: some View {
         HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                studioTopBar
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 14)
-                Divider()
-                if stacked {
-                    ScrollView {
-                        studio(.layout, stacked: true)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 20)
-                            .frame(maxWidth: 900, alignment: .leading)
-                            .frame(maxWidth: .infinity)
+            sidebar
+            Divider()
+            if section == .library {
+                libraryView(showsShelfMenu: false)
+            } else {
+                desktopStudio
+            }
+        }
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 10) {
+                PocketMark()
+                Text("Pocket Daily").font(.headline)
+            }
+            .padding(.horizontal, 12)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Library")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 12).padding(.bottom, 4)
+                ForEach(LibraryView.Shelf.allCases) { item in
+                    sidebarRow(item.rawValue, symbol: item == .books ? "books.vertical" : "doc.text",
+                               selected: section == .library && shelf == item) {
+                        shelf = item
+                        section = .library
                     }
-                } else {
-                    // The canvas stays in view; only the controls scroll.
-                    ProfileStudioView(model: model, editor: profileEditor, scrollsControls: true,
-                                      initialPreview: initialPreview)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-                        .frame(maxWidth: 900, maxHeight: .infinity, alignment: .topLeading)
-                        .frame(maxWidth: .infinity)
                 }
             }
-            .background(PocketPalette.stage)
-            Divider()
-            ScrollView { inspector.padding(16) }
-                .accessibilityIdentifier("inspector")
-                .frame(width: Self.inspectorWidth)
-                .background(PocketPalette.panel)
+            if section == .library && shelf == .articles && !inbox.feeds.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Following").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                    ScrollView {
+                        VStack(spacing: 2) {
+                            ForEach(inbox.feeds) { feed in
+                                sidebarRow(feed.title, symbol: "dot.radiowaves.left.and.right", selected: inbox.filter == .feed(feed.id)) {
+                                    inbox.filter = .feed(feed.id)
+                                }
+                            }
+                        }
+                    }.frame(height: min(CGFloat(inbox.feeds.count) * 64, 240))
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Your reader")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 12).padding(.bottom, 4)
+                sidebarRow(StudioSection.layout.rawValue, symbol: StudioSection.layout.symbol, selected: section == .layout) {
+                    section = .layout
+                }
+                sidebarRow(StudioSection.reader.rawValue, symbol: StudioSection.reader.symbol, selected: section == .reader) {
+                    section = .reader
+                }
+            }
+            Spacer()
         }
+        .padding(12)
+        .padding(.top, 12)
+        .frame(width: 200)
+        .background(PocketPalette.panel)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("app-sidebar")
+    }
+
+    private func sidebarRow(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .lineLimit(2)
+                .font(.subheadline.weight(selected ? .semibold : .regular))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12).padding(.vertical, 11)
+                .background(selected ? PocketPalette.selection : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("navigation-\(title)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var desktopStudio: some View {
+        VStack(spacing: 0) {
+            studioTopBar
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+            Divider()
+            if section == .reader {
+                GeometryReader { geometry in
+                    ScrollView {
+                        deviceContents(twoColumns: geometry.size.width >= 980)
+                            .padding(24)
+                            .frame(maxWidth: 1100)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .accessibilityIdentifier("inspector")
+                }
+            } else {
+                ProfileStudioView(model: model, editor: profileEditor,
+                                  initialPreview: initialPreview)
+                    .padding(24)
+                    .frame(maxWidth: 1100, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(PocketPalette.stage)
     }
 
     private var compactStudio: some View {
         TabView(selection: $section) {
-            libraryView
+            libraryView()
                 .tabItem { Label(StudioSection.library.rawValue, systemImage: StudioSection.library.symbol) }
                 .tag(StudioSection.library)
             ForEach([StudioSection.layout, .reader], id: \.self) { tab in
                 NavigationStack {
                     Group {
                         if tab == .layout {
-                            // Scrolls on its own so Apply stays pinned above the tab bar.
-                            ProfileStudioView(model: model, editor: profileEditor, stacked: true, pinsApplyBar: true,
+                            // The preview and Apply stay visible while settings scroll.
+                            ProfileStudioView(model: model, editor: profileEditor, contentPadding: 12,
                                               initialPreview: initialPreview)
                         } else {
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 14) {
-                                    studio(tab, stacked: true)
+                                    deviceContents()
                                 }
                                 .padding()
                             }
@@ -275,7 +323,7 @@ struct ContentView: View {
                         }
                     }
                     .background(PocketPalette.workspace)
-                    .navigationTitle(tab.rawValue)
+                    .navigationTitle(tab == .layout ? "Reader screens" : "Device")
 #if os(iOS)
                     .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -293,21 +341,15 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder private func studio(_ section: StudioSection, stacked: Bool) -> some View {
-        switch section {
-        case .layout: ProfileStudioView(model: model, editor: profileEditor, stacked: stacked,
-                                        initialPreview: initialPreview)
-        case .reader: inspector
-        case .library: libraryView
-        }
-    }
-
-    /// Wide header: the product and the reader in one line.
+    /// The destination title and the current reader or preview hardware.
     private var studioTopBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 14) {
-                PocketMark()
-                Text("Pocket Daily").font(.title3.weight(.semibold))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(section == .layout ? "Reader screens" : "Device").font(.title2.weight(.semibold))
+                    Text(section == .layout ? "Home, sleep and reading" : "Connection, files and firmware")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
                 Spacer(minLength: 12)
                 ReaderChip(model: model)
             }
@@ -316,40 +358,42 @@ struct ContentView: View {
 
     // MARK: Inspector
 
-    private var inspector: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
-            if showsStatus {
-                StatusCallout(message: model.message, tone: model.messageTone)
+    private func deviceContents(twoColumns: Bool = false) -> some View {
+        let columns = twoColumns ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+                                 : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
+        return columns {
+            VStack(alignment: .leading, spacing: 20) {
+                ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
+                if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
+                if model.isTransferring, model.activeTransferKind == nil {
+                    Button("Pause transfer") { model.pauseTransfer() }
+                }
+                if model.activeTransferKind == nil, model.uploadProgress > 0 && model.uploadProgress < 1 {
+                    ProgressView(value: model.uploadProgress)
+                }
+                FilesInspector(model: model) { urls in
+                    if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
+                } choose: {
+                    importAction = .wirelessUpload
+                    importing = true
+                } copyToSD: {
+                    importAction = .sdSource
+                    importing = true
+                }
             }
-            if model.isTransferring, model.activeTransferKind == nil {
-                Button("Pause transfer") { model.pauseTransfer() }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 20) {
+                FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
+                                   update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate)
+                if !model.isDemoMode { TroubleshootingInspector(model: model, nearby: nearby) }
+                Button { showingProjectInfo = true } label: {
+                    Label("About & Privacy", systemImage: "info.circle")
+                }
+                .buttonStyle(.borderless).font(.callout).foregroundStyle(.secondary)
+                .accessibilityIdentifier("about-privacy")
             }
-            if model.activeTransferKind == nil, model.uploadProgress > 0 && model.uploadProgress < 1 { ProgressView(value: model.uploadProgress) }
-            FilesInspector(model: model) { urls in
-                if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
-            } choose: {
-                importAction = .wirelessUpload
-                importing = true
-            } copyToSD: {
-                importAction = .sdSource
-                importing = true
-            }
-            FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
-                               update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate)
-            if !model.isDemoMode {
-                TroubleshootingInspector(model: model, nearby: nearby)
-            }
-            Button {
-                showingProjectInfo = true
-            } label: {
-                Label("About & Privacy", systemImage: "info.circle")
-            }
-            .buttonStyle(.borderless)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .padding(.top, 6)
-            .accessibilityIdentifier("about-privacy")
+            .frame(width: twoColumns ? 320 : nil)
+            .frame(maxWidth: twoColumns ? nil : .infinity, alignment: .topLeading)
         }
     }
 
@@ -439,7 +483,7 @@ private struct ReaderChip: View {
     }
 }
 
-/// Compact toolbar reader state; opens the Reader tab, or picks the preview
+/// Compact toolbar reader state; opens the Device tab, or picks the preview
 /// hardware when no reader is connected.
 private struct CompactReaderMenu: View {
     @ObservedObject var model: PocketModel
@@ -691,7 +735,7 @@ private struct ConnectionInspector: View {
     @State private var showingHelp = false
 
     var body: some View {
-        InspectorCard(title: "READER", symbol: "dot.radiowaves.left.and.right") {
+        InspectorCard(title: "Connection", symbol: "dot.radiowaves.left.and.right") {
             HStack {
                 Circle().fill(model.readerStatus == nil ? Color.secondary : Color.green).frame(width: 9, height: 9)
                 VStack(alignment: .leading, spacing: 2) {
@@ -699,8 +743,17 @@ private struct ConnectionInspector: View {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                if model.isWorking { ProgressView().controlSize(.small) }
+                if model.isWorking || model.canCancelConnection { ProgressView().controlSize(.small) }
                 if isConnected { sessionMenu }
+            }
+            if model.canCancelConnection {
+                Button(model.isSearchingForReader ? "Cancel search" : "Cancel connection", systemImage: "xmark.circle") {
+                    nearby.disconnect()
+                    model.cancelConnectionAttempt()
+                }
+                .accessibilityIdentifier("cancel-reader-connection")
+            } else if model.isCancellingConnection {
+                Text("Stopping connection…").font(.callout).foregroundStyle(.secondary)
             }
             actions
             if model.readerStatus != nil { ReaderStoragePanel(model: model) }
@@ -714,12 +767,12 @@ private struct ConnectionInspector: View {
                             .buttonStyle(.bordered)
                     }
                     Button("Retry automatic join") { model.useNearbyLease(lease) }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.borderedProminent).disabled(model.isWorking)
                     Text(lease.ssid)
                     Text(lease.passphrase).textSelection(.enabled)
                     Button("Verify connection") {
                         Task { await model.verifyNearbyLease(lease) }
-                    }
+                    }.disabled(model.isWorking)
                 }
                 .font(.caption.monospaced())
                 .padding(9)
@@ -749,7 +802,9 @@ private struct ConnectionInspector: View {
     /// Only what makes sense now: leave demo; connect (and how); or, once
     /// connected, nothing here, since session actions sit in the ⋯ menu.
     @ViewBuilder private var actions: some View {
-        if model.isDemoMode {
+        if model.canCancelConnection || model.isCancellingConnection {
+            EmptyView()
+        } else if model.isDemoMode {
             Button("Exit demo") { model.exitDemoMode() }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
                 .disabled(model.isWorking)
@@ -770,6 +825,7 @@ private struct ConnectionInspector: View {
                 Spacer()
                 Button("Try demo") { nearby.disconnect(); model.enterDemoMode() }
                     .accessibilityIdentifier("try-demo")
+                    .disabled(model.isWorking)
             }
             .buttonStyle(.borderless)
             .font(.callout)
@@ -816,6 +872,8 @@ private struct ConnectionInspector: View {
 
     private var detail: String {
         if model.isDemoMode { return "Demo · nothing is sent" }
+        if model.isCancellingConnection { return "Stopping connection…" }
+        if model.isSearchingForReader { return "Searching on this Wi-Fi…" }
         if let status = model.readerStatus { return "\(status.version) · \(status.mode) · \(status.ip)" }
         if model.manualHotspotFallback { return "Private Wi-Fi needs a manual join" }
         switch nearby.state {
@@ -842,7 +900,7 @@ struct FirmwareUpdateCard: View {
     private var sending: Bool { model.isTransferring && model.activeTransferKind == .firmware }
 
     var body: some View {
-        InspectorCard(title: "FIRMWARE", symbol: "cpu") {
+        InspectorCard(title: "Firmware", symbol: "cpu") {
             if model.isDemoMode {
                 Text("Firmware updates appear when you connect a reader.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -883,6 +941,8 @@ struct FirmwareUpdateCard: View {
                         .font(.caption).foregroundStyle(.secondary)
                 } else if model.isCheckingFirmware {
                     ProgressView("Checking for updates…").font(.caption)
+                    Button("Cancel check") { model.cancelFirmwareCheck() }
+                        .accessibilityIdentifier("cancel-firmware-check")
                 } else if let error = model.firmwareCheckError {
                     Text(error).font(.caption).foregroundStyle(.secondary)
                     Button("Try again") { Task { await model.checkFirmwareRelease() } }
@@ -954,7 +1014,7 @@ private struct FilesInspector: View {
                 .accessibilityIdentifier("copy-to-sd")
 #endif
         } label: {
-            Label("Prepare content", systemImage: "plus")
+            Label("Add files", systemImage: "plus")
         }
         .fixedSize()
         .disabled(!isEnabled)
@@ -962,7 +1022,7 @@ private struct FilesInspector: View {
     }
 
     var body: some View {
-        InspectorCard(title: "CONTENT · SD CARD", symbol: "sdcard") {
+        InspectorCard(title: "Files", symbol: "sdcard") {
             // The menu moves under the label when the inspector is narrow.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
@@ -1100,7 +1160,7 @@ private struct DiagnosticsInspector: View {
     @State private var expanded = false
 
     var body: some View {
-        InspectorCard(title: "DIAGNOSTICS", symbol: "waveform.path.ecg") {
+        InspectorCard(title: "Diagnostics", symbol: "waveform.path.ecg") {
             Text("Recorded device crash").font(.callout.weight(.semibold))
             Text(diagnostic.version).font(.caption.monospaced()).textSelection(.enabled)
             Text("Reset: \(diagnostic.resetReason)").font(.caption).textSelection(.enabled)
@@ -1136,7 +1196,7 @@ private struct ConnectionTraceInspector: View {
     @State private var expanded = false
 
     var body: some View {
-        InspectorCard(title: "CONNECTION LOG", symbol: "point.3.connected.trianglepath.dotted") {
+        InspectorCard(title: "Connection log", symbol: "point.3.connected.trianglepath.dotted") {
             Text(nearby.traceAnalysis).font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button(expanded ? "Hide log" : "Show log") { expanded.toggle() }.buttonStyle(.bordered)
@@ -1164,10 +1224,11 @@ struct InspectorCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: symbol).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Label(title, systemImage: symbol).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             content
         }
-        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
         .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 13))
         .overlay { RoundedRectangle(cornerRadius: 13).stroke(PocketPalette.line, lineWidth: 1) }
     }
