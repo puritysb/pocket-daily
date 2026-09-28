@@ -6,6 +6,12 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-29 Signing restored on this Mac: Xcode's account issues profiles
+  again (`-allowProvisioningUpdates`). iOS/Mac development profiles include
+  iCloud key-value storage, so the App ID has the iCloud capability; the app is
+  installed on the paired iPhone 14 Pro Max. App Store export from c4eea1a is
+  signed and verified (appstore/submission.json). Firmware v1.7.0-beta.2
+  (pre-release, 17828ba2) is published for the app's beta channel.
 - 2026-09-28 App layout: Library (with Articles) first, then Screens (Home/
   Sleep/reading settings), Device (connection, files, firmware), Weather and
   Calendar as separate sections with Apple Weather attribution. The Mac reader

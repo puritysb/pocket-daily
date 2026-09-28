@@ -32,10 +32,9 @@
     "tests": "45 iOS tests passed (40 unit, 5 UI) and the macOS render test passed, both on Xcode 26.6",
     "screenshots": "2026-09-28: Regenerated from shipping views by scripts/capture_screenshots.sh: iPhone 6.9\" x6, iPad 13\" x7, Mac 2880x1800 x6. Reading/library first, Screens with persistent preview, separate Device management, and Articles subscriptions with local publisher fixtures; no duplicates.",
     "package_validation": "scripts/validate_app_store.sh passed",
-    "signed_export": "NOT AVAILABLE for this revision. scripts/package_app_store.sh archived iOS successfully and then failed at export with 'No Accounts' and 'No signing certificate \"iOS Distribution\" found'. The keychain currently holds only an Apple Development identity for a different team, so the Apple Distribution certificate for QF36NDHYHD must be restored before a distribution can be produced.",
-    "prior_signed_export": "An earlier build of this session's source did export and verify cleanly (iOS IPA arm64 with Hotspot Configuration and get-task-allow false; universal sandboxed macOS PKG; both with PrivacyInfo.xcprivacy). Those artifacts predate the LAN-discovery change and were removed, so they are not the submission candidate.",
+    "signed_export": "2026-09-29: scripts/package_app_store.sh --skip-tests exported and verified both distributions from c4eea1a (full test run passed on the same tree): iOS IPA arm64, Apple Distribution + store profile, iCloud key-value storage and App Group entitlements, no debugger attachment (sha256 f12a605c…); universal sandboxed macOS PKG, installer-signed (sha256 e5b7b22a…). Nothing was uploaded.",
     "public_urls": "Marketing, support, and privacy URLs returned HTTP 200 on 2026-09-06",
-    "next_step": "Sign in to Xcode with the account holder's Apple ID for team QF36NDHYHD so the distribution certificate is reinstalled, then re-run scripts/package_app_store.sh on the committed revision."
+    "next_step": "Create the App Store Connect record and review contact, upload these builds (or a newer export), then run TestFlight with a physical reader and add the reader video URL."
   },
   "account_fields_still_required": [
     "App Store Connect app record and Apple-generated app ID",
