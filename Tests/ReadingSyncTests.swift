@@ -203,7 +203,7 @@ final class ReadingSyncTests: XCTestCase {
         // With the saved (older) time, a reader place seen since then is the most recent read.
         let json = """
         {"v":1,"deviceID":"X3-1","books":[
-          {"document":"\(digest)","progress":"/body/DocFragment[3]/body/p[1]/text()[1].500","percentage":0.3,"updated":0,"seq":4}
+          {"path":"/a.epub","document":"\(digest)","progress":"/body/DocFragment[3]/body/p[1]/text()[1].500","percentage":0.3,"updated":0,"seq":4}
         ]}
         """
         var opened = book
