@@ -37,6 +37,7 @@ struct ContentView: View {
     @StateObject private var profileEditor = ProfileEditorState()
     @ObservedObject private var library = LibraryModel.shared
     @ObservedObject private var sync = ReadingSync.shared
+    private let readerLink = ReaderBluetoothLink.shared
     @ObservedObject private var inbox: ArticleInboxModel
     @State private var section: StudioSection
     @State private var reading: ReadingTarget?
@@ -127,6 +128,10 @@ struct ContentView: View {
             }
             if case let .connected(status) = state {
                 model.selectHardware(named: status.model)
+                // Authenticated pairing: remember this reader for reading sync over Bluetooth.
+                if !model.isDemoMode, let peripheral = nearby.connectedPeripheralID {
+                    readerLink.remember(peripheral: peripheral, readerID: status.deviceID, model: status.model)
+                }
                 if model.directConnectionRequested {
                     model.expectDirectReader(status.deviceID)
                     do { try nearby.requestHotspot() }
@@ -134,10 +139,12 @@ struct ContentView: View {
                 }
             }
         }
+        .onChange(of: nearby.ownsBluetooth) { _, owns in readerLink.nearbySessionActive = owns }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await inbox.activate(allowNetwork: !model.isDemoMode) }
                 sync.nudgeReader()
+                readerLink.start()
             }
             else if phase == .background { inbox.suspend() }
 #if os(iOS)
@@ -168,6 +175,7 @@ struct ContentView: View {
             sync.nudgeReader()
         }
         .task(id: model.isDemoMode) {
+            readerLink.isDemoMode = model.isDemoMode
             if model.isDemoMode { inbox.cancelRefresh() }
             await inbox.activate(allowNetwork: !model.isDemoMode)
             if !model.isDemoMode { await model.checkFirmwareAtLaunch() }

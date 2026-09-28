@@ -38,7 +38,9 @@
 		1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */; };
 		1CAC16659F5DD4FC8F20DC16 /* CalendarSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2AB607A0C3CA83EDDCF855 /* CalendarSource.swift */; };
 		1E97B607E7232858CBBA4EEF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3E49DE72DF4FB23BEBF63301 /* PrivacyInfo.xcprivacy */; };
+		1F1EF8E56D4F517685A74DA7 /* ReaderBluetoothLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78643CA122DE82B8C818A327 /* ReaderBluetoothLink.swift */; };
 		1FCABE563A756BAC9E5C5444 /* EPUBPackageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540552AB586FC81B89715EBF /* EPUBPackageReader.swift */; };
+		214907388750AF1C6D82EABF /* CoreBluetoothReaderTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C783315F5ED047FCCC49FD1 /* CoreBluetoothReaderTransport.swift */; };
 		230CD450C1CF6929F8CC87D0 /* ContentRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FA699FD202B240470E8A0C /* ContentRevision.swift */; };
 		24CF827FFEDCC2922ECC5795 /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
 		28D505D7C810F2CE4E5C6406 /* CalendarSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2AB607A0C3CA83EDDCF855 /* CalendarSource.swift */; };
@@ -48,6 +50,7 @@
 		2BBF5EABD8D905AC3E8CEE59 /* ContentActivationJournalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15F6370CE0221DE9161710BC /* ContentActivationJournalTests.swift */; };
 		2BC17D2D3793FF5CF8F06540 /* ReadingSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71E25A675032249243DE405 /* ReadingSync.swift */; };
 		2BCD25F75B0F3037FA119A46 /* FirmwareGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DD89EE15EA3953F05850F7 /* FirmwareGuidance.swift */; };
+		2FA5D941AB7937E9960B45D3 /* ReadingSyncBLEProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10C77A6F46DEB65A12CA291 /* ReadingSyncBLEProtocol.swift */; };
 		30B2B007EF0A9D5944224B71 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A90DAA8205C09A1AC46687 /* LibraryView.swift */; };
 		329FE3A9A5DA0A0D8C8FA2CE /* ContentDeployment.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD5CDB7619C59CB8CC6E9426 /* ContentDeployment.swift */; };
 		34ACE3CB623B589288BB20DC /* WeatherSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAB205ED7484E5711C0DC7E /* WeatherSnapshot.swift */; };
@@ -73,9 +76,11 @@
 		4BF0220E2A34C285C2366A26 /* ContentPreparationHTTPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB57FA3D554E7B96A58509E9 /* ContentPreparationHTTPTests.swift */; };
 		4CF8D4056513B87B732EF3EF /* PocketDevicePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EED09CE50431CFB4BC9C740 /* PocketDevicePreview.swift */; };
 		4DA17B5656864277C148A061 /* ContentCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35E5C23903D153A5C1161EE /* ContentCard.swift */; };
+		4E3860A4E2F67A8F46727524 /* ReaderBluetoothLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78643CA122DE82B8C818A327 /* ReaderBluetoothLink.swift */; };
 		4EB6223E991F88B72608FC1D /* ContentStudioSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DCF4874386633399B3E1EE2 /* ContentStudioSupport.swift */; };
 		4FE8262F7F07D37E69BE406D /* PocketMacReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E822A7A862B9E6419AEFACB1 /* PocketMacReaderTests.swift */; };
 		5031638530A05ACC06BC51DD /* PocketReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09B9253893CEDE90FD4DF7 /* PocketReaderTests.swift */; };
+		504D86E06A269F9D1A2C229D /* ReadingSyncBLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E094594F1CB4B9E1D7E4FCB2 /* ReadingSyncBLETests.swift */; };
 		50BC11B3111CB74258A626D7 /* NearbySyncProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED14B15E886AE48D45407B10 /* NearbySyncProtocol.swift */; };
 		52CEB90FB7E884A52E806D93 /* ReaderEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE183592B1BB611EEC932E59 /* ReaderEngineTests.swift */; };
 		53A2EAF44A3C90974741B4BD /* ContentDraftStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BE8DAC4DDD08FCA8D8093E /* ContentDraftStoreTests.swift */; };
@@ -84,6 +89,7 @@
 		5467EA1DEC61331B2E60C63B /* ContentManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84C7EEC1D8C95E385ECAF439 /* ContentManifest.swift */; };
 		546BFF999C233A64517E8145 /* PocketApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78DAF0568606DE01F034EB9F /* PocketApp.swift */; };
 		572796AF75FF75C044A5A2D3 /* PocketShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7627FFD7ED810F4685D869BE /* PocketShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		57C97947D6D09E7170949775 /* CoreBluetoothReaderTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C783315F5ED047FCCC49FD1 /* CoreBluetoothReaderTransport.swift */; };
 		57D04674F495AE1D6321B9E8 /* LiveSyncClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A3EFDC948E33F6D7D82B42 /* LiveSyncClient.swift */; };
 		5BC82A68B594BCA37F5D6C09 /* ReadingSync+Reader.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5A1A9FDBBE5C5732806B5B /* ReadingSync+Reader.swift */; };
 		5C742F3F0B3408A7282836A8 /* ReaderGlance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C0A7EAFBFF2EAB15D727E7 /* ReaderGlance.swift */; };
@@ -206,6 +212,7 @@
 		CD135FFBA0AC57DA0373E942 /* ArticleEPUB.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFE9E910B48D1D3BEC32D147 /* ArticleEPUB.swift */; };
 		CD3815679371A43E47962963 /* ContentImageImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64A7D8C8D0968BBF9F0DABB /* ContentImageImport.swift */; };
 		CD531D9365FAF1CF7E046FE0 /* ReaderPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF08AB00EB2736143F58C22A /* ReaderPreferencesTests.swift */; };
+		CDB6F1F2F2401A9E9D2209FD /* ReadingSyncBLEProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10C77A6F46DEB65A12CA291 /* ReadingSyncBLEProtocol.swift */; };
 		CF90E6856E17BA33920385FB /* ReaderFonts in Resources */ = {isa = PBXBuildFile; fileRef = 02991BB12646486CA5805F7F /* ReaderFonts */; };
 		CFBDFBC887E02814D4C9D452 /* ContentStudioSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DCF4874386633399B3E1EE2 /* ContentStudioSupport.swift */; };
 		D092E60F992DEB1A94907A4E /* ArticleFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB988628CB2627C550091EDB /* ArticleFeed.swift */; };
@@ -317,6 +324,7 @@
 		1C95F7B00987D244A5B7728F /* PocketMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PocketMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2438136E43779E85BB2ABEBA /* MyCardsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyCardsEditor.swift; sourceTree = "<group>"; };
 		28FC5BB6E5BAF17FBE651A95 /* ScreenPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPresentationTests.swift; sourceTree = "<group>"; };
+		2C783315F5ED047FCCC49FD1 /* CoreBluetoothReaderTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBluetoothReaderTransport.swift; sourceTree = "<group>"; };
 		337D1DEFD924E9B66409E868 /* ContentApplyAdmissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentApplyAdmissionTests.swift; sourceTree = "<group>"; };
 		3675DAEF0E5E6DD18C170A9F /* ScreenPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPresentation.swift; sourceTree = "<group>"; };
 		3857985EFC80A72BE576D61E /* ArticleLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleLibraryView.swift; sourceTree = "<group>"; };
@@ -356,6 +364,7 @@
 		72C0A7EAFBFF2EAB15D727E7 /* ReaderGlance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderGlance.swift; sourceTree = "<group>"; };
 		753C0E39C665BA17D4B62EBF /* PocketUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PocketUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7627FFD7ED810F4685D869BE /* PocketShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PocketShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		78643CA122DE82B8C818A327 /* ReaderBluetoothLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderBluetoothLink.swift; sourceTree = "<group>"; };
 		78DAF0568606DE01F034EB9F /* PocketApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketApp.swift; sourceTree = "<group>"; };
 		7CD0FA4176A1D030F77579CE /* ReaderStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderStorage.swift; sourceTree = "<group>"; };
 		7F71BFC27A06665CCADF39C1 /* EPUBStoredZIP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBStoredZIP.swift; sourceTree = "<group>"; };
@@ -410,12 +419,14 @@
 		CF08AB00EB2736143F58C22A /* ReaderPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferencesTests.swift; sourceTree = "<group>"; };
 		CF86CD3C8490B57EB11E8071 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CFA45A839623104E41E721EB /* ContentPreparationReceiptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreparationReceiptTests.swift; sourceTree = "<group>"; };
+		D10C77A6F46DEB65A12CA291 /* ReadingSyncBLEProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSyncBLEProtocol.swift; sourceTree = "<group>"; };
 		D61604ADB60E9E92E71D22DB /* PocketProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketProfileTests.swift; sourceTree = "<group>"; };
 		D7D86893F059F05BEB54691B /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
 		D91C90539AA275C8E705BB2E /* ArticleFeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleFeedStore.swift; sourceTree = "<group>"; };
 		DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncController.swift; sourceTree = "<group>"; };
 		DCEBC2E37191EC4B80D7B4EB /* ContentEditorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentEditorModel.swift; sourceTree = "<group>"; };
 		DE183592B1BB611EEC932E59 /* ReaderEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderEngineTests.swift; sourceTree = "<group>"; };
+		E094594F1CB4B9E1D7E4FCB2 /* ReadingSyncBLETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSyncBLETests.swift; sourceTree = "<group>"; };
 		E1988366ACAAA3D45E411A30 /* ContentPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPresentation.swift; sourceTree = "<group>"; };
 		E35E5C23903D153A5C1161EE /* ContentCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentCard.swift; sourceTree = "<group>"; };
 		E4D853E4EB7E4C43B5C9F8E7 /* PositionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PositionRecord.swift; sourceTree = "<group>"; };
@@ -611,6 +622,7 @@
 				CF08AB00EB2736143F58C22A /* ReaderPreferencesTests.swift */,
 				07C6613EF8E514F21104941C /* ReaderSymbolFontTests.swift */,
 				8E32A7904290F64ED7F059C2 /* ReadingDocumentPreparationTests.swift */,
+				E094594F1CB4B9E1D7E4FCB2 /* ReadingSyncBLETests.swift */,
 				07E85118B15866F7432A3E56 /* ReadingSyncTests.swift */,
 				28FC5BB6E5BAF17FBE651A95 /* ScreenPresentationTests.swift */,
 				F39BD4DB8AA2EE88995A6E87 /* TransferSeparationTests.swift */,
@@ -645,9 +657,12 @@
 		9515EFD3564D49DEAF8E4915 /* Sync */ = {
 			isa = PBXGroup;
 			children = (
+				2C783315F5ED047FCCC49FD1 /* CoreBluetoothReaderTransport.swift */,
 				E4D853E4EB7E4C43B5C9F8E7 /* PositionRecord.swift */,
+				78643CA122DE82B8C818A327 /* ReaderBluetoothLink.swift */,
 				F71E25A675032249243DE405 /* ReadingSync.swift */,
 				ED5A1A9FDBBE5C5732806B5B /* ReadingSync+Reader.swift */,
+				D10C77A6F46DEB65A12CA291 /* ReadingSyncBLEProtocol.swift */,
 				84CD34B492D9F53B4A13338F /* SyncChannels.swift */,
 				88B26787B372A6EDDCC0D7C4 /* SyncSettingsView.swift */,
 			);
@@ -1065,6 +1080,7 @@
 				CD531D9365FAF1CF7E046FE0 /* ReaderPreferencesTests.swift in Sources */,
 				B266C913F50B1DB24F3A4500 /* ReaderSymbolFontTests.swift in Sources */,
 				BD1F30510F8FB7B276C1D7D1 /* ReadingDocumentPreparationTests.swift in Sources */,
+				504D86E06A269F9D1A2C229D /* ReadingSyncBLETests.swift in Sources */,
 				AAE3F7A1ECBDAF5709CC7978 /* ReadingSyncTests.swift in Sources */,
 				BE722FCEDEB810E435395D0D /* ScreenPresentationTests.swift in Sources */,
 				C34F11ACA9B78622ED90296C /* TransferSeparationTests.swift in Sources */,
@@ -1107,6 +1123,7 @@
 				60803444EEA4ACDE05DD9900 /* ContentStateReceipt.swift in Sources */,
 				4EB6223E991F88B72608FC1D /* ContentStudioSupport.swift in Sources */,
 				E72A0BD7BB8E36855DA96247 /* ContentView.swift in Sources */,
+				214907388750AF1C6D82EABF /* CoreBluetoothReaderTransport.swift in Sources */,
 				FEAC785F7C5914FA98BBB52B /* CrossPointClient.swift in Sources */,
 				0368E20577EA2F31604B9D73 /* DeviceCore.swift in Sources */,
 				07940820BEB8A8CFF56EECF9 /* EPUBDocument.swift in Sources */,
@@ -1138,6 +1155,7 @@
 				A0B124B096476FF24801D135 /* PreviewFontStore.swift in Sources */,
 				C6926A8E76B1E977CE66B1C7 /* ProfileStudioView.swift in Sources */,
 				47D0B8E2D65CE7A605747248 /* ReaderAppearance.swift in Sources */,
+				4E3860A4E2F67A8F46727524 /* ReaderBluetoothLink.swift in Sources */,
 				6C698FBA82DC0274F580A495 /* ReaderContentPull.swift in Sources */,
 				7AE55A6545ECA400149410BD /* ReaderContentTransport.swift in Sources */,
 				2A65FE14096BB207F1B70269 /* ReaderDisplayState.swift in Sources */,
@@ -1148,6 +1166,7 @@
 				767273389E82E9C88794DF79 /* ReadingDocumentPreparation.swift in Sources */,
 				137A320981393E848AA32D67 /* ReadingSync+Reader.swift in Sources */,
 				DAB40B7AE8CBD718636413AB /* ReadingSync.swift in Sources */,
+				CDB6F1F2F2401A9E9D2209FD /* ReadingSyncBLEProtocol.swift in Sources */,
 				293B3AE16C4238A579F40061 /* ReorderableList.swift in Sources */,
 				B149C2C5BFF841CD876C51AA /* ScreenPresentation.swift in Sources */,
 				676CFDFB01C1A311303B9390 /* SyncChannels.swift in Sources */,
@@ -1206,6 +1225,7 @@
 				677EADB49600A4441B0D9138 /* ContentStateReceipt.swift in Sources */,
 				CFBDFBC887E02814D4C9D452 /* ContentStudioSupport.swift in Sources */,
 				A6208CA1D1EDD27DDD132C2F /* ContentView.swift in Sources */,
+				57C97947D6D09E7170949775 /* CoreBluetoothReaderTransport.swift in Sources */,
 				136F7173D3544851F4C78858 /* CrossPointClient.swift in Sources */,
 				6A1BD5C811438399B452357D /* DeviceCore.swift in Sources */,
 				D1C93A8F55E3260E0F5AE23F /* EPUBDocument.swift in Sources */,
@@ -1237,6 +1257,7 @@
 				09DD2182BEFDE3ADE4D1BD7D /* PreviewFontStore.swift in Sources */,
 				AE703BCFF23C93CEAB083CEF /* ProfileStudioView.swift in Sources */,
 				A34CDD9ABF00528639DC303B /* ReaderAppearance.swift in Sources */,
+				1F1EF8E56D4F517685A74DA7 /* ReaderBluetoothLink.swift in Sources */,
 				A8C4099BC35624AB73E0FD4D /* ReaderContentPull.swift in Sources */,
 				7D563CC8AD5E93038D3F37B9 /* ReaderContentTransport.swift in Sources */,
 				B99B6DE759C5021C9D87C17F /* ReaderDisplayState.swift in Sources */,
@@ -1247,6 +1268,7 @@
 				8E5990E2F0A50BA1F93A030D /* ReadingDocumentPreparation.swift in Sources */,
 				5BC82A68B594BCA37F5D6C09 /* ReadingSync+Reader.swift in Sources */,
 				2BC17D2D3793FF5CF8F06540 /* ReadingSync.swift in Sources */,
+				2FA5D941AB7937E9960B45D3 /* ReadingSyncBLEProtocol.swift in Sources */,
 				C67C2E63158E3AA2132090E2 /* ReorderableList.swift in Sources */,
 				0C42F4A00F10A35B41A825F8 /* ScreenPresentation.swift in Sources */,
 				01E9D5D84BF3B5FC1D0D0BA2 /* SyncChannels.swift in Sources */,

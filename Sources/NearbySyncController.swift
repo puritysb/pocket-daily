@@ -22,15 +22,27 @@ final class NearbySyncController: NSObject, ObservableObject {
         }
     }
 
-    @Published private(set) var state: State = .idle
+    @Published private(set) var state: State = .idle {
+        didSet { refreshOwnership() }
+    }
     @Published private(set) var hotspotLease: HotspotLease?
+    /// Scanning or holding a connection: the background reading-sync link
+    /// (`ReaderBluetoothLink`) stands down while this is set.
+    @Published private(set) var ownsBluetooth = false
+    /// The authenticated reader's system identifier, while connected.
+    var connectedPeripheralID: UUID? {
+        if case .connected = state { return peripheral?.identifier }
+        return nil
+    }
     @Published private(set) var traceEntries: [String] = []
 
     /// Created on the first Find & Connect, not at launch: instantiating a
     /// central manager is what triggers the system Bluetooth permission prompt.
     private var central: CBCentralManager?
     private var scanRequested = false
-    private var peripheral: CBPeripheral?
+    private var peripheral: CBPeripheral? {
+        didSet { refreshOwnership() }
+    }
     private var statusCharacteristic: CBCharacteristic?
     private var commandCharacteristic: CBCharacteristic?
     private var eventCharacteristic: CBCharacteristic?
@@ -174,6 +186,16 @@ final class NearbySyncController: NSObject, ObservableObject {
     private static func loadTrace() -> [String] {
         guard let report = try? String(contentsOf: traceURL, encoding: .utf8) else { return [] }
         return Array(report.components(separatedBy: .newlines).filter { !$0.isEmpty }.suffix(80))
+    }
+
+    private func refreshOwnership() {
+        let owns: Bool
+        switch state {
+        case .scanning, .connecting: owns = true
+        case .connected, .switchingToHotspot: owns = peripheral != nil
+        case .idle, .bluetoothUnavailable, .failed: owns = false
+        }
+        if owns != ownsBluetooth { ownsBluetooth = owns }
     }
 
     private func publishConnectedIfReady() {
