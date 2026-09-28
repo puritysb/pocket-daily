@@ -82,8 +82,11 @@ reading-progress v1로 구현했다([READING_PROGRESS.md](READING_PROGRESS.md), 
 - `Sources/Library/`: 서재 레코드, 가져오기(파일·Articles·직접 작성), 문서 식별, 서재 화면.
 - `Sources/Reading/`: 렌더러 브리지(WKWebView), 읽기 화면, 모양 설정, 위치 저장.
 - `Sources/Sync/`: 위치 레코드, iCloud·리더 교환, 이어 읽기 제안.
-- 최상위 화면: Library(첫 화면) · Customize reader · Reader(연결·파일·펌웨어).
-  넓은 화면은 Library와 기존 스튜디오를 같은 최상위 선택으로 전환한다.
+- 최상위 화면: Library(첫 화면) · Screens · Device(연결·파일·펌웨어).
+  넓은 화면은 왼쪽 사이드바의 Library 아래 Books·Articles, Your reader 아래 Screens·Device로 이동한다.
+  iPhone은 하단 탭을 유지하고, 서재 제목 메뉴에서 Books·Articles를 전환한다.
+- 책은 모든 플랫폼에서 같은 앱 창의 읽기 화면으로 열린다. Library로 돌아오면 기존 분류와 스크롤 위치가 유지된다.
+  Continue Reading 설정은 서재 오른쪽 Library options 메뉴에서 연다.
 - 서재의 책은 "리더로 보내기"로 기존 전송 대기열을 사용한다.
 - 데모 모드는 기기 기능에만 적용된다. 서재·읽기는 실제 기능이며 기기를 바꾸지 않는다.
   처음 실행하면 원본 안내 책 한 권을 서재에 만든다.
@@ -91,7 +94,7 @@ reading-progress v1로 구현했다([READING_PROGRESS.md](READING_PROGRESS.md), 
 ## 구현 상태 (2026-09-27, 미커밋)
 
 - 1단계 완료(로컬 검증): Library 첫 화면, 안내 책, EPUB/TXT/MD 가져오기(CP949 포함), 중복 제거, 리더
-  (탭·키보드·목차·모양·2단·Mac 별도 창), 위치 저장·복원, Articles를 서재에서 읽기.
+  (탭·키보드·목차·모양·2단·앱 내 읽기), 위치 저장·복원, Articles를 서재에서 읽기.
 - 2단계: iCloud·리더 직접 교환(서버 없음). KOSync 연동은 이번 버전에서 제외.
 - 3단계 진행: 스토어 메타데이터·심사 노트·개인정보·공개 페이지·스크린샷 구성 변경.
 - 남음: X3/X4에서 직접 교환 왕복 검증, iCloud 서명 빌드 확인,
@@ -107,3 +110,11 @@ reading-progress v1로 구현했다([READING_PROGRESS.md](READING_PROGRESS.md), 
 
 완료로 주장하려면 단위 시험(식별값·XPointer·API 오류)과 iOS/macOS 빌드, 리더 UI 시험,
 iCloud·리더 교환 결과를 구분해 기록한다. 실기기 X3/X4와의 이어 읽기는 실기기 결과로만 주장한다.
+
+## Articles inbox — 2026-09-28
+
+Articles now supports local RSS 2.0 / Atom subscriptions, offline text, independent
+read/saved states, source filters, and explicit existing EPUB preparation. It refreshes
+on foreground activation and user request; email inbox integration, library-content
+cloud sync and scheduled background delivery are outside this version. See
+[ARTICLES.md](ARTICLES.md) for retention, parsing and unchanged firmware contracts.

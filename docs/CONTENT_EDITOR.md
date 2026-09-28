@@ -57,9 +57,9 @@ comparison/import and persistent backup browsing are not yet implemented.
 ## Studio layout (all platforms, 2026-09-25)
 
 One studio serves Mac, iPad and iPhone (`ContentView`, `StudioSection`):
-**Customize reader** holds everything the reader shows from Pocket Daily (Home
+**Screens** holds everything the reader shows from Pocket Daily (Home
 items, **My cards**, weather, sleep screen, and the reader settings "Open
-Pocket Daily when the reader starts", book cover, sleep timeout and text size)
+Pocket Daily at startup", book cover, sleep timeout and text size)
 with one **Apply to reader** action. Screen-specific controls come first. A compact Reading group below them
 contains book/article text size. Button remapping is not exposed in the app;
 existing reader mappings are preserved. Changing text size shows a clearly
@@ -67,13 +67,29 @@ labeled illustrative article in the device preview, with a Back to layout action
 This example is not the EPUB renderer and does not promise exact fonts or pagination. They can be edited before connecting, in the current app window.
 Connection merges untouched fields from the reader and retains edited fields;
 Reader-only settings, including existing button mappings, retain their loaded values. Nothing is sent until the user
-connects to reader Sync and chooses Apply. The **Reader** inspector holds the connection, files ("Write
+connects to reader Sync and chooses Apply. The **Device** screen holds the connection, files ("Write
 text to read" prepares an EPUB by default, with a plain-text option),
 troubleshooting (folded) and About & Privacy.
-Wide windows (at least 920 pt) show the header with the reader state beside a
-320 pt inspector; the canvas stays in view while the controls scroll, and
-stacks above them below 720 pt of studio width. Narrower windows (iPhone,
-iPad split view) use two tabs. Removed in the same change: the Cards tab (now
+Wide windows (at least 920 pt) use a sidebar for Books, Articles, Screens and Device. Screens has a persistent preview beside independently
+scrolling controls when the workspace is at least 680 pt wide. Smaller workspaces
+pin the preview above the controls and Apply below them. Compact windows use
+Library, Screens and Device tabs. The connection/files inspector lives
+in Device on every platform, leaving the studio's width for editing and preview.
+The Home **Daily panel** contains separate Weather and Calendar settings. Its
+placement/on-off still maps to profile v1 `home.weather`; `home.nextEvent`
+controls the event line within it. Firmware HomeRenderer.cpp draws both in
+`drawUtilities`, so a calendar-only independent Home block is not offered.
+Sleep Weather and Today's schedule configure their own sources separately.
+The official Apple Weather mark (when available) and Data sources link stay
+next to Weather, with readable source text and the legal link before setup or
+offline. This follows [Apple's attribution guidance](https://developer.apple.com/weatherkit/).
+Demo shows labeled examples and makes no geocoding, WeatherKit attribution or
+Calendar permission requests. Changing a city preserves the current city until
+lookup succeeds; cancellation/disappearance discards late results.
+Device groups Connection and Files as the main tasks, with Firmware and
+troubleshooting beside them when width permits. No firmware wire changes.
+
+Removed in the same change: the Cards tab (now
 My cards), the theme-metric inspector, the reader-screen capture download and
 live-frame fetching (no view showed them), the LIVE/POLL badge, JSON card
 import/export and Auto-send.

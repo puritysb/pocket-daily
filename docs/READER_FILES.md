@@ -2,7 +2,7 @@
 
 Implemented 2026-09-27; physical acceptance remains pending on updated firmware.
 
-The Reader panel shows RAM free bytes and, when `totalHeap` is present, a used
+The Device screen shows RAM free bytes and, when `totalHeap` is present, a used
 percentage. RAM is working memory, not a file destination. SD files are separate
 from firmware installation. Prepared content displays its exact SD destination;
 preparing content does not send it. The Sync file browser lists folders and

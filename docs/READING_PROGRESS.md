@@ -19,7 +19,7 @@ percentage, device, device_id, timestamp)를 쓴다.
   한 기기가 앞부분을 읽어도 다른 기기의 레코드를 덮어쓰지 않는다.
 - 1 MB·1024키 한도: 최근 갱신 순으로 최대 800개를 유지하고 오래된 키부터 지운다.
 - 다른 기기에서 값이 바뀌면(`didChangeExternallyNotification`) 열린 책이 제안을 다시 확인한다.
-- iCloud 계정이 없거나 꺼져 있으면 조용히 건너뛴다. 사용자는 Library → Continue Reading에서 끌 수 있다.
+- iCloud 계정이 없거나 꺼져 있으면 조용히 건너뛴다. 사용자는 Library → Library options → Continue Reading에서 끌 수 있다.
 - 엔타이틀먼트 `com.apple.developer.ubiquity-kvstore-identifier`. 계정 소유자가 App ID의 iCloud
   기능을 켜야 서명 빌드에서 동작한다(스토어 제출 전 확인).
 

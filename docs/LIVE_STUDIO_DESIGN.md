@@ -159,10 +159,25 @@ unchanged. Physical pixels and host/device parity remain unverified.
 
 ## Studio UX
 
-Studio (2026-09-25): Home & Sleep and Cards are studio tabs on Mac, iPad and
-iPhone, each with one explicit Send and (Cards) an opt-in Auto-send toggle;
-see CONTENT_EDITOR.md. Direct on-canvas text editing and undo last send remain
+Studio (2026-09-28): Screens keeps a host-rendered preview visible
+while its settings scroll independently. Wide windows place them side by side;
+compact windows pin a smaller preview above the controls. Home/Sleep selection
+and Apply stay visible. Library and Device (connection, files, firmware) are
+separate destinations in both sidebar and tab navigation. The app brand appears
+once in the sidebar; the workspace header names its current destination.
+My cards belongs to Home. The studio observes card-draft changes even while its
+preview already shows that card; preview readiness matches the rendered request,
+so an older frame cannot be reported as the current edit.
+Direct on-canvas text editing and undo last send remain
 open UX steps (NEXT_STEPS.md).
+
+Reader discovery and pending direct connections expose Cancel connection.
+Cancellation revokes late handoffs immediately and retains exclusive work
+ownership until discovery/OS association and lease cleanup finish; retry is
+available after cleanup. Firmware metadata checks also offer Cancel check.
+Article fetches/subscriptions/refresh and transfers retain their existing
+Cancel/Stop/Pause behavior.
+No firmware endpoint or installation policy changes are involved.
 
 Content live editing update (2026-09-22): the card editor has an explicit,
 non-persistent Start live apply authorization for one reader/connection session.

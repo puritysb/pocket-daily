@@ -6,6 +6,16 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-28 App layout: Library (with Articles) first, then Screens (Home/
+  Sleep/reading settings), Device (connection, files, firmware), Weather and
+  Calendar as separate sections with Apple Weather attribution. The Mac reader
+  opens inside the main window. Articles can follow direct HTTPS RSS/Atom feeds
+  (≤50, latest 20 entries, refresh on activation at most every 5 min or on
+  demand, no background delivery, no pruning); feed links/redirects to local
+  hosts are rejected (docs/ARTICLES.md). Local: 398 unit, 22 UI, 7 Mac tests.
+- 2026-09-28 X3 reading accepted on firmware bc158e02 (user: much faster; no
+  freeze over 30+ pages; lastBuildError none). Still pending on hardware:
+  X3→iPhone→X3 landing accuracy and signed iCloud between Apple devices.
 - 2026-09-27 KOReader sync removed from this version by user decision (hidden,
   code deleted; history before c594af7). Continue Reading = iCloud KVS + reader
   exchange only. Previews use the PocketSymbols fallback (firmware 75df8f0e).
@@ -18,24 +28,21 @@ with a dated note below.
   (docs/READING_PROGRESS.md). App↔firmware XPointers cross-checked both ways
   (258/258, 15/15, 114/114). Wireless .cpfont transfers now go to
   /.fonts/<family>/ like the SD copy. X3/X4 acceptance pending.
-- 2026-09-27 Sync without a server: the public KOSync server returned HTTP
-  522 (known recurring outages), so iCloud key-value storage (same Apple ID)
+- 2026-09-27 Sync without a server: iCloud key-value storage (same Apple ID)
   and direct reader exchange (docs/READING_PROGRESS.md, firmware
-  `readingProgress: 1`) carry KOSync v1 records too; KOSync stays optional.
-  Verification without hardware: scripts/e2e_sync.sh (local KOSync double,
-  two simulators) and Mac off-screen reader tests incl. real EPUBs. foliate's
-  100 ms turn lock silently dropped jumps right after a turn; the bridge now
-  serializes turns before navigation.
+  `readingProgress: 1`). Verification without hardware: Mac off-screen reader
+  tests incl. real EPUBs. foliate's 100 ms turn lock silently dropped jumps
+  right after a turn; the bridge now serializes turns before navigation.
 - 2026-09-27 Product direction changed (user decision): Pocket Daily is a
   standalone, account-free e-book reader AND the X3/X4 companion; Library is
   the first screen. Renderer: pinned foliate-js subset in Support/ReaderEngine
   (WKWebView, app-only `pocket-reader://` scheme, CSP blocks book scripts).
   Positions: KOReader XPointer + percentage (+ CFI locally); document identity:
   KOReader partial MD5 (offset 0 first, matches firmware and KOReader).
-  KOReader sync is optional and recommended; never auto-jumps. Android is a
+  Continue-reading suggestions never auto-jump. Android is a
   later target with platform-neutral contracts. Decision record and contracts:
   docs/READER_EXPANSION.md. Store category moves to Books. Local tests/builds
-  pass; real KOSync round trip and X3/X4 continuity are unverified.
+  pass; X3/X4 continuity is unverified.
 - 2026-09-27 Reader resources/files: RAM usage replaces routine memory warnings;
   refreshable SD usage and Sync folder browse/reading-file delete require
   `readerFiles: 1`. Prepared content shows its SD destination. Old firmware
@@ -52,9 +59,8 @@ with a dated note below.
   preparation → explicit SD transfer → reader library and user-controlled
   deletion. iOS share extension uses an App Group; macOS has the in-app library.
   Contracts: docs/ARTICLES.md and docs/EPUB_ENGINE.md. A prepared article is
-  retained when the reader lacks articleLibrary support. The old X3 EPUB
-  sample opens, but long-section reading froze during user testing today;
-  physical EPUB acceptance is failed/pending diagnosis, not complete.
+  retained when the reader lacks articleLibrary support. The long-section X3
+  freeze seen that day was fixed in firmware (see the 2026-09-28 entry).
 - 2026-09-26 Firmware beta channel: DEBUG builds use
   `FirmwareReleaseSource.Channel.beta` (GitHub `/releases?per_page=10`,
   newest non-draft usable release, pre-releases included) and offer any other
