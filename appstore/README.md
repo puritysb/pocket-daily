@@ -84,13 +84,23 @@ Run `scripts/validate_app_store.sh` before archive. The validator intentionally
 keeps the account, build-upload, TestFlight, and physical-review evidence in
 `submission.json` as external release work rather than source repository defects.
 
-## Article library development — 2026-09-27
+## Article library development — 2026-09-28
 
-The working tree adds Files → Add → Articles, local article retention, explicit
-EPUB preparation, and an iOS/iPadOS Share → Pocket Daily extension. macOS uses
-Add article to paste a link or text. HTTPS page retrieval is user initiated;
-review the extracted text before saving. Link-only saves cannot be prepared
-until text is added. No reader is needed to save or review articles.
+Library → Articles supports saved links/text and local RSS 2.0 / Atom 1.0 subscriptions.
+Choose + → Subscriptions and paste a direct HTTPS feed URL. The latest 20 entries per
+feed are collected on subscription, app activation (at most once per five minutes), or
+manual refresh. There is no email account integration or scheduled background delivery.
+Feed-provided full text and extracted original pages are saved for offline reading.
+Extraction failures keep a link and preview; Get full text allows retry or pasted text.
+Subscriptions and page requests go directly to publishers without browser cookies,
+credentials, scripts, images or an extraction service. Demo mode does not fetch feeds.
+
+Tap an offline article to read in the app; its menu offers Save for later, read/unread,
+Edit article, Prepare for reader and Delete. Reading and saving are independent.
+Unsubscribing retains collected articles; refresh does not restore deleted feed articles.
+Content, subscriptions and these flags stay on this device. Reader preparation and
+sending remain explicit and use the existing EPUB format. The iOS/iPadOS Share →
+Pocket Daily extension and + → Add article remain available for manual captures.
 
 The app and extension require the App Group `group.bound.serendipity.pocket.daily`.
 The extension bundle ID is `bound.serendipity.pocket.daily.share`. Registering

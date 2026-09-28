@@ -30,7 +30,7 @@
     "verified_on": "2026-09-08",
     "development_team": "QF36NDHYHD",
     "tests": "45 iOS tests passed (40 unit, 5 UI) and the macOS render test passed, both on Xcode 26.6",
-    "screenshots": "Regenerated from the shipping demo UI by scripts/capture_screenshots.sh: iPhone 6.9\" x4, iPad 13\" x4, Mac 2880x1800 x3, Home & Sleep first, no duplicates",
+    "screenshots": "2026-09-28: Regenerated from shipping views by scripts/capture_screenshots.sh: iPhone 6.9\" x6, iPad 13\" x7, Mac 2880x1800 x6. Reading/library first, Screens with persistent preview, separate Device management, and Articles subscriptions with local publisher fixtures; no duplicates.",
     "package_validation": "scripts/validate_app_store.sh passed",
     "signed_export": "NOT AVAILABLE for this revision. scripts/package_app_store.sh archived iOS successfully and then failed at export with 'No Accounts' and 'No signing certificate \"iOS Distribution\" found'. The keychain currently holds only an Apple Development identity for a different team, so the Apple Distribution certificate for QF36NDHYHD must be restored before a distribution can be produced.",
     "prior_signed_export": "An earlier build of this session's source did export and verify cleanly (iOS IPA arm64 with Hotspot Configuration and get-task-allow false; universal sandboxed macOS PKG; both with PrivacyInfo.xcprivacy). Those artifacts predate the LAN-discovery change and were removed, so they are not the submission candidate.",
@@ -45,5 +45,11 @@
     "Uploaded iOS and macOS builds",
     "Successful iOS and macOS TestFlight runs with a physical reader",
     "Public review-video URL showing one physical reader transfer"
-  ]
+  ],
+  "navigation_local_verification": {
+    "verified_on": "2026-09-28",
+    "tests": "2026-09-28 full run: 398 iOS unit tests, 22 iOS UI tests (ad-hoc signed for the App Group; includes article feeds, Home/Sleep editing, Weather/Calendar separation, reading settings and connection cancellation) and 7 macOS tests (2 skipped without external samples) passed. Demo does not offer Calendar access.",
+    "builds": "iOS and sandboxed macOS builds passed. Live WeatherKit/geocoding, Calendar authorization and physical reader operations were not verified by these tests.",
+    "screenshots": "scripts/capture_screenshots.sh passed: 6 iPhone, 7 iPad and 6 Mac images. Screens and Device are separate destinations; Weather attribution sits beside Weather, with Calendar in a sibling section. Source package validation passed."
+  }
 }

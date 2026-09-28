@@ -60,7 +60,7 @@ Pocket Daily does not read precise coordinates of the device. On macOS, location
 requested because the operating system gates nearby Wi-Fi network information
 behind that permission. On iOS, Wi-Fi changes use Apple's system confirmation.
 
-## Articles saved for later
+## Articles and subscriptions
 
 When you share an article link or tap Get article text, Pocket Daily requests
 the selected HTTPS page and its HTTPS redirects directly from its publisher.
@@ -68,11 +68,21 @@ The publisher sees your network address and the requested URL. The app does not
 send reader information, browser cookies, or an account login, execute page scripts,
 or request embedded images and other page resources. Extraction may fail on
 login-protected or script-dependent pages; you can save the link or paste selected
-text instead. Review the extracted text before saving.
+text instead. Review manually extracted text before saving.
+
+When you subscribe to an HTTPS RSS or Atom feed, Pocket Daily requests that feed
+and attempts to save the latest 20 articles, using feed text or requests to the
+original article URLs. These direct publisher requests happen when you subscribe,
+open the app (at most once per five minutes), or choose Refresh. They have the same
+cookie-free, script-free behaviour described above. There is no email account
+connection, tracking-pixel loading, server relay or scheduled background delivery.
+Subscription URLs, titles, read state and saved state stay on this device.
+Unsubscribing stops future collection and keeps all previously collected articles.
+Deleted feed articles leave local identity hashes so refresh does not restore them.
 
 Article links, titles and saved text stay in a local shared container used by the
-iOS share extension and the app. They remain until you explicitly delete them
-from Articles. Sending or deleting a reader copy does not delete the app copy.
+iOS share extension and the app. On macOS, they are stored in the app’s local Application Support directory.
+They remain until you explicitly delete them from Articles. Sending or deleting a reader copy does not delete the app copy.
 No article is sent to the developer or an extraction service.
 
 ## Storage, sharing, and retention

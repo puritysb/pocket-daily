@@ -20,17 +20,17 @@ The app opens on the **Library**, which already holds a short original guide,
 page to turn, the middle for controls (Contents, Aa text and page settings,
 Library). Add more DRM-free EPUB, TXT or Markdown files with **+** (Files), or
 save an article from Safari's share sheet and read it under **Articles**. On
-Mac, a book opens in its own window. No account, network or hardware is needed
+Mac, a book opens in the same app window. No account, network or hardware is needed
 for reading.
 
-The circular-arrows button in the Library shows **Continue Reading**: iCloud
+Library options (the ellipsis menu) → **Continue Reading** shows: iCloud
 key-value storage between the user's own Apple devices (on by default, no
 setup) and exchange with a connected X3/X4 reader over the local connection.
 Neither needs an account.
 
 The companion has an explicit, local demo mode for review without a reader:
-open **Reader** (a tab on iPhone; on iPad and Mac the panel on the right of
-**Customize reader**) and choose **Try demo**. **Customize reader** then
+open **Device** (a tab in compact windows, a sidebar item on iPad and Mac)
+and choose **Try demo**. **Screens** then
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
 from a device. Switch between the Home and Sleep screens above the preview;
@@ -113,13 +113,23 @@ The bundled privacy manifest declares app-only UserDefaults and user-selected
 file-metadata access; the app does not track or collect data. See
 [`PRIVACY.md`](PRIVACY.md).
 
-## Article library development — 2026-09-27
+## Article library development — 2026-09-28
 
-The working tree adds Files → Add → Articles, local article retention, explicit
-EPUB preparation, and an iOS/iPadOS Share → Pocket Daily extension. macOS uses
-Add article to paste a link or text. HTTPS page retrieval is user initiated;
-review the extracted text before saving. Link-only saves cannot be prepared
-until text is added. No reader is needed to save or review articles.
+Library → Articles supports saved links/text and local RSS 2.0 / Atom 1.0 subscriptions.
+Choose + → Subscriptions and paste a direct HTTPS feed URL. The latest 20 entries per
+feed are collected on subscription, app activation (at most once per five minutes), or
+manual refresh. There is no email account integration or scheduled background delivery.
+Feed-provided full text and extracted original pages are saved for offline reading.
+Extraction failures keep a link and preview; Get full text allows retry or pasted text.
+Subscriptions and page requests go directly to publishers without browser cookies,
+credentials, scripts, images or an extraction service. Demo mode does not fetch feeds.
+
+Tap an offline article to read in the app; its menu offers Save for later, read/unread,
+Edit article, Prepare for reader and Delete. Reading and saving are independent.
+Unsubscribing retains collected articles; refresh does not restore deleted feed articles.
+Content, subscriptions and these flags stay on this device. Reader preparation and
+sending remain explicit and use the existing EPUB format. The iOS/iPadOS Share →
+Pocket Daily extension and + → Add article remain available for manual captures.
 
 The app and extension require the App Group `group.bound.serendipity.pocket.daily`.
 The extension bundle ID is `bound.serendipity.pocket.daily.share`. Registering

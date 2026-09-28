@@ -1,10 +1,10 @@
 Pocket Daily is a calm, private e-book reader for iPhone, iPad and Mac, and the companion for compatible X3/X4 pocket e-paper readers.
 
 A quiet place to read
-Open DRM-free EPUB books in a paper-like reader that stays out of the way. Pages turn instantly, like e-paper. Tap the sides to turn, tap the middle for controls, or use a keyboard or Bluetooth page turner. Choose the text size, font, line spacing, margins, and a Paper, White or Night page. No feeds, badges or pop-ups.
+Open DRM-free EPUB books in a paper-like reader that stays out of the way. Pages turn instantly, like e-paper. Tap the sides to turn, tap the middle for controls, or use a keyboard or Bluetooth page turner. Choose the text size, font, line spacing, margins, and a Paper, White or Night page. Reading controls stay hidden until you need them.
 
 Your library, your files
-Add EPUB books from Files, or drop them on the Mac window. Plain text and Markdown files become books when you add them. Save articles from the share sheet while browsing and read them later, here or on your reader. A short guide is included, so you can start reading right away.
+Add EPUB books from Files, or drop them on the Mac window. Plain text and Markdown files become books when you add them. Save articles from the share sheet or follow RSS and Atom feeds, including newsletters that offer a feed. Read saved text offline, keep favourites for later, and send articles to your reader when you choose. A short guide is included, so you can start reading right away.
 
 Continue where you left off
 Your place follows you through your own iCloud on your iPhone, iPad and Mac, and is exchanged with your X3/X4 reader while it is connected, with no Pocket Daily account or server to set up. When another device read more recently or got further, Pocket Daily offers to jump there; it never moves your page without asking. Share the same book file to each device from the Library.

@@ -1,14 +1,14 @@
 # App Review notes
 
-Pocket Daily is a local-first companion for separately obtained X3/X4-class e-paper hardware running Pocket Daily or compatible CrossPoint-based firmware. It does not support a manufacturer's factory firmware or cloud service. No login, purchase, subscription, or remote service is required.
+Pocket Daily is an account-free, distraction-free e-book reader for iPhone, iPad and Mac, and the companion for separately obtained X3/X4-class e-paper hardware running Pocket Daily or compatible CrossPoint-based firmware. Reading needs no hardware. It does not support a manufacturer's factory firmware or cloud service. No login, purchase, subscription, or remote service is required.
 
 ## Review without hardware
 
-1. Launch Pocket Daily. It opens on **Home & Sleep**.
-2. Open **Reader** (a tab on iPhone; the panel on the right on iPad and Mac) and choose **Try demo**.
-3. On **Home & Sleep**, switch between the **Home** and **Sleep** screens above the preview, then turn Home pages or sleep sections on and off, drag them into order, or move the weather panel. The preview is drawn by the reader's own layout code with a sample card and built-in sample content and is captioned as sample content; nothing in it is read from a device. **My cards** (opened from its Home page) holds a sample card; its image menu makes a QR code on the device. Under **Weather and events**, typing a city fetches Apple Weather for that city (no location permission); turning on calendar events asks for Calendar access and reads only today's events, which are sent to a connected reader and nowhere else.
-4. Reader settings are populated in demo mode. Apply, applying settings and sending files are intentionally disabled because no physical reader is connected.
-5. Choose **Exit demo** under Reader to return to normal discovery.
+1. Launch Pocket Daily. It opens on the **Library**, which holds a short original guide, "Welcome to Pocket Daily". Tap it to read: tap the right or left side of the page to turn, the middle for Contents, Aa (text and page) and the way back to the Library. On Mac the book opens in the same window.
+2. Add DRM-free EPUB, TXT or Markdown files with **+**, or save an article from Safari's share sheet and read it under **Articles**. **+ → Subscriptions** accepts a direct HTTPS RSS or Atom feed URL; feeds are fetched directly from the publisher when subscribing, when the app becomes active (at most once every five minutes) and on manual refresh. Demo mode never fetches feeds.
+3. Library options (the ellipsis menu) → **Continue Reading** shows iCloud key-value storage between the user's own Apple devices and exchange with a connected reader over the local connection; neither needs an account or setup.
+4. For the companion without a reader, open **Device** (a tab in compact windows, a sidebar item on iPad and Mac) and choose **Try demo**. **Screens** then shows the reader's Home and Sleep screens drawn by the reader's own layout code with a sample card and built-in sample content, captioned as sample content; nothing in them is read from a device. Switch between Home and Sleep above the preview, turn Home pages or sleep sections on and off and drag them into order. **My cards** (opened from its Home page) holds a sample card; its image menu makes a QR code on the device. Under **Weather**, typing a city fetches Apple Weather for that city (no location permission); under **Calendar**, turning on events asks for Calendar access outside demo and reads only today's events, which are sent to a connected reader and nowhere else.
+5. Reader settings are populated in demo mode. Apply, applying settings and sending files are intentionally disabled because no physical reader is connected. Choose **Exit demo** under Device to return to normal discovery.
 
 The submitted screenshot build can also be launched with `--demo` by the development team; reviewers do not need launch arguments because the same mode is visible in the interface.
 
@@ -28,7 +28,7 @@ The submitted screenshot build can also be launched with `--demo` by the develop
 5. Successful direct batches release the temporary connection. New firmware also
    exits the private session. Firmware still requires reader-side confirmation;
    reconnect to verify the version for an identified reader.
-6. Update reader (Reader panel, only while a real reader is connected on the
+6. Update reader (Device, only while a real reader is connected on the
    same Wi-Fi; hidden in demo mode) downloads the latest official firmware from
    the developer's public GitHub releases only when tapped, validates it, shows
    the firmware warning and sends it. The reader asks before installing. The
