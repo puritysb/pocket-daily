@@ -12,7 +12,7 @@
 - main 상태: 앱·펌웨어 모두 main에 병합·푸시. 펌웨어 pre-release `v1.7.0-beta.3`(bc24adb3, CI 통과).
   App Store 서명 export는 c4eea1a 기준으로 검증됨(업로드 안 함, `appstore/submission.json`).
 - 보류: Bluetooth 자동 이어 읽기(reading-sync-ble-v1)는 양쪽 `feat/ble-reading-sync` 브랜치에만 있다
-  (로컬 브랜치, 원격 미푸시). X3 실측: 창은 열리지만 NimBLE 후 여유 heap 13.5 KB, 최저 6.9 KB/블록 2 KB.
+  (원격 `origin/feat/ble-reading-sync`에 보관, main 미병합). X3 실측: 창은 열리지만 NimBLE 후 여유 heap 13.5 KB, 최저 6.9 KB/블록 2 KB.
   마지막 실기기 시험에서 iPhone이 리더를 등록하지 못했다(원인 미확정, 앱 브랜치에 등록 경로 수정과
   `reading-sync.log` 추적 추가됨). 재개 시 이 브랜치에서 시작하고 heap 여유를 먼저 설계한다.
 - X3(`5B09AF70`): main 빌드 `1.7.0-dev-main-bc24adb3` 스테이징됨(리더에서 설치 확인 필요).
