@@ -94,6 +94,21 @@ only in the user's own iCloud key-value storage or over the local connection
 to the user's reader. Book contents are never sent, and the app never moves
 the page to another device's position without asking.
 
+### Background Bluetooth (`bluetooth-central`, iOS/iPadOS)
+
+The iOS app declares the `bluetooth-central` background mode for one purpose:
+keeping reading places in step with the reader the user paired with Connect
+directly. After that pairing the app keeps a single pending connection to that
+one bonded reader (no scanning, no other accessories, no new pairing). When the
+reader closes a book, wakes or goes to sleep it advertises briefly; the system
+completes the connection, even with the app in the background, and the app
+reads the reader's reading list, sends back the places that are further along
+on the iPhone or iPad, and disconnects. Only a book fingerprint, the position,
+the percentage and the device name cross the encrypted link. Nothing is shown,
+and no page moves until the user chooses an offered place. Turning off Library
+options → Continue Reading → Your X3/X4 reader cancels the pending connection;
+demo mode never connects. A physical reader is required to observe it.
+
 ## Weather and calendar
 
 Weather is Apple WeatherKit data for a city the user types (geocoded with
@@ -107,7 +122,8 @@ without them.
 ## Privacy
 
 Bluetooth, local-network, and location purpose strings describe the direct
-reader connection. Location is used only where the operating system requires it
+reader connection; the Bluetooth string also covers exchanging reading places
+with the paired reader (see Background Bluetooth above). Location is used only where the operating system requires it
 to inspect or join nearby Wi-Fi; coordinates are neither read nor transmitted.
 The bundled privacy manifest declares app-only UserDefaults and user-selected
 file-metadata access; the app does not track or collect data. See

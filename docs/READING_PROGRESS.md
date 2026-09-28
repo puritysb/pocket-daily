@@ -8,6 +8,7 @@ percentage, device, device_id, timestamp)를 쓴다.
 | --- | --- | --- | --- |
 | iCloud 키-값 저장소 | 같은 Apple ID의 iPhone·iPad·Mac | Apple iCloud (개발자 서버 없음) | iCloud 로그인, 설정에서 켬(기본 켬) |
 | 리더 직접 교환 | 앱 ↔ X3/X4 | 기존 Sync 연결(LAN/직접 연결) | 펌웨어 `readingProgress: 1` |
+| 리더 Bluetooth 교환 | 앱 ↔ 페어링한 X3/X4 | 본딩된 Nearby Sync BLE(백그라운드 가능) | 상태 `CAP`에 `READ1` |
 
 공통 규칙: 다른 기기의 더 앞선 위치만 제안하고 페이지를 자동으로 옮기지 않는다.
 문서 식별은 partial MD5(리더도 같은 값), 위치는 XPointer + 페이지 시작 기준 진행률.
@@ -73,3 +74,31 @@ percentage, device, device_id, timestamp)를 쓴다.
 - 정확한 페이지 위치(2026-09-29, 펌웨어 `feat/exact-page-offsets`, 섹션 캐시 v133): 리더는 페이지
   첫 글자의 장 텍스트 offset을 기록해 그 글자를 가리키는 XPointer를 만들고, 받은 XPointer는 그 글자가
   있는 페이지로 연다(이전: 문단 안 비례 추정). 앱 교차 검증은 430/430(기존 258 + offset 172).
+
+## 리더 Bluetooth 교환 (reading-sync-ble-v1, 2026-09-29)
+
+펌웨어 계약 원본은 형제 저장소 `docs/reading-sync-ble-v1.md`다. 같은 목록·오퍼 JSON을 본딩된
+Nearby Sync 서비스로 나른다. 하드웨어 검증 전이다.
+
+- 기억: Connect directly(Nearby Sync)에서 인증된 연결(암호화 상태 읽기 + 이벤트 구독)이 되면 앱은
+  주변기기 식별자와 상태의 `ID`, `MODEL`만 UserDefaults `readerLink.remembered.v1`에 저장한다.
+  패스키·핫스팟 정보는 저장하지 않는다. 페어링한 리더가 없으면 Bluetooth를 켜지 않는다(권한 창 없음).
+- 링크(`Sources/Sync/ReaderBluetoothLink.swift`): 스캔하지 않고 기억한 주변기기에 대기 `connect`만
+  걸어 둔다. iOS는 복원 식별자 `PocketReaderReadingSync`와 `UIBackgroundModes: bluetooth-central`로
+  앱이 멈춰 있어도 리더가 교환 창(책 닫기·깨우기 45초, 잠들기 20초)을 열면 시스템이 연결을 완성하고,
+  종료됐으면 백그라운드로 다시 띄운다. macOS는 앱이 실행 중일 때만 한다.
+- 순서: 서비스·특성 탐색 → 이벤트 구독 + 상태 읽기 → `ID`가 기억한 값과 같고 `CAP`에 `READ1`이
+  있어야 한다(아니면 조용히 끊음) → `READ_LIST` → `D` 조각을 seq로 모아(순서 뒤섞임·중복 허용,
+  같은 seq에 다른 내용·빈 seq·8 KiB 초과는 거부) `END`의 길이와 CRC-32(IEEE)가 맞을 때만
+  `ReaderReadingList`로 해석(`path` 없음) → 서재를 불러와(비어 있으면 load) HTTP 교환과 같은
+  `ReadingSync.exchange` 규칙으로 병합 → 이 기기가 더 앞선 책만 최대 10개 `OFFER` + `W`
+  조각(≤180바이트, UTF-8 경계에서 자름, 응답 있는 쓰기)으로 보낸다. 본문은 HTTP POST와 같은
+  JSON(`CrossPointClient.readingOfferBody`). `OK`를 받아야 다음 오퍼, `ERR UNKNOWN_DOCUMENT`는
+  HTTP 404처럼 건너뛰고, 다른 `ERR`은 교환 실패다 → `exchangeFinished` → 끊고 다시 대기.
+- 시간 제한: 준비 15초, 레코드 사이 10초, 연결 전체 60초. 끝나면 60초 쉬었다가 대기 연결을 다시
+  건다(리더의 가장 긴 창보다 길어 한 창에 한 번 교환). iOS는 이 타이머를 백그라운드 작업으로
+  잡고, 시스템이 시간을 먼저 끝내면 그때 바로 다시 건다.
+- 보고: 목록을 병합하기 시작한 뒤의 실패와 목록 자체의 오류(`ERR`, CRC·형식)는 설정의 "마지막
+  교환 실패"에 남고, 받은 위치는 유지된다. 다른 리더·구 펌웨어·응답 없음은 조용히 넘어간다.
+- 물러섬: Connect directly가 스캔·연결 중이면(`NearbySyncController.ownsBluetooth`) 진행 중인 교환을
+  끊고 대기 연결도 취소한다. 데모 모드와 "Your X3/X4 reader" 끄기도 같다. 페이지는 절대 옮기지 않는다.

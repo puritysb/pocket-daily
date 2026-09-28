@@ -25,13 +25,19 @@ local copy; deleting the app deletes the library.
   nothing. Turn it off in Library → Sync.
 - Your X3/X4 reader (on by default): while connected over the local
   connection, the app and a reader whose firmware supports it exchange the same
-  kind of record for books both have. Nothing leaves the local connection.
+  kind of record for books both have. A reader paired with Connect directly
+  also exchanges them over its encrypted Bluetooth connection when it closes a
+  book, wakes or goes to sleep, including while the app is in the background;
+  file names are not sent. Nothing leaves the local connection.
 
 
 ## Data the app handles
 
 - Bluetooth advertisements and local-network responses from a nearby compatible
   reader, used only to discover, pair with, and identify that reader.
+- For the reader paired with Connect directly: the system's Bluetooth
+  identifier for it and its reader ID, stored on-device so reading places can
+  be exchanged with that one reader. The pairing passkey is never stored.
 - A temporary Wi-Fi network name and passphrase supplied by the paired reader,
   used only to establish the direct transfer link requested by the user.
 - User-selected books, learning packs, fonts, and requested firmware updates, transferred directly

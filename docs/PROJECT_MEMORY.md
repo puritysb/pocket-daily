@@ -6,6 +6,16 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-29 Reading sync over BLE v1 (app side, branch feat/ble-reading-sync;
+  contract: firmware docs/reading-sync-ble-v1.md, app docs/READING_PROGRESS.md).
+  An authenticated Connect directly pairing remembers the peripheral UUID +
+  reader ID/model (`readerLink.remembered.v1`, no passkey). `ReaderBluetoothLink`
+  keeps a pending connect (iOS restore ID + `bluetooth-central` background mode),
+  requires the same ID and `READ1`, READ_LIST (CRC-32) → `ReadingSync.exchange`
+  → ≤10 OFFER/W offers → disconnect, 60 s cooldown, re-arm. Stands down while
+  Nearby Sync owns BLE, in demo, or with reader exchange off. The offer JSON is
+  now key-sorted and slash-unescaped for HTTP too. Simulator unit tests only;
+  background relaunch and X3 exchange windows are not hardware verified.
 - 2026-09-29 Signing restored on this Mac: Xcode's account issues profiles
   again (`-allowProvisioningUpdates`). iOS/Mac development profiles include
   iCloud key-value storage, so the App ID has the iCloud capability; the app is
