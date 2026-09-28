@@ -124,7 +124,8 @@ struct ContentView: View {
         }
         .onChange(of: nearby.state) { _, state in
             if let message = state.failureMessage {
-                model.directDiscoveryFailed(message)
+                if readerLink.setup == .searching { readerLink.setup = .failed(message) }
+                else { model.directDiscoveryFailed(message) }
             }
             if case let .connected(status) = state {
                 model.selectHardware(named: status.model)
@@ -176,6 +177,8 @@ struct ContentView: View {
         }
         .task(id: model.isDemoMode) {
             readerLink.isDemoMode = model.isDemoMode
+            readerLink.requestSetupConnection = { nearby.scan() }
+            readerLink.endSetupConnection = { nearby.disconnect() }
             if model.isDemoMode { inbox.cancelRefresh() }
             await inbox.activate(allowNetwork: !model.isDemoMode)
             if !model.isDemoMode { await model.checkFirmwareAtLaunch() }

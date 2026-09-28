@@ -289,6 +289,32 @@ final class ReaderBluetoothLinkTests: XCTestCase {
         XCTAssertEqual(RememberedBluetoothReaderStore(defaults: defaults).reader?.readerID, readerID, "Remembered across launches")
     }
 
+    func testSettingsSetupPairsOnceThenEndsTheConnectionAndForgetStops() {
+        let link = makeLink(remember: false)
+        link.start()
+        var requested = 0, ended = 0
+        link.requestSetupConnection = { requested += 1 }
+        link.endSetupConnection = { ended += 1 }
+        link.beginSetup()
+        XCTAssertEqual(link.setup, .searching)
+        XCTAssertEqual(requested, 1)
+        // The shell remembers the reader when the Nearby Sync connection authenticates.
+        link.remember(peripheral: peripheral, readerID: readerID, model: "X3")
+        XCTAssertEqual(link.setup, .paired("X3"))
+        XCTAssertEqual(ended, 1, "Setup needs no hotspot: the connection ends once remembered")
+        XCTAssertEqual(link.phase, .waiting)
+
+        link.forget()
+        XCTAssertNil(link.rememberedReader)
+        XCTAssertNil(RememberedBluetoothReaderStore(defaults: defaults).reader)
+        XCTAssertEqual(link.phase, .off)
+
+        link.beginSetup()
+        link.cancelSetup()
+        XCTAssertEqual(link.setup, .idle)
+        XCTAssertEqual(ended, 2)
+    }
+
     func testSuccessfulExchangeMergesOffersAndReArms() async throws {
         let link = makeLink()
         link.start()

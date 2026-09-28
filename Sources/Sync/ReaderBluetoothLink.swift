@@ -128,6 +128,44 @@ final class ReaderBluetoothLink: ObservableObject {
     @Published private(set) var phase: Phase = .off
     @Published private(set) var rememberedReader: RememberedBluetoothReader?
 
+    /// Pairing for reading sync from Settings: the reader's Sync screen is open and
+    /// the app connects once (Nearby Sync, authenticated) only to remember it.
+    enum Setup: Equatable {
+        case idle
+        case searching
+        case paired(String)
+        case failed(String)
+    }
+    @Published var setup: Setup = .idle
+    /// Set by the app shell: starts the explicit Nearby Sync connection.
+    var requestSetupConnection: (() -> Void)?
+    /// Set by the app shell: ends it once the reader is remembered.
+    var endSetupConnection: (() -> Void)?
+
+    func beginSetup() {
+        guard !isDemoMode, let requestSetupConnection else { return }
+        setup = .searching
+        requestSetupConnection()
+    }
+
+    func cancelSetup() {
+        guard setup == .searching else { return }
+        setup = .idle
+        endSetupConnection?()
+    }
+
+    /// Stops reading sync with the remembered reader (a new pairing replaces it).
+    func forget() {
+        if session != nil { endSession(error: nil, report: false) }
+        cooldownTimer?.cancel()
+        cooldownTimer = nil
+        if phase != .off { transport.cancelConnection() }
+        phase = .off
+        store.reader = nil
+        rememberedReader = nil
+        setup = .idle
+    }
+
     /// The explicit Sync flow owns Bluetooth while this is set.
     var nearbySessionActive = false {
         didSet { if oldValue != nearbySessionActive { update() } }
@@ -200,6 +238,10 @@ final class ReaderBluetoothLink: ObservableObject {
     /// Remembers a reader after an authenticated Nearby Sync connection.
     func remember(peripheral: UUID, readerID: String, model: String) {
         let reader = RememberedBluetoothReader(peripheralID: peripheral, readerID: readerID, model: model)
+        if setup == .searching {
+            setup = .paired(model)
+            endSetupConnection?()
+        }
         guard reader != rememberedReader else { return }
         if session != nil { endSession(error: nil, report: false) }
         store.reader = reader
