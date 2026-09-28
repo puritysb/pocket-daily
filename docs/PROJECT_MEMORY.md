@@ -6,6 +6,13 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-29 Continue Reading with the reader: automatic Wi-Fi exchange with the
+  last reader (same device ID, 1.5 s probe of its last address on app activation,
+  book open/close); opening a book no longer counts as reading (keeps the saved
+  time, so a newer X3 place is offered as "Continue from X3"; X3-verified).
+  Exact page positions from firmware v133 verified on the X3. Reading sync over
+  Bluetooth is held on branch feat/ble-reading-sync (not on main): the reader's
+  window opened but the iPhone never registered the reader in the field test.
 - 2026-09-29 Signing restored on this Mac: Xcode's account issues profiles
   again (`-allowProvisioningUpdates`). iOS/Mac development profiles include
   iCloud key-value storage, so the App ID has the iCloud capability; the app is
