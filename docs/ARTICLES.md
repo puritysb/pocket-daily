@@ -13,8 +13,9 @@
 3. Articles keeps the local title, source and full text across app restarts. Review opens
    the full saved text. Prepare for reader creates a durable EPUB copy in Files. Connect
    and explicitly Send. No reconnection, library refresh or reader deletion triggers a send.
-4. Reader Home → Articles shows the newest articles with title, source host and New /
-   Reading / Read state. Open uses the existing EPUB reader and resume cache. Back returns
+4. On the reader, Pocket Reader → Articles (the Left front button on Pocket Daily's Home;
+   the stock CrossPoint Home menu keeps only the Pocket Reader entry) shows the newest
+   articles with title, source host and New / Reading / Read state. Open uses the existing EPUB reader and resume cache. Back returns
    to Articles; the end-of-book screen records Read. Articles are exempt from the ordinary
    finished-book auto-move setting and remain in this collection.
 5. Hold Open on an article to confirm deleting that reader copy. The final list action
