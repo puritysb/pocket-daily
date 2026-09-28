@@ -129,10 +129,6 @@ struct ContentView: View {
             }
             if case let .connected(status) = state {
                 model.selectHardware(named: status.model)
-                // Authenticated pairing: remember this reader for reading sync over Bluetooth.
-                if !model.isDemoMode, let peripheral = nearby.connectedPeripheralID {
-                    readerLink.remember(peripheral: peripheral, readerID: status.deviceID, model: status.model)
-                }
                 if model.directConnectionRequested {
                     model.expectDirectReader(status.deviceID)
                     do { try nearby.requestHotspot() }
@@ -177,6 +173,11 @@ struct ContentView: View {
         }
         .task(id: model.isDemoMode) {
             readerLink.isDemoMode = model.isDemoMode
+            // Authenticated pairing: remember this reader for reading sync over Bluetooth.
+            nearby.onAuthenticated = { [weak readerLink] peripheral, status in
+                guard !model.isDemoMode else { return }
+                readerLink?.remember(peripheral: peripheral, readerID: status.deviceID, model: status.model)
+            }
             readerLink.requestSetupConnection = { nearby.scan() }
             readerLink.endSetupConnection = { nearby.disconnect() }
             if model.isDemoMode { inbox.cancelRefresh() }

@@ -35,6 +35,8 @@ final class NearbySyncController: NSObject, ObservableObject {
         return nil
     }
     @Published private(set) var traceEntries: [String] = []
+    /// Called once per authenticated connection with the reader's system identifier.
+    var onAuthenticated: ((UUID, PocketDeviceStatus) -> Void)?
 
     /// Created on the first Find & Connect, not at launch: instantiating a
     /// central manager is what triggers the system Bluetooth permission prompt.
@@ -200,6 +202,9 @@ final class NearbySyncController: NSObject, ObservableObject {
 
     private func publishConnectedIfReady() {
         guard eventNotificationsReady, let pendingStatus else { return }
+        // Before the state change: the shell may request the hotspot on `.connected`,
+        // which moves the state on at once.
+        if let identifier = peripheral?.identifier { onAuthenticated?(identifier, pendingStatus) }
         state = .connected(pendingStatus)
     }
 }

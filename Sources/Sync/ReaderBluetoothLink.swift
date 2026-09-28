@@ -125,7 +125,9 @@ final class ReaderBluetoothLink: ObservableObject {
         scheduler: TaskReaderLinkScheduler()
     )
 
-    @Published private(set) var phase: Phase = .off
+    @Published private(set) var phase: Phase = .off {
+        didSet { if oldValue != phase { ReadingSyncTrace.note("phase \(oldValue) -> \(phase)") } }
+    }
     @Published private(set) var rememberedReader: RememberedBluetoothReader?
 
     /// Pairing for reading sync from Settings: the reader's Sync screen is open and
@@ -156,6 +158,7 @@ final class ReaderBluetoothLink: ObservableObject {
 
     /// Stops reading sync with the remembered reader (a new pairing replaces it).
     func forget() {
+        ReadingSyncTrace.note("forget")
         if session != nil { endSession(error: nil, report: false) }
         cooldownTimer?.cancel()
         cooldownTimer = nil
@@ -240,8 +243,11 @@ final class ReaderBluetoothLink: ObservableObject {
         let reader = RememberedBluetoothReader(peripheralID: peripheral, readerID: readerID, model: model)
         if setup == .searching {
             setup = .paired(model)
-            endSetupConnection?()
+            // Called from the controller's authentication callback: end the connection
+            // after it has published its state.
+            Task { @MainActor [weak self] in self?.endSetupConnection?() }
         }
+        ReadingSyncTrace.note("remember \(model) \(readerID) peripheral \(peripheral.uuidString.prefix(8))")
         guard reader != rememberedReader else { return }
         if session != nil { endSession(error: nil, report: false) }
         store.reader = reader
@@ -276,7 +282,7 @@ final class ReaderBluetoothLink: ObservableObject {
         phase = .waiting
         if !transport.connect(to: reader.peripheralID) {
             phase = .off
-            log.info("Paired reader is unknown to Bluetooth; waiting for a new pairing")
+            note("Paired reader is unknown to Bluetooth; waiting for a new pairing")
         }
     }
 
@@ -349,12 +355,12 @@ final class ReaderBluetoothLink: ObservableObject {
             return
         }
         guard status.deviceID == session.reader.readerID else {
-            log.info("Paired peripheral reported another reader ID; disconnecting")
+            note("Paired peripheral reported another reader ID \(status.deviceID); disconnecting")
             endSession(error: nil, report: false)
             return
         }
         guard status.capabilities.contains(ReadingSyncBLE.capability) else {
-            log.info("Reader firmware does not offer reading sync over Bluetooth")
+            note("Reader firmware does not offer reading sync over Bluetooth: \(text)")
             endSession(error: nil, report: false)
             return
         }
@@ -434,6 +440,7 @@ final class ReaderBluetoothLink: ObservableObject {
             let offers = sync.exchange(with: list, readerName: session.readerName, library: library)
             session.exchanged = true
             session.offers = Array(offers.prefix(ReadingSyncBLE.maximumOffers))
+            note("list merged: \(list.books.count) book(s), \(session.offers.count) offer(s)")
             self.session = session
             phase = .offering
             offerNext()
@@ -502,6 +509,11 @@ final class ReaderBluetoothLink: ObservableObject {
     /// places received are kept either way), and a failure of the reader's
     /// list is reported; a reader that is simply gone, another reader or older
     /// firmware is left quietly. The pending connection is re-armed afterwards.
+    private func note(_ message: String) {
+        log.info("\(message, privacy: .public)")
+        ReadingSyncTrace.note(message)
+    }
+
     private func endSession(error: Error?, report: Bool, rearm: Bool = true, disconnected: Bool = false) {
         guard let session else { return }
         self.session = nil
@@ -516,7 +528,8 @@ final class ReaderBluetoothLink: ObservableObject {
         } else if report, let error {
             sync.exchangeFinished(readerName: session.readerName, sent: 0, error: error)
         }
-        if let error { log.info("Bluetooth reading exchange ended: \(error.localizedDescription, privacy: .public)") }
+        note("session ended: exchanged \(session.exchanged), sent \(session.sent)"
+             + (error.map { ", error \($0.localizedDescription)" } ?? ""))
         if !disconnected { transport.cancelConnection() }
         if rearm { rearmLater() } else { phase = .off }
     }
@@ -564,5 +577,29 @@ private final class TaskReaderLinkTimer: ReaderLinkTimer {
         action = nil
         task?.cancel()
         background.end()
+    }
+}
+
+/// A bounded, local trace of Bluetooth reading-sync events (Application Support/
+/// Pocket/reading-sync.log) for diagnosing a pairing or exchange in the field. It
+/// holds phases, reader IDs and counts only: no book names or places.
+enum ReadingSyncTrace {
+    private static let limit = 150
+
+    @MainActor static func note(_ message: String) {
+        let line = ISO8601DateFormatter().string(from: Date()) + " " + message
+        let url = self.url
+        var lines = (try? String(contentsOf: url, encoding: .utf8))?
+            .components(separatedBy: .newlines).filter { !$0.isEmpty } ?? []
+        lines.append(line)
+        if lines.count > limit { lines.removeFirst(lines.count - limit) }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    static var url: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("Pocket", isDirectory: true).appendingPathComponent("reading-sync.log")
     }
 }
