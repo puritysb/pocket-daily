@@ -188,6 +188,32 @@ final class ReadingSyncTests: XCTestCase {
         XCTAssertNil(sync.readerExchangeError)
     }
 
+    func testReopeningTheSamePlaceIsNotReading() async {
+        let then = Date(timeIntervalSince1970: 1_700_000_000)
+        let saved = ReadingPosition(fraction: 0.2, xpointer: "/body/DocFragment[3]/body/p[1]/text()[1].100", cfi: nil,
+                                    chapter: nil, updatedAt: then)
+        var shown = saved
+        shown.updatedAt = Date()
+        XCTAssertTrue(saved.isSamePlace(as: shown), "The page shown on open is the saved place")
+        shown.xpointer = "/body/DocFragment[3]/body/p[1]/text()[1].900"
+        XCTAssertFalse(saved.isSamePlace(as: shown))
+        XCTAssertTrue(ReadingPosition(fraction: 0.5, xpointer: nil, cfi: nil, chapter: nil, updatedAt: then)
+            .isSamePlace(as: ReadingPosition(fraction: 0.5002, xpointer: nil, cfi: nil, chapter: nil, updatedAt: Date())))
+
+        // With the saved (older) time, a reader place seen since then is the most recent read.
+        let json = """
+        {"v":1,"deviceID":"X3-1","books":[
+          {"document":"\(digest)","progress":"/body/DocFragment[3]/body/p[1]/text()[1].500","percentage":0.3,"updated":0,"seq":4}
+        ]}
+        """
+        var opened = book
+        opened.position = saved
+        _ = sync.exchange(with: try! ReaderReadingList.decode(Data(json.utf8), deviceID: "X3-1"), readerName: "X3",
+                          library: [opened])
+        let suggestion = await sync.suggestion(for: opened, current: saved)
+        XCTAssertEqual(suggestion?.kind, .lastRead)
+    }
+
     func testReaderPlacesRefreshAnOpenBookAndNudgesFollowTheSetting() throws {
         let json = """
         {"v":1,"deviceID":"X3-1","books":[
