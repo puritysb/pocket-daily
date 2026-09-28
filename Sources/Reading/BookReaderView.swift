@@ -125,6 +125,9 @@ struct BookReaderView: View {
         }
         .onAppear {
             session.onPosition = { position in
+                // Opening the book shows the saved page again: keep when it was really read,
+                // so another device that read since then is offered as the most recent.
+                if let saved = library.book(book.id)?.position, saved.isSamePlace(as: position) { return }
                 library.savePosition(position, for: book.id)
                 sync.positionChanged(position, for: book)
             }
@@ -286,14 +289,20 @@ struct BookReaderView: View {
         session.setInsets(top: proxy.safeAreaInsets.top, bottom: proxy.safeAreaInsets.bottom)
     }
 
+    /// The place with the time it was last read here (the session reports the page it
+    /// shows, stamped now, even when nothing was turned).
+    private var savedPosition: ReadingPosition? {
+        library.book(book.id)?.position ?? session.position
+    }
+
     private func checkRemote() async {
         guard session.phase == .ready else { return }
-        suggestion = await sync.suggestion(for: book, current: session.position ?? book.position)
+        suggestion = await sync.suggestion(for: book, current: savedPosition)
     }
 
     private func leave(pushing: Bool) async {
         await library.flushPositions()
-        if pushing, let position = session.position { await sync.pushNow(position, for: book) }
+        if pushing, let position = savedPosition { await sync.pushNow(position, for: book) }
         // Leaving a book is when the reader most wants the new place.
         sync.nudgeReader(minimumInterval: 0)
     }

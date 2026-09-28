@@ -10,6 +10,14 @@ struct ReadingPosition: Codable, Hashable, Sendable {
     var cfi: String?
     var chapter: String?
     var updatedAt: Date
+
+    /// The same page as `other`, whatever its time. Reopening a book or re-rendering a
+    /// page reports the place again; that is not reading, so it keeps the earlier time.
+    func isSamePlace(as other: ReadingPosition) -> Bool {
+        if let xpointer, let otherPointer = other.xpointer { return xpointer == otherPointer }
+        if let cfi, let otherCFI = other.cfi { return cfi == otherCFI }
+        return abs(fraction - other.fraction) < 0.0005
+    }
 }
 
 struct LibraryBook: Codable, Identifiable, Hashable, Sendable {
