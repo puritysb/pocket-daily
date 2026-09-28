@@ -135,7 +135,10 @@ struct ContentView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await inbox.activate(allowNetwork: !model.isDemoMode) } }
+            if phase == .active {
+                Task { await inbox.activate(allowNetwork: !model.isDemoMode) }
+                sync.nudgeReader()
+            }
             else if phase == .background { inbox.suspend() }
 #if os(iOS)
             if phase == .background {
@@ -157,7 +160,13 @@ struct ContentView: View {
         }
         .onChange(of: model.isWorking) { _, working in if !working { exchangeReadingPositions() } }
         .onChange(of: model.readerStatus?.deviceID) { _, _ in exchangeReadingPositions() }
-        .task { model.refreshGlance() }
+        .task {
+            model.refreshGlance()
+            sync.attachReader(model: model, library: library)
+            // Positions are matched against library books, so load them first.
+            if library.books.isEmpty { await library.load() }
+            sync.nudgeReader()
+        }
         .task(id: model.isDemoMode) {
             if model.isDemoMode { inbox.cancelRefresh() }
             await inbox.activate(allowNetwork: !model.isDemoMode)

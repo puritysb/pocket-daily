@@ -18,8 +18,12 @@ struct SyncSettingsView: View {
                         Text("Sign in to iCloud in Settings to continue between your iPhone, iPad and Mac.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    Toggle("Your X3/X4 reader, when connected", isOn: $sync.readerExchangeEnabled)
+                    Toggle("Your X3/X4 reader", isOn: $sync.readerExchangeEnabled)
                         .accessibilityIdentifier("sync-reader-exchange")
+                    if sync.readerExchangeEnabled {
+                        Text("Places are exchanged when you connect, and automatically whenever a reader you connected before is in Same Wi-Fi mode while Pocket Daily is open: as you open or close a book, or return to the app.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     if let last = sync.lastReaderExchange {
                         LabeledContent("Last exchange", value: "\(last.device) · \(last.date.formatted(.relative(presentation: .named)))")
                             .accessibilityIdentifier("sync-last-exchange")

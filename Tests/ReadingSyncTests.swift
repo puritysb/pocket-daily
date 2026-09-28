@@ -188,6 +188,31 @@ final class ReadingSyncTests: XCTestCase {
         XCTAssertNil(sync.readerExchangeError)
     }
 
+    func testReaderPlacesRefreshAnOpenBookAndNudgesFollowTheSetting() throws {
+        let json = """
+        {"v":1,"deviceID":"X3-1","books":[
+          {"path":"/Books/a.epub","document":"\(digest)","progress":"/body/DocFragment[2]/body/p[4]/text().0","percentage":0.5,"updated":0,"seq":3}
+        ]}
+        """
+        let list = try ReaderReadingList.decode(Data(json.utf8), deviceID: "X3-1")
+        let revision = sync.remoteRevision
+        _ = sync.exchange(with: list, readerName: "X3", library: [book])
+        sync.exchangeFinished(readerName: "X3", sent: 0, error: nil)
+        XCTAssertEqual(sync.remoteRevision, revision + 1, "Received reader places make an open book check again")
+        _ = sync.exchange(with: try ReaderReadingList.decode(Data(#"{"v":1,"deviceID":"X3-1","books":[]}"#.utf8), deviceID: "X3-1"),
+                          readerName: "X3", library: [book])
+        sync.exchangeFinished(readerName: "X3", sent: 0, error: nil)
+        XCTAssertEqual(sync.remoteRevision, revision + 1, "An exchange that brought nothing does not")
+
+        var nudges: [TimeInterval] = []
+        sync.readerNudge = { nudges.append($0) }
+        sync.nudgeReader()
+        sync.nudgeReader(minimumInterval: 0)
+        sync.readerExchangeEnabled = false
+        sync.nudgeReader()
+        XCTAssertEqual(nudges, [30, 0], "Turning reader exchange off stops automatic exchanges")
+    }
+
     func testReaderPlaceKeepsTheTimeItWasFirstSeen() async throws {
         func list(_ progress: String) throws -> ReaderReadingList {
             try ReaderReadingList.decode(Data("""

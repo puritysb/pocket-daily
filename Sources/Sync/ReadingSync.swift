@@ -36,6 +36,9 @@ final class ReadingSync: ObservableObject {
     @Published private(set) var readerExchangeError: String?
     /// Changes when another device's iCloud record arrives, so an open book can re-check.
     @Published private(set) var remoteRevision = 0
+    /// Set by the app shell: exchanges with the last reader if it is reachable
+    /// right now, quietly (see `PocketModel.quietReadingExchange`).
+    var readerNudge: ((TimeInterval) -> Void)?
     @Published var iCloudEnabled: Bool {
         didSet { defaults.set(iCloudEnabled, forKey: Keys.iCloud) }
     }
@@ -217,8 +220,17 @@ final class ReadingSync: ObservableObject {
         } else {
             readerExchangeError = nil
             lastReaderExchange = ReaderExchange(device: readerName, date: now, received: pendingReceived, sent: sent)
+            // An open book re-checks its suggestion against the reader's places.
+            if pendingReceived > 0 { remoteRevision += 1 }
         }
         pendingReceived = 0
+    }
+
+    /// Asks for a reader exchange at natural moments (app active, a book opened
+    /// or left). Does nothing when reader exchange is off or no reader is known.
+    func nudgeReader(minimumInterval: TimeInterval = 30) {
+        guard readerExchangeEnabled else { return }
+        readerNudge?(minimumInterval)
     }
 
     private var dismissedMarkers: [String: [String]] {

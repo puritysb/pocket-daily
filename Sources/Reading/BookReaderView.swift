@@ -113,7 +113,10 @@ struct BookReaderView: View {
         }
         .onChange(of: appearanceStore.appearance) { _, value in session.apply(value) }
         .onChange(of: session.phase) { _, phase in
-            if phase == .ready { Task { await checkRemote() } }
+            if phase == .ready {
+                Task { await checkRemote() }
+                sync.nudgeReader()
+            }
         }
         .onChange(of: sync.remoteRevision) { _, _ in Task { await checkRemote() } }
         .onChange(of: scenePhase) { _, phase in
@@ -291,6 +294,8 @@ struct BookReaderView: View {
     private func leave(pushing: Bool) async {
         await library.flushPositions()
         if pushing, let position = session.position { await sync.pushNow(position, for: book) }
+        // Leaving a book is when the reader most wants the new place.
+        sync.nudgeReader(minimumInterval: 0)
     }
 
     private func finish() {

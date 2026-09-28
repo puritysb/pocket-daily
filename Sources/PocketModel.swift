@@ -243,6 +243,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// coverage short on the largest home subnet the candidate list builds.
     private static let discoveryBudget: Duration = .seconds(20)
     private static let lastReaderHostKey = "Pocket.lastReaderHost"
+    private static let lastReaderDeviceIDKey = "Pocket.lastReaderDeviceID"
     private static let stagedFirmwareVersionKey = "Pocket.stagedFirmwareVersion"
 
     enum StorageError: LocalizedError {
@@ -367,6 +368,43 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// screen being edited: when the reader can draw screens inside Sync, it
     /// draws that one afterwards (and cards are not drawn separately, since
     /// the screen shows them).
+    private var quietExchangeTask: Task<Void, Never>?
+    private var lastQuietExchange = Date.distantPast
+
+    /// Exchanges reading positions with the last connected reader when it already
+    /// answers at its last address on the current Wi-Fi. No session is started,
+    /// no network is joined or scanned, and nothing is shown unless the exchange
+    /// itself fails. Only the same reader (device ID) qualifies, so a legacy or
+    /// different reader at that address is left alone.
+    func quietReadingExchange(minimumInterval: TimeInterval = 30,
+                              prepare: @escaping @MainActor (ReaderReadingList, String) -> [PositionRecord],
+                              finish: @escaping @MainActor (String, Int, Error?) -> Void) {
+        guard !isDemoMode, !isInBackground, readerStatus == nil, !hasReaderWork, !isWorking,
+              !hasDirectSession, quietExchangeTask == nil,
+              Date().timeIntervalSince(lastQuietExchange) >= minimumInterval,
+              let host = discoveryIO.rememberedHost, !host.isEmpty,
+              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return }
+        lastQuietExchange = Date()
+        let discoveryIO = discoveryIO, client = client
+        quietExchangeTask = Task { [weak self] in
+            defer { self?.quietExchangeTask = nil }
+            // A reader that is reading, asleep or elsewhere simply does not answer.
+            guard let status = try? await discoveryIO.status(host: host, port: 80, timeout: 1.5),
+                  status.readingProgress == 1, status.deviceID == identity, !Task.isCancelled else { return }
+            var sent = 0
+            do {
+                let list = try await client.readingProgress(identity: identity, host: host, port: 80)
+                for record in prepare(list, status.device).prefix(10) {
+                    try await client.offerReadingProgress(record, identity: identity, host: host, port: 80)
+                    sent += 1
+                }
+                finish(status.device, sent, nil)
+            } catch {
+                if !(error is CancellationError) { finish(status.device, sent, error) }
+            }
+        }
+    }
+
     var canExchangeReadingPositions: Bool {
         !isDemoMode && readerStatus?.readingProgress == 1 && readerStatus?.deviceID != nil
     }
@@ -1127,6 +1165,9 @@ final class PocketModel: ObservableObject, DeviceSession {
         readerStatus = status
         mirror.apply(.sessionStarted(status))
         UserDefaults.standard.set(host, forKey: Self.lastReaderHostKey)
+        if let deviceID = status.deviceID {
+            UserDefaults.standard.set(deviceID, forKey: Self.lastReaderDeviceIDKey)
+        }
         selectHardware(named: status.device)
         activeHost = host
         activeHTTPPort = httpPort
@@ -1845,6 +1886,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     func pauseForBackground() {
         isInBackground = true
+        quietExchangeTask?.cancel()
         readerWorkTask?.cancel()
         // joinOnce is released by iOS while in the background. Never rejoin there.
         connectionAttempt += 1
