@@ -22,15 +22,29 @@ final class NearbySyncController: NSObject, ObservableObject {
         }
     }
 
-    @Published private(set) var state: State = .idle
+    @Published private(set) var state: State = .idle {
+        didSet { refreshOwnership() }
+    }
     @Published private(set) var hotspotLease: HotspotLease?
+    /// Scanning or holding a connection: the background reading-sync link
+    /// (`ReaderBluetoothLink`) stands down while this is set.
+    @Published private(set) var ownsBluetooth = false
+    /// The authenticated reader's system identifier, while connected.
+    var connectedPeripheralID: UUID? {
+        if case .connected = state { return peripheral?.identifier }
+        return nil
+    }
     @Published private(set) var traceEntries: [String] = []
+    /// Called once per authenticated connection with the reader's system identifier.
+    var onAuthenticated: ((UUID, PocketDeviceStatus) -> Void)?
 
     /// Created on the first Find & Connect, not at launch: instantiating a
     /// central manager is what triggers the system Bluetooth permission prompt.
     private var central: CBCentralManager?
     private var scanRequested = false
-    private var peripheral: CBPeripheral?
+    private var peripheral: CBPeripheral? {
+        didSet { refreshOwnership() }
+    }
     private var statusCharacteristic: CBCharacteristic?
     private var commandCharacteristic: CBCharacteristic?
     private var eventCharacteristic: CBCharacteristic?
@@ -39,7 +53,10 @@ final class NearbySyncController: NSObject, ObservableObject {
     private var pendingHotspotRequestID: String?
     private var scanTimeout: Task<Void, Never>?
 
-    override init() {
+    private let ownershipChanged: ((Bool) -> Void)?
+
+    init(ownershipChanged: ((Bool) -> Void)? = nil) {
+        self.ownershipChanged = ownershipChanged
         super.init()
         traceEntries = Self.loadTrace()
         record("Pocket BLE controller initialized")
@@ -135,7 +152,7 @@ final class NearbySyncController: NSObject, ObservableObject {
         eventNotificationsReady = false
         pendingHotspotRequestID = nil
         hotspotLease = nil
-        if central?.state == .poweredOn { state = .idle }
+        state = .idle
     }
 
     func requestHotspot() throws {
@@ -152,6 +169,7 @@ final class NearbySyncController: NSObject, ObservableObject {
 
     private func fail(_ error: Error) {
         record("BLE operation failed: \(error.localizedDescription)")
+        disconnect()
         state = .failed(error.localizedDescription)
     }
 
@@ -176,8 +194,24 @@ final class NearbySyncController: NSObject, ObservableObject {
         return Array(report.components(separatedBy: .newlines).filter { !$0.isEmpty }.suffix(80))
     }
 
+    private func refreshOwnership() {
+        let owns: Bool
+        switch state {
+        case .scanning, .connecting: owns = true
+        case .connected, .switchingToHotspot: owns = peripheral != nil
+        case .idle, .bluetoothUnavailable, .failed: owns = false
+        }
+        if owns != ownsBluetooth {
+            ownershipChanged?(owns)
+            ownsBluetooth = owns
+        }
+    }
+
     private func publishConnectedIfReady() {
         guard eventNotificationsReady, let pendingStatus else { return }
+        // Before the state change: the shell may request the hotspot on `.connected`,
+        // which moves the state on at once.
+        if let identifier = peripheral?.identifier { onAuthenticated?(identifier, pendingStatus) }
         state = .connected(pendingStatus)
     }
 }
@@ -212,7 +246,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
         rssi RSSI: NSNumber
     ) {
         Task { @MainActor in
-            guard self.peripheral == nil else { return }
+            guard state == .scanning, self.peripheral == nil else { return }
             let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
             let serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
             let name = advertisedName ?? peripheral.name

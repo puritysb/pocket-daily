@@ -58,7 +58,7 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Pocket Daily uses Bluetooth to find and securely pair with your nearby reader.</string>
+	<string>Pocket Daily uses Bluetooth to find and securely pair with your nearby reader, and to keep your reading places in step with that paired reader.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_crosspoint._tcp</string>

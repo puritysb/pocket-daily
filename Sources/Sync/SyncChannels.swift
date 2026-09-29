@@ -91,8 +91,9 @@ final class ICloudProgressStore {
 // MARK: Reader exchange
 
 /// One book in the reader's `GET /api/pocket/v1/reading` list (reading-progress v1).
+/// The Bluetooth list omits `path`, so no file names cross the air.
 struct ReaderReadingEntry: Decodable, Equatable, Sendable {
-    var path: String
+    var path: String?
     var document: String
     var filenameDocument: String?
     var progress: String?

@@ -32,6 +32,9 @@ struct PocketDeviceStatus: Equatable {
     let deviceID: String
     let firmware: String?
     let capabilities: Set<String>
+    /// `WIN=1` while the reader is in a reading-sync exchange window, `WIN=0`
+    /// on its Nearby Sync screen; nil from readers without reading sync.
+    let exchangeWindow: Bool?
 
     init(record: String) throws {
         let fields = try RecordParser.fields(record)
@@ -46,6 +49,7 @@ struct PocketDeviceStatus: Equatable {
         self.deviceID = deviceID
         firmware = fields["FW"]
         self.capabilities = Set(capabilities.split(separator: ",").map(String.init))
+        exchangeWindow = fields["WIN"].flatMap { $0 == "1" ? true : $0 == "0" ? false : nil }
     }
 }
 

@@ -33,10 +33,13 @@ struct ContentView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var model: PocketModel
-    @StateObject private var nearby = NearbySyncController()
+    @StateObject private var nearby = NearbySyncController(ownershipChanged: {
+        ReaderBluetoothLink.shared.nearbySessionActive = $0
+    })
     @StateObject private var profileEditor = ProfileEditorState()
     @ObservedObject private var library = LibraryModel.shared
     @ObservedObject private var sync = ReadingSync.shared
+    private let readerLink = ReaderBluetoothLink.shared
     @ObservedObject private var inbox: ArticleInboxModel
     @State private var section: StudioSection
     @State private var reading: ReadingTarget?
@@ -123,7 +126,8 @@ struct ContentView: View {
         }
         .onChange(of: nearby.state) { _, state in
             if let message = state.failureMessage {
-                model.directDiscoveryFailed(message)
+                if readerLink.setup == .searching { readerLink.setup = .failed(message) }
+                else { model.directDiscoveryFailed(message) }
             }
             if case let .connected(status) = state {
                 model.selectHardware(named: status.model)
@@ -141,6 +145,7 @@ struct ContentView: View {
 #endif
                 Task { await inbox.activate(allowNetwork: !model.isDemoMode) }
                 sync.nudgeReader()
+                readerLink.start()
             }
             else if phase == .background { inbox.suspend() }
 #if os(iOS)
@@ -169,6 +174,13 @@ struct ContentView: View {
             sync.nudgeReader()
         }
         .task(id: model.isDemoMode) {
+            // Authenticated pairing: remember this reader for reading sync over Bluetooth.
+            nearby.onAuthenticated = { peripheral, status in
+                guard !model.isDemoMode else { return }
+                readerLink.remember(peripheral: peripheral, readerID: status.deviceID, model: status.model)
+            }
+            readerLink.requestSetupConnection = { nearby.scan() }
+            readerLink.endSetupConnection = { nearby.disconnect() }
             if model.isDemoMode { inbox.cancelRefresh() }
             await inbox.activate(allowNetwork: !model.isDemoMode)
             if !model.isDemoMode { await model.checkFirmwareAtLaunch() }

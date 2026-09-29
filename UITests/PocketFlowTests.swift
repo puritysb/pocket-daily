@@ -177,6 +177,31 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Try demo"].exists)
     }
 
+    func testBluetoothSetupIsExplicitAndHiddenInDemo() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-empty-discovery"]
+        app.launch()
+        XCTAssertTrue(app.buttons["library-options"].waitForExistence(timeout: 10))
+        app.buttons["library-options"].tap()
+        app.buttons["library-sync"].tap()
+        let enabled = app.switches["sync-reader-exchange"]
+        XCTAssertTrue(enabled.waitForExistence(timeout: 5))
+        if enabled.value as? String == "0" { enabled.tap() }
+        XCTAssertTrue(app.buttons["sync-bluetooth-setup"].waitForExistence(timeout: 5))
+        XCTAssertFalse(springboard.alerts.firstMatch.exists)
+        attach(app, "ble-reading-sync-setup")
+        app.terminate()
+        app.launchArguments = ["--demo"]
+        app.launch()
+        XCTAssertTrue(app.buttons["library-options"].waitForExistence(timeout: 10))
+        app.buttons["library-options"].tap()
+        app.buttons["library-sync"].tap()
+        XCTAssertTrue(app.switches["sync-reader-exchange"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["sync-bluetooth-setup"].exists)
+        XCTAssertFalse(springboard.alerts.firstMatch.exists)
+        attach(app, "ble-reading-sync-demo")
+    }
+
     func testDirectConnectionRequiresConfirmationAndOfflinePreparationIsAvailable() {
         let app = XCUIApplication()
         app.launch()
