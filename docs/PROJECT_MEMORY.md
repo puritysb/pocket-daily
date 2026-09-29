@@ -4,6 +4,19 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Firmware product version migration — 2026-09-30
+
+- Pocket Daily firmware starts product version `1.0.0` on CrossPoint 1.6.5.
+  Official tags now use `pocket-v...`; historical `v1.6.6` and
+  `v1.7.0-beta.*` remain old test releases. The firmware contract is in
+  sibling `pocket-daily-firmware/docs/product-versioning.md`.
+- The app accepts only product release tags for Update reader. It recognizes
+  unmarked historical `1.6.6` and `1.7.0` reader versions as migration
+  candidates, including their beta/dev builds; new firmware reports
+  `firmwareLineage: 1` so future versions with the same numbers are distinct.
+  Old firmware cannot retroactively discover the new version through its own
+  updater. Physical installation still requires reader confirmation.
+
 ## BLE integration and review — 2026-09-30
 
 - `codex/ble-sync-review` integrates held app BLE `e4751d3` onto `c22df41`;

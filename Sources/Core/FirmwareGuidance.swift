@@ -1,33 +1,16 @@
 import Foundation
 
-/// Reader firmware guidance. An older reader gets a note with Update reader,
-/// which downloads the latest official release only when tapped
-/// (FirmwareReleaseSource); the bundled minimum needs no network. Dev builds
-/// (`-dev-` version strings) never trigger the hint: they are ahead of or
-/// beside the release lineage by design.
+/// Reader version parsing and the one-time pre-launch version migration.
 enum FirmwareGuidance {
-    /// Bump when a reader release matters for the companion experience.
-    static let minimumRecommended = "1.7.0"
-    static let releasesPage = URL(string: "https://github.com/puritysb/pocket-daily-firmware/releases/latest")!
+    static let minimumRecommended = "1.0.0"
 
-    enum Advice: Equatable {
-        case upToDate
-        case updateAvailable(current: String, minimum: String)
-        case developmentBuild
-        case unknownFormat
-    }
-
-    static func advise(readerVersion: String) -> Advice {
-        let version = readerVersion.trimmingCharacters(in: .whitespaces)
-        if version.contains("-dev-") || version.hasPrefix("DEMO") {
-            return .developmentBuild
-        }
-        guard let running = parse(version), let minimum = parse(minimumRecommended) else {
-            return .unknownFormat
-        }
-        return running < minimum
-            ? .updateAvailable(current: version, minimum: minimumRecommended)
-            : .upToDate
+    /// Before the product's first 1.0.0, GitHub carried v1.6.6 and v1.7.0
+    /// test images. Their numbers are higher but belong to the old lineage.
+    /// New firmware reports lineage 1 so future 1.6.6/1.7.0 are unambiguous.
+    static func isPrelaunchVersion(_ version: String, lineage: Int?) -> Bool {
+        guard lineage == nil, let parsed = parse(version) else { return false }
+        return (parsed.0, parsed.1, parsed.2) == (1, 6, 6)
+            || (parsed.0, parsed.1, parsed.2) == (1, 7, 0)
     }
 
     /// Extracts (major, minor, patch) from a leading `x.y.z` prefix.

@@ -1,29 +1,15 @@
 import XCTest
 @testable import Pocket
 
-/// Reader firmware guidance aligned with the reader's OTA update path.
 final class FirmwareGuidanceTests: XCTestCase {
-    func testOlderReleaseTriggersUpdateAdvice() {
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.6.6"),
-                       .updateAvailable(current: "1.6.6", minimum: "1.7.0"))
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.4.1"),
-                       .updateAvailable(current: "1.4.1", minimum: "1.7.0"))
-    }
-
-    func testCurrentAndNewerAreUpToDate() {
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.7.0"), .upToDate)
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.10.0"), .upToDate)
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.7.0-something"), .upToDate)
-    }
-
-    func testDevelopmentBuildsNeverNag() {
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "1.4.1-dev-main-a1b2c3d-w1234"), .developmentBuild)
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "DEMO 1.0"), .developmentBuild)
-    }
-
-    func testUnparseableVersionIsUnknown() {
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: "weird"), .unknownFormat)
-        XCTAssertEqual(FirmwareGuidance.advise(readerVersion: ""), .unknownFormat)
+    func testHistoricalPublishedVersionsNeedMigration() {
+        XCTAssertTrue(FirmwareGuidance.isPrelaunchVersion("1.6.6", lineage: nil))
+        XCTAssertTrue(FirmwareGuidance.isPrelaunchVersion("1.7.0-beta.4", lineage: nil))
+        XCTAssertTrue(FirmwareGuidance.isPrelaunchVersion("1.7.0-dev-main-abcd", lineage: nil))
+        XCTAssertFalse(FirmwareGuidance.isPrelaunchVersion("1.6.6", lineage: 1))
+        XCTAssertFalse(FirmwareGuidance.isPrelaunchVersion("1.7.0", lineage: 1))
+        XCTAssertFalse(FirmwareGuidance.isPrelaunchVersion("1.4.1", lineage: nil))
+        XCTAssertFalse(FirmwareGuidance.isPrelaunchVersion("weird", lineage: nil))
     }
 
     func testParsing() {

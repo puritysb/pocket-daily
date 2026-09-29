@@ -19,6 +19,9 @@ struct CrossPointStatus: Codable, Equatable {
     let uploadStreamResume: Bool?
     let diagnosticsAffordable: Bool?
     var deviceID: String? = nil
+    /// Present only in the independently versioned Pocket Daily 1.x firmware.
+    var firmwareLineage: Int? = nil
+    var crossPointBase: String? = nil
     var sessionEnd: Bool? = nil
     var contentPresentation: Bool? = nil
     /// Live-studio capability advertisement. Absent on readers that predate
