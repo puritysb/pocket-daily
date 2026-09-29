@@ -4,6 +4,33 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Appearance refresh — 2026-09-30
+
+- `Sources/PocketPalette.swift` owns the app palette as adaptive colors
+  (warm paper in light mode, warm charcoal in dark mode); the app no longer
+  forces `.light`. The reader page keeps its own Paper/White/Night themes.
+  `AccentColor` (amber, with a dark variant) is the global accent, so iOS tab
+  bars, links, toggles and checkboxes match the icon and the Mac sidebar.
+- Value bars use `PocketBarProgressStyle` (`.pocketBar`) on both platforms
+  because the AppKit indicator ignores `tint` and vanished on paper.
+- `scripts/generate_app_icons.swift` renders macOS slots on the Big Sur grid
+  (824-pt rounded shape on a transparent 1024 canvas) and a thicker-stroke
+  variant at 64 px and below; iOS slots stay opaque squares.
+- Symbols: Device tab is `rectangle.portrait.inset.filled`, Connection uses
+  `antenna.radiowaves.left.and.right` (subscriptions keep the dot variant),
+  Files uses `tray.full`, so no two cards on one screen share a symbol.
+- Store captures: the Mac window is made key with `controlActiveState .key`
+  (switches still draw inactive; see `appstore/screenshots/README.md`), and
+  the simulators are pinned to `en_US` before boot. `testRendersDarkAppearance`
+  attaches dark QA renders that the publish step skips.
+- Flow polish from the QA renders (`testRendersUserFlowStates`): the Text &
+  Page sheet is a grouped form with a Done button on macOS; Articles rows share
+  the Library's 1100-pt measure and 24-pt gutter; the Firmware card stays
+  neutral until a reader is connected instead of showing a failed update check;
+  the Library shows an add-books hint until the first own book arrives.
+- Not done: localization (no `.xcstrings`; `appstore/metadata/ko-KR` exists),
+  and Icon Composer layered icons for iOS 26/macOS 26.
+
 ## Firmware product version migration — 2026-09-30
 
 - Pocket Daily firmware starts product version `1.0.0` on CrossPoint 1.6.5.

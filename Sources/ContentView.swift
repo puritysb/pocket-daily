@@ -11,7 +11,7 @@ enum StudioSection: String, CaseIterable, Hashable {
         switch self {
         case .library: "books.vertical"
         case .layout: "rectangle.3.group"
-        case .reader: "externaldrive"
+        case .reader: "rectangle.portrait.inset.filled"
         }
     }
 }
@@ -31,6 +31,8 @@ struct ContentView: View {
     /// Wide layouts use a sidebar; compact layouts use tabs.
     private static let wideWidth: CGFloat = 920
 
+    @AppStorage("appAppearance") private var appearance = AppAppearance.system
+    @ObservedObject private var readerAppearance = ReaderAppearanceStore.shared
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController(ownershipChanged: {
@@ -83,6 +85,7 @@ struct ContentView: View {
                     .id(reading.id)
             }
         }
+        .preferredColorScheme(reading == nil ? appearance.colorScheme : readerAppearance.appearance.theme.colorScheme)
         .background(PocketPalette.workspace)
         .onOpenURL { url in
             Task {
@@ -271,6 +274,9 @@ struct ContentView: View {
                 }
             }
             Spacer()
+            AppAppearancePicker()
+                .pickerStyle(.menu)
+                .font(.caption)
         }
         .padding(12)
         .padding(.top, 12)
@@ -391,7 +397,7 @@ struct ContentView: View {
                     Button("Pause transfer") { model.pauseTransfer() }
                 }
                 if model.activeTransferKind == nil, model.uploadProgress > 0 && model.uploadProgress < 1 {
-                    ProgressView(value: model.uploadProgress)
+                    ProgressView(value: model.uploadProgress).progressViewStyle(.pocketBar)
                 }
                 FilesInspector(model: model) { urls in
                     if let first = urls.first { prepareTransfer(first, action: .wirelessUpload) }
@@ -407,6 +413,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
                                    update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate)
+                AppAppearancePicker().pickerStyle(.menu)
                 if !model.isDemoMode { TroubleshootingInspector(model: model, nearby: nearby) }
                 Button { showingProjectInfo = true } label: {
                     Label("About & Privacy", systemImage: "info.circle")
@@ -483,7 +490,7 @@ private struct ReaderChip: View {
     var body: some View {
         HStack(spacing: 8) {
             if let status = model.readerStatus, !model.isDemoMode {
-                Circle().fill(Color.green).frame(width: 8, height: 8)
+                Circle().fill(PocketPalette.signal).frame(width: 8, height: 8)
                 Text(status.device).font(.callout.weight(.semibold))
                 Text(model.hasDirectSession ? "Direct" : "Same Wi-Fi")
                     .font(.caption).foregroundStyle(.secondary)
@@ -516,7 +523,7 @@ private struct CompactReaderMenu: View {
             Button(action: openReader) {
                 Label(status.device, systemImage: "circle.fill")
                     .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(PocketPalette.signal)
             }
             .accessibilityLabel("\(status.device) connected")
         } else {
@@ -524,10 +531,13 @@ private struct CompactReaderMenu: View {
                 Picker("Preview device", selection: $model.preferredHardware) {
                     ForEach(PocketHardware.allCases) { Text($0.rawValue).tag($0) }
                 }
-                Button("Connect a reader", systemImage: "dot.radiowaves.left.and.right", action: openReader)
+                Button("Connect a reader", systemImage: "antenna.radiowaves.left.and.right", action: openReader)
             } label: {
-                Text("\(model.hardware.rawValue) · \(model.isDemoMode ? "Demo" : "No reader")")
-                    .font(.callout)
+                HStack(spacing: 5) {
+                    Text(model.hardware.rawValue).font(.subheadline.weight(.semibold))
+                    Text(model.isDemoMode ? "Demo" : "No reader").font(.caption).foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.primary)
             }
             .accessibilityIdentifier("reader-menu")
         }
@@ -538,7 +548,8 @@ private struct PocketMark: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7)
-                .fill(PocketPalette.ink)
+                .fill(PocketPalette.deviceTop)
+                .overlay { RoundedRectangle(cornerRadius: 7).stroke(Color.white.opacity(0.14), lineWidth: 0.5) }
                 .frame(width: 32, height: 38)
             RoundedRectangle(cornerRadius: 3)
                 .fill(PocketPalette.paper)
@@ -574,7 +585,7 @@ struct ProjectInformationSheet: View {
                     InfoSection(title: "Reading", symbol: "books.vertical") {
                         Text("Reads DRM-free EPUB books, and text or Markdown files converted to EPUB, on this device. No reader hardware is needed.")
                     }
-                    InfoSection(title: "Compatibility", symbol: "rectangle.connected.to.line.below") {
+                    InfoSection(title: "Compatibility", symbol: "rectangle.portrait.inset.filled") {
                         Text("The companion is designed for X3/X4 hardware running Pocket Daily or compatible CrossPoint-based firmware. Factory firmware and manufacturer cloud services are not supported.")
                     }
                     InfoSection(title: "Independent project", symbol: "person.crop.circle.badge.checkmark") {
@@ -583,7 +594,7 @@ struct ProjectInformationSheet: View {
                     InfoSection(title: "Privacy", symbol: "lock.shield") {
                         Text("No account, analytics, advertising, or cloud relay. Your library stays on this device. Device discovery and transfer stay on Bluetooth and the local network. Reading positions stay in your own iCloud and on your reader. Pocket Daily does not read your coordinates.")
                     }
-                    InfoSection(title: "Firmware responsibility", symbol: "externaldrive.badge.exclamationmark") {
+                    InfoSection(title: "Firmware responsibility", symbol: "cpu") {
                         Text("Custom firmware can affect device support or warranty. Pocket Daily offers official firmware updates and requires confirmation on the reader before installation.")
                     }
 
@@ -757,9 +768,9 @@ private struct ConnectionInspector: View {
     @State private var showingHelp = false
 
     var body: some View {
-        InspectorCard(title: "Connection", symbol: "dot.radiowaves.left.and.right") {
+        InspectorCard(title: "Connection", symbol: "antenna.radiowaves.left.and.right") {
             HStack {
-                Circle().fill(model.readerStatus == nil ? Color.secondary : Color.green).frame(width: 9, height: 9)
+                Circle().fill(model.readerStatus == nil ? Color.secondary : PocketPalette.signal).frame(width: 9, height: 9)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.readerStatus?.device ?? model.hardware.displayName).fontWeight(.semibold)
                     Text(detail).font(.caption).foregroundStyle(.secondary)
@@ -828,18 +839,18 @@ private struct ConnectionInspector: View {
             EmptyView()
         } else if model.isDemoMode {
             Button("Exit demo") { model.exitDemoMode() }
-                .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity)
                 .disabled(model.isWorking)
         } else if model.hasDirectSession, model.readerStatus == nil {
             Button("Reconnect directly") { confirmingDirectConnection = true }
-                .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity)
                 .disabled(model.isWorking)
             Button("End session") { nearby.disconnect(); model.endConnection() }
                 .buttonStyle(.borderless).font(.callout)
                 .disabled(model.isWorking)
         } else if model.readerStatus == nil {
             Button("Find on same Wi-Fi", action: onConnect)
-                .buttonStyle(.borderedProminent).tint(PocketPalette.ink).frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity)
                 .disabled(model.isWorking)
             HStack {
                 Button("Connect directly") { confirmingDirectConnection = true }
@@ -937,7 +948,7 @@ struct FirmwareUpdateCard: View {
                 }
                 if isUpdating || sending {
                     if sending {
-                        ProgressView(value: model.uploadProgress)
+                        ProgressView(value: model.uploadProgress).progressViewStyle(.pocketBar)
                         Text(model.uploadProgress >= 1 ? "Saving on reader…" : "Sending · \(Int(model.uploadProgress * 100))%")
                             .font(.caption)
                     } else {
@@ -965,6 +976,9 @@ struct FirmwareUpdateCard: View {
                     ProgressView("Checking for updates…").font(.caption)
                     Button("Cancel check") { model.cancelFirmwareCheck() }
                         .accessibilityIdentifier("cancel-firmware-check")
+                } else if model.firmwareCheckError != nil, model.readerStatus == nil {
+                    Text("Firmware updates appear when you connect a reader.")
+                        .font(.caption).foregroundStyle(.secondary)
                 } else if let error = model.firmwareCheckError {
                     Text(error).font(.caption).foregroundStyle(.secondary)
                     Button("Try again") { Task { await model.checkFirmwareRelease() } }
@@ -1044,7 +1058,7 @@ private struct FilesInspector: View {
     }
 
     var body: some View {
-        InspectorCard(title: "Files", symbol: "sdcard") {
+        InspectorCard(title: "Files", symbol: "tray.full") {
             // The menu moves under the label when the inspector is narrow.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
@@ -1112,7 +1126,7 @@ private struct PreparedTransferQueue: View {
                     Text(model.destinationLabel(for: item)).font(.caption2).foregroundStyle(.secondary)
                 }
                 if isActive {
-                    ProgressView(value: model.uploadProgress)
+                    ProgressView(value: model.uploadProgress).progressViewStyle(.pocketBar)
                     Text(model.uploadProgress >= 1 ? "Saving on SD card…" : "Sending · \(Int(model.uploadProgress * 100))%")
                         .font(.caption)
                     HStack {
@@ -1205,7 +1219,7 @@ private struct DiagnosticsInspector: View {
             if expanded {
                 ScrollView([.horizontal, .vertical]) {
                     Text(diagnostic.report)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.caption2.monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1231,7 +1245,7 @@ private struct ConnectionTraceInspector: View {
             if expanded {
                 ScrollView([.horizontal, .vertical]) {
                     Text(nearby.traceReport)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.caption2.monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1258,21 +1272,6 @@ struct InspectorCard<Content: View>: View {
         .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 13))
         .overlay { RoundedRectangle(cornerRadius: 13).stroke(PocketPalette.line, lineWidth: 1) }
     }
-}
-
-enum PocketPalette {
-    static let workspace = Color(red: 0.952, green: 0.946, blue: 0.925)
-    static let stage = Color(red: 0.925, green: 0.918, blue: 0.888)
-    static let panel = Color(red: 0.977, green: 0.973, blue: 0.956)
-    static let card = Color.white.opacity(0.72)
-    static let paper = Color(red: 0.94, green: 0.93, blue: 0.86)
-    static let ink = Color(red: 0.105, green: 0.12, blue: 0.115)
-    static let deviceTop = Color(red: 0.105, green: 0.125, blue: 0.12)
-    static let deviceBottom = Color(red: 0.055, green: 0.065, blue: 0.062)
-    static let accent = Color(red: 0.78, green: 0.46, blue: 0.12)
-    static let signal = Color(red: 0.22, green: 0.58, blue: 0.38)
-    static let line = Color.black.opacity(0.11)
-    static let selection = accent.opacity(0.15)
 }
 
 /// Owns a single picker presentation independently of connection/preview updates.

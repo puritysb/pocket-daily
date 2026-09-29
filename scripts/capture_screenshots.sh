@@ -40,6 +40,14 @@ capture_ios() {
   local name="$1" folder="$2" width="$3" height="$4" udid
   udid="$(simulator_udid "$name")"
   [[ -n "$udid" ]] || { echo "ERROR: simulator '$name' is not available." >&2; exit 1; }
+  # The status bar's date follows the simulator's own locale, not the app's, so
+  # pin it to en-US before boot; the setting takes effect on the next boot.
+  xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
+  local prefs="$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Preferences/.GlobalPreferences.plist"
+  mkdir -p "$(dirname "$prefs")"
+  [[ -f "$prefs" ]] || plutil -create binary1 "$prefs"
+  plutil -replace AppleLanguages -json '["en"]' "$prefs"
+  plutil -replace AppleLocale -string en_US "$prefs"
   xcrun simctl boot "$udid" 2>/dev/null || true
   xcrun simctl bootstatus "$udid" -b >/dev/null
   xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 \

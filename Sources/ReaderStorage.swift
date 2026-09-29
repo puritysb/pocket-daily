@@ -54,7 +54,7 @@ struct ReaderStoragePanel: View {
                 }
                 if let total = status.totalHeap, total > 0, status.freeHeap >= 0, status.freeHeap <= total {
                     ProgressView(value: Double(total - status.freeHeap), total: Double(total))
-                        .tint(.blue)
+                        .progressViewStyle(.pocketBar(tint: .secondary))
                         .accessibilityLabel("RAM used")
                         .accessibilityValue("\(Int(100 * Double(total - status.freeHeap) / Double(total))) percent")
                     Text("\(Int(100 * Double(total - status.freeHeap) / Double(total)))% used · working memory")
@@ -66,11 +66,11 @@ struct ReaderStoragePanel: View {
                 Divider()
                 Label("SD card · books & articles", systemImage: "sdcard")
                 if model.isDemoMode {
-                    ProgressView(value: 0.25).tint(.teal)
+                    ProgressView(value: 0.25).progressViewStyle(.pocketBar)
                     Text("Example · 2 GB used / 8 GB").font(.caption).foregroundStyle(.secondary)
                 } else if let usage = model.readerSpace, usage.deviceID == status.deviceID {
                     if let free = usage.free, usage.total > 0 {
-                        ProgressView(value: Double(usage.total - free), total: Double(usage.total)).tint(.teal)
+                        ProgressView(value: Double(usage.total - free), total: Double(usage.total)).progressViewStyle(.pocketBar)
                         Text("\(bytes(usage.total - free)) used / \(bytes(usage.total))")
                             .font(.caption.monospacedDigit())
                     } else {
@@ -82,7 +82,7 @@ struct ReaderStoragePanel: View {
                     ProgressView("Reading SD card…").font(.caption)
                     Button("Cancel") { model.cancelStorageRead() }
                 } else if model.isDemoMode {
-                    Text("Connect a reader in Sync to browse its SD card.").font(.caption).foregroundStyle(.secondary)
+                    Text("Connect a reader to browse its SD card.").font(.caption).foregroundStyle(.secondary)
                 } else if status.readerFiles == 1 {
                     HStack {
                         Button("Browse files") { browsing = true }.accessibilityIdentifier("reader-browse-files")

@@ -33,6 +33,87 @@ final class PocketMacScreenshotTests: XCTestCase {
         try await render(name: "05-articles", hardware: .x3, section: .library, shelf: .articles, inbox: inbox)
     }
 
+    /// QA captures of the dark palette; not part of the store set (names carry no
+    /// leading number, so the capture script skips them).
+    @MainActor
+    func testRendersDarkAppearance() async throws {
+        try await render(name: "dark-library", hardware: .x3, section: .library, dark: true)
+        try await render(name: "dark-home-x3", hardware: .x3, dark: true)
+        try await render(name: "dark-device", hardware: .x3, section: .reader, dark: true)
+    }
+
+    /// QA captures of the states a first-time user meets outside demo mode and
+    /// behind sheets: no reader yet, the reader's controls, the text panel, sync
+    /// settings, adding an article, subscriptions, and About. Not store images.
+    @MainActor
+    func testRendersUserFlowStates() async throws {
+        let model = PocketModel()
+        try await renderView(ContentView(initialSection: .reader).environmentObject(model),
+                             name: "qa-device-no-reader", size: Self.pointSize)
+        try await renderView(ContentView(initialSection: .reader).environmentObject(model),
+                             name: "qa-device-no-reader-dark", size: Self.pointSize, dark: true)
+
+        await LibraryModel.shared.load()
+        let book = try XCTUnwrap(LibraryModel.shared.books.first { $0.origin == .welcome })
+        let url = try await LibraryModel.shared.fileURL(for: book)
+        let session = ReaderSession(bookFile: url, appearance: ReaderAppearance())
+        session.open(at: nil)
+        let reader = BookReaderView(book: book, session: session, library: .shared, sync: .shared, close: {})
+        try await renderView(reader, name: "qa-reader-loading", size: NSSize(width: 1180, height: 780), settle: 0.3)
+        let deadline = Date().addingTimeInterval(20)
+        while session.phase != .ready, Date() < deadline { try await Task.sleep(for: .milliseconds(100)) }
+        session.chromeVisible = true
+        try await renderView(reader, name: "qa-reader-chrome", size: NSSize(width: 1180, height: 780))
+
+        let demo = PocketModel()
+        demo.enterDemoMode()
+        try await renderView(ReaderAppearancePanel(store: ReaderAppearanceStore.shared),
+                             name: "qa-reader-appearance", size: NSSize(width: 420, height: 520))
+        try await renderView(SyncSettingsView(sync: .shared, model: demo, library: .shared),
+                             name: "qa-sync-settings", size: NSSize(width: 520, height: 620))
+        try await renderView(ArticleCaptureView(initialURL: "", completed: {}),
+                             name: "qa-article-add", size: NSSize(width: 520, height: 620))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("qa-feeds-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = ArticleFeedPreview.inbox(root: root)
+        try await inbox.subscribe("https://journal.example/feed.xml")
+        try await renderView(ArticleSubscriptionsView(inbox: inbox, isDemo: true),
+                             name: "qa-subscriptions", size: NSSize(width: 520, height: 520))
+        try await renderView(ProjectInformationSheet(), name: "qa-about", size: NSSize(width: 560, height: 700))
+    }
+
+    /// Hosts any view in a key off-screen window and attaches its drawing.
+    @MainActor
+    private func renderView(_ view: some View, name: String, size: NSSize, dark: Bool = false,
+                            settle: TimeInterval = 3) async throws {
+        let content = view.preferredColorScheme(dark ? .dark : .light)
+            .environment(\.controlActiveState, .key)
+        let hosting = NSHostingView(rootView: content)
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let frame = NSRect(origin: NSPoint(x: 0, y: -20_000), size: size)
+        let window = CaptureWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = hosting
+        window.setFrame(frame, display: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        window.layoutIfNeeded()
+        window.displayIfNeeded()
+        try await Task.sleep(for: .seconds(settle))
+        window.displayIfNeeded()
+        guard let content = window.contentView,
+              let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+            XCTFail("Could not create a bitmap for \(name)")
+            return
+        }
+        content.cacheDisplay(in: content.bounds, to: rep)
+        window.orderOut(nil)
+        let attachment = XCTAttachment(data: try opaquePNG(rep), uniformTypeIdentifier: "public.png")
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     @MainActor
     func testRendersFirmwareUpdateCard() async throws {
         let release = FirmwareRelease(version: "1.8.0", downloadURL: URL(string: "https://example.invalid/firmware.bin")!,
@@ -67,14 +148,17 @@ final class PocketMacScreenshotTests: XCTestCase {
     @MainActor
     private func render(name: String, hardware: PocketHardware, section: StudioSection = .layout,
                         preview: ProfileStudioView.PreviewSurface = .home, shelf: LibraryView.Shelf = .books,
-                        inbox: ArticleInboxModel? = nil) async throws {
+                        inbox: ArticleInboxModel? = nil, dark: Bool = false) async throws {
         let model = PocketModel()
         model.preferredHardware = hardware
         model.enterDemoMode()
 
         let content = ContentView(initialSection: section, initialPreview: preview, initialShelf: shelf, inbox: inbox)
             .environmentObject(model)
-            .preferredColorScheme(.light)
+            .preferredColorScheme(dark ? .dark : .light)
+            // The test runner is never the frontmost app, so AppKit would draw every
+            // control dimmed; tell SwiftUI the window is active regardless.
+            .environment(\.controlActiveState, .key)
 
         let hosting = NSHostingView(rootView: content)
         hosting.frame = NSRect(origin: .zero, size: Self.pointSize)
@@ -83,11 +167,17 @@ final class PocketMacScreenshotTests: XCTestCase {
         // screen's visible frame, which silently cropped the capture to the display
         // height instead of the requested 900 points.
         let frame = NSRect(origin: NSPoint(x: 0, y: -20_000), size: Self.pointSize)
-        let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = CaptureWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.contentView = hosting
         window.setFrame(frame, display: true)
         // Order the window in so AppKit gives it a backing store and SwiftUI performs a
         // real layout pass; an unrealised window never lays out its scroll view contents.
+        // It must also be the key window: controls in an inactive window draw in the
+        // dimmed "background" style, which turned every toggle and bar grey.
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         window.layoutIfNeeded()
         window.displayIfNeeded()
@@ -139,4 +229,11 @@ final class PocketMacScreenshotTests: XCTestCase {
         }
         return opaque
     }
+}
+
+/// A borderless window that can become key, so captured controls draw in their
+/// active appearance.
+private final class CaptureWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }

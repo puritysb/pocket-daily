@@ -20,7 +20,7 @@ struct PocketDevicePreview: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .shadow(color: PocketPalette.ink.opacity(0.2), radius: 18, y: 10)
+                    .shadow(color: .black.opacity(0.3), radius: 18, y: 10)
                 RoundedRectangle(cornerRadius: width * 0.046)
                     .stroke(Color.white.opacity(0.14), lineWidth: 1)
                     .padding(width * 0.018)

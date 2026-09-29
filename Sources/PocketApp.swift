@@ -33,7 +33,6 @@ struct PocketApp: App {
     private var mainView: some View {
         ContentView()
             .environmentObject(model)
-            .preferredColorScheme(.light)
 #if os(macOS)
             .frame(minWidth: 1080, minHeight: 720)
 #endif
