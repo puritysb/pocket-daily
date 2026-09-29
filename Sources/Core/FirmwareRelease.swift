@@ -8,7 +8,7 @@ struct FirmwareRelease: Equatable, Sendable {
     let version: String
     let downloadURL: URL
     let byteCount: Int
-    /// A GitHub pre-release (for example `v1.7.0-beta.1`); only the beta
+    /// A GitHub pre-release (for example `pocket-v1.0.0-beta.1`); only the beta
     /// channel of development builds ever sees one.
     var isPrerelease = false
     var publishedAt: Date? = nil
@@ -98,13 +98,15 @@ enum FirmwareReleaseSource {
     private static func release(from document: ReleaseDocument, allowingPrerelease: Bool) throws -> FirmwareRelease {
         let prerelease = document.prerelease == true
         guard document.draft != true, allowingPrerelease || !prerelease else { throw FirmwareReleaseError.malformed }
-        var version = document.tag_name.trimmingCharacters(in: .whitespaces)
-        if version.hasPrefix("v") || version.hasPrefix("V") { version.removeFirst() }
-        guard FirmwareGuidance.parse(version) != nil,
+        let tag = document.tag_name.trimmingCharacters(in: .whitespaces)
+        guard tag.hasPrefix("pocket-v") else { throw FirmwareReleaseError.malformed }
+        let version = String(tag.dropFirst("pocket-v".count))
+        guard version.wholeMatch(of: /^\d+\.\d+\.\d+(?:-beta\.\d+)?$/) != nil,
+              prerelease == version.contains("-beta."),
               let asset = document.assets.first(where: { $0.name == "firmware.bin" }) else {
             throw FirmwareReleaseError.malformed
         }
-        guard asset.browser_download_url.hasPrefix(downloadPrefix),
+        guard asset.browser_download_url.hasPrefix(downloadPrefix + tag + "/"),
               let url = URL(string: asset.browser_download_url), url.scheme == "https" else {
             throw FirmwareReleaseError.untrustedLocation
         }
@@ -158,8 +160,9 @@ enum FirmwareReleaseSource {
     /// True when `latest` is newer than what the reader runs. Development
     /// builds compare by their x.y.z prefix, so a dev build of the current
     /// release is not offered the same release again.
-    static func isNewer(_ latest: String, than running: String) -> Bool {
+    static func isNewer(_ latest: String, than running: String, lineage: Int? = nil) -> Bool {
         guard let new = FirmwareGuidance.parse(latest), let old = FirmwareGuidance.parse(running) else { return false }
+        if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage) { return true }
         return new > old
     }
 
@@ -167,12 +170,15 @@ enum FirmwareReleaseSource {
     /// Stable offers only a newer x.y.z. Beta also offers any other build of
     /// the same x.y.z (a beta over a dev build, the final release over its
     /// beta) but never the exact version the reader runs or an older series.
-    static func shouldOffer(_ release: String, to running: String, channel: Channel) -> Bool {
+    static func shouldOffer(_ release: String, to running: String, channel: Channel,
+                            lineage: Int? = nil) -> Bool {
         switch channel {
         case .stable:
-            return isNewer(release, than: running)
+            guard !release.contains("-") else { return false }
+            return isNewer(release, than: running, lineage: lineage)
         case .beta:
             guard let new = FirmwareGuidance.parse(release), let old = FirmwareGuidance.parse(running) else { return false }
+            if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage) { return true }
             return new > old || (new == old && release != running)
         }
     }

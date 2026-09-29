@@ -1466,7 +1466,8 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     var firmwareUpdateAvailable: Bool {
         guard let release = latestFirmwareRelease, let running = readerStatus?.version else { return false }
-        return FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel)
+        return FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel,
+                                                 lineage: readerStatus?.firmwareLineage)
     }
 
     /// Metadata only, once per app model lifetime. Failed checks offer an explicit retry.
@@ -1523,7 +1524,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             else { release = try await releaseSource.latest() }
             latestFirmwareRelease = release
             try Task.checkCancellation()
-            guard FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel) else {
+            guard FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel,
+                                                    lineage: readerStatus?.firmwareLineage) else {
                 post("The reader is up to date: it runs \(running) and the latest release is \(release.version).", tone: .success)
                 return nil
             }
