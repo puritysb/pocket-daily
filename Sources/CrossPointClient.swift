@@ -1028,6 +1028,14 @@ actor CrossPointClient {
         return try ReaderReadingList.decode(data, deviceID: identity)
     }
 
+    /// The body of a reading-progress offer, the same over HTTP and Bluetooth.
+    static func readingOfferBody(_ record: PositionRecord, identity: String) throws -> Data {
+        try JSONSerialization.data(withJSONObject: [
+            "deviceID": identity, "document": record.document, "progress": record.progress,
+            "percentage": record.percentage, "device": record.device,
+        ], options: [.sortedKeys, .withoutEscapingSlashes])
+    }
+
     /// Offers a position to the reader; it asks before moving when the book opens.
     func offerReadingProgress(_ record: PositionRecord, identity: String, host: String, port: Int) async throws {
         guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/reading") else {
@@ -1037,10 +1045,7 @@ actor CrossPointClient {
         request.httpMethod = "POST"
         request.timeoutInterval = 10
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "deviceID": identity, "document": record.document, "progress": record.progress,
-            "percentage": record.percentage, "device": record.device,
-        ])
+        request.httpBody = try Self.readingOfferBody(record, identity: identity)
         let (data, response) = try await http.data(for: request, session: session)
         if (response as? HTTPURLResponse)?.statusCode == 404 { return }
         try Self.requireSuccess(response, body: data)

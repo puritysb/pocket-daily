@@ -4,6 +4,27 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## BLE integration and review — 2026-09-30
+
+- `codex/ble-sync-review` integrates held app BLE `e4751d3` onto `c22df41`;
+  firmware counterpart is based on `ee188fe7` plus held BLE `68a77147`.
+  This change contains the reviewed integration. GitHub PRs/releases record
+  publication state; physical BLE acceptance remains pending.
+- Fixes serialize early END against the READ_LIST write acknowledgement, count
+  only persisted OK offers, bind demo before launch, and yield synchronously to
+  explicit Nearby Sync and the existing HTTP/user-work lane (including drain).
+  Restored non-selected connections and failed/cancelled Nearby discovery are
+  cleaned up. Reading-sync traces no longer include raw status or reader IDs.
+- `docs/READING_PROGRESS.md` records the contract and OS-controlled background
+  behavior. Firmware `docs/ble-sync-review-2026-09-30.md` records acceptance:
+  96/40 KiB startup gate deliberately skips the old ~83 KB Home case; current
+  X3/X4 actual exchange, heap, bonds, Wi-Fi handoff and sleep remain unverified.
+- Validation: 439 iOS unit tests (31 BLE), 2 BLE/permission UI tests, macOS
+  build/tests and 430/430 firmware XPointers pass. All 19 store screenshots
+  regenerated/inspected; only four iPad status-bar date differences arose and
+  were omitted. App Store source validation and renderer artifact verification
+  pass. Logs/captures are in ignored `.build/ble-review/`.
+
 ## Repository split
 
 - 2026-09-30 Firmware integration follow-up at `ee188fe7`: imported a freshly

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// A weak Wi-Fi link or a reader briefly busy serving a preview/transfer must
@@ -716,7 +717,11 @@ final class PocketModel: ObservableObject, DeviceSession {
     private var connectionAttempt = 0
     private var nearbyLease: HotspotLease?
     private var readerWorkTask: Task<Void, Never>?
-    private var readerWorkOwner: UUID?
+    @Published private var readerWorkOwner: UUID?
+    /// Includes quiet HTTP exchanges and cancellation draining. BLE yields to this lane.
+    var readerWorkActive: AnyPublisher<Bool, Never> {
+        $readerWorkOwner.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
+    }
     private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage, quietReading }
     private var readerWorkKind: ReaderWorkKind?
     private var isInBackground = false

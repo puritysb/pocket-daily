@@ -8,6 +8,7 @@ percentage, device, device_id, timestamp)를 쓴다.
 | --- | --- | --- | --- |
 | iCloud 키-값 저장소 | 같은 Apple ID의 iPhone·iPad·Mac | Apple iCloud (개발자 서버 없음) | iCloud 로그인, 설정에서 켬(기본 켬) |
 | 리더 직접 교환 | 앱 ↔ X3/X4 | 기존 Sync 연결(LAN/직접 연결) | 펌웨어 `readingProgress: 1` |
+| 리더 Bluetooth 교환 | 앱 ↔ 페어링한 X3/X4 | 본딩된 Nearby Sync BLE(백그라운드 가능) | 상태 `CAP`에 `READ1` |
 
 공통 규칙: 다른 기기의 더 앞선 위치만 제안하고 페이지를 자동으로 옮기지 않는다.
 문서 식별은 partial MD5(리더도 같은 값), 위치는 XPointer + 페이지 시작 기준 진행률.
@@ -81,4 +82,50 @@ percentage, device, device_id, timestamp)를 쓴다.
 끝날 때까지 기다린다. 데모 진입·직접 연결 준비·백그라운드 진입도 이를 취소한다.
 probe/위치 읽기/각 제안 쓰기 후 소유권을 재확인해 오래된 결과를 적용하지 않는다.
 iOS 활성화에서는 foreground 상태 복원을 먼저 처리한 뒤 위치 교환을 요청한다.
-BLE·Wi-Fi 계약과 리더 위치 payload는 변경하지 않았다.
+이 HTTP 작업 수명 보강은 리더 위치 payload를 변경하지 않았다.
+
+## 리더 Bluetooth 교환 (reading-sync-ble-v1, 2026-09-29)
+
+펌웨어 계약 원본은 형제 저장소 `docs/reading-sync-ble-v1.md`다. 같은 목록·오퍼 JSON을 본딩된
+Nearby Sync 서비스로 나른다. 하드웨어 검증 전이다.
+
+- 기억: Connect directly(Nearby Sync)에서 인증된 연결(암호화 상태 읽기 + 이벤트 구독)이 되면 앱은
+  주변기기 식별자와 상태의 `ID`, `MODEL`만 UserDefaults `readerLink.remembered.v1`에 저장한다.
+  패스키·핫스팟 정보는 저장하지 않는다. 페어링한 리더가 없으면 Bluetooth를 켜지 않는다(권한 창 없음).
+- 링크(`Sources/Sync/ReaderBluetoothLink.swift`): 스캔하지 않고 기억한 주변기기에 대기 `connect`만
+  걸어 둔다. iOS는 복원 식별자 `PocketReaderReadingSync`와 `UIBackgroundModes: bluetooth-central`로
+  리더의 교환 창(책 닫기·깨우기 45초, 잠들기 20초)에 백그라운드 연결·상태 복원을 요청한다.
+  실행 여부와 시간은 OS가 결정하며 매번 전달되거나 강제 종료 후 자동 복구된다고 보장하지 않는다.
+  macOS는 앱이 실행 중일 때만 한다.
+- 순서: 서비스·특성 탐색 → 이벤트 구독 + 상태 읽기 → `ID`가 기억한 값과 같고 `CAP`에 `READ1`이
+  있어야 한다(아니면 조용히 끊음) → `READ_LIST` → `D` 조각을 seq로 모아(순서 뒤섞임·중복 허용,
+  같은 seq에 다른 내용·빈 seq·8 KiB 초과는 거부) `END`의 길이와 CRC-32(IEEE)가 맞을 때만
+  `ReaderReadingList`로 해석(`path` 없음) → 서재를 불러와(비어 있으면 load) HTTP 교환과 같은
+  `ReadingSync.exchange` 규칙으로 병합 → 이 기기가 더 앞선 책만 최대 10개 `OFFER` + `W`
+  조각(≤180바이트, UTF-8 경계에서 자름, 응답 있는 쓰기)으로 보낸다. 본문은 HTTP POST와 같은
+  JSON(`CrossPointClient.readingOfferBody`). `OK`를 받아야 다음 오퍼, `ERR UNKNOWN_DOCUMENT`는
+  HTTP 404처럼 건너뛰고, 다른 `ERR`은 교환 실패다 → `exchangeFinished` → 끊고 다시 대기.
+- 시간 제한: 준비 15초, 레코드 사이 10초, 연결 전체 60초. 끝나면 60초 쉬었다가 대기 연결을 다시
+  건다(리더의 가장 긴 창보다 길어 한 창에 한 번 교환). iOS는 이 타이머를 백그라운드 작업으로
+  잡고, 시스템이 시간을 먼저 끝내면 그때 바로 다시 건다.
+- 보고: 목록을 병합하기 시작한 뒤의 실패와 목록 자체의 오류(`ERR`, CRC·형식)는 설정의 "마지막
+  교환 실패"에 남고, 받은 위치는 유지된다. 다른 리더·구 펌웨어·응답 없음은 조용히 넘어간다.
+- 물러섬: Connect directly가 스캔·연결 중이면(`NearbySyncController.ownsBluetooth`) 진행 중인 교환을
+  끊고 대기 연결도 취소한다. 데모 모드와 "Your X3/X4 reader" 끄기도 같다. 페이지는 절대 옮기지 않는다.
+
+### 2026-09-30 통합 점검
+
+- 앱 `c22df41`, 펌웨어 `ee188fe7`에서 각각 `codex/ble-sync-review` 후보를 준비했다.
+  이 변경은 기존 `feat/ble-reading-sync` 이력을 포함한다. main 병합·배포 상태는
+  GitHub PR·릴리스에서 확인하며, 실기 검증 완료를 의미하지 않는다.
+- `END`가 `READ_LIST` 쓰기 완료보다 먼저 와도 양쪽 완료 전에는 다음 `OFFER`를 쓰지 않는다.
+  전송 성공 수는 실제 저장 `OK`에만 증가한다. timeout/forget/UNKNOWN_DOCUMENT는 성공으로 세지 않는다.
+- 앱 시작 전에 데모 상태를 구독하고, 데모 변경과 Nearby Sync의 라디오 점유를 동기적으로 반영한다.
+  SwiftUI의 다음 화면 갱신까지 자동 연결 취소가 지연되지 않는다.
+- HTTP 조용한 교환·사용자 작업·취소 I/O 정리 동안 기존 작업 소유권 publisher로 BLE를 중단한다.
+  따라서 서로 다른 전송이 공유 병합 상태를 동시에 덮어쓰지 않는다.
+- 복원된 연결 중 기억한 리더가 아닌 것은 취소한다. reading-sync.log에는 원시 상태/기기 ID를 남기지 않는다.
+- 펌웨어는 부족한 힙에서 창을 건너뛴다. 현재 후보의 96/40 KiB 시작 조건 때문에 과거 83 KB Home
+  사례는 동기화되지 않을 수 있다. 실기에서 창 열림과 실제 lists/offers 완료를 각각 확인해야 한다.
+- iOS 백그라운드 정책 근거: [Apple Core Bluetooth](https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html).
+  실기 체크리스트와 전체 판정은 펌웨어 `docs/ble-sync-review-2026-09-30.md`에 모았다.

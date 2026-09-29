@@ -2,7 +2,16 @@ import SwiftUI
 
 @main
 struct PocketApp: App {
-    @StateObject private var model = PocketModel()
+    @StateObject private var model: PocketModel
+
+    init() {
+        // Before any scene: a background relaunch for a restored Bluetooth
+        // connection must recreate the reading-sync central at once.
+        let model = PocketModel()
+        _model = StateObject(wrappedValue: model)
+        ReaderBluetoothLink.shared.bindAppState(to: model)
+        ReaderBluetoothLink.shared.start()
+    }
 
     var body: some Scene {
         WindowGroup {
