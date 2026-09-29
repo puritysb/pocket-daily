@@ -122,3 +122,26 @@ firmware release. Logs: `.build/firmware-simple-tests-final.log`,
 Final macOS build/render tests and 3 store captures pass; all 11 store images
 were regenerated. `validate_app_store.sh` and `git diff --check` pass. No new
 SpringBoard crash report appeared during this sequential simulator run.
+
+## Publication confirmation and compatibility — 2026-09-29
+
+General file sends require an existing Pocket advertisement before any upload:
+`transferControl:1`, a valid `uploadStreamPort`, or positive `uploadChunkBytes`.
+These are compatibility evidence from the existing Pocket protocol; a generic
+CrossPoint `/api/status` plus browser `/upload` is insufficient. No new firmware
+capability or route is assumed. Unrecognized firmware is rejected before staging;
+use supported Pocket firmware or the Mac SD-copy path.
+
+Each prepared item can now carry optional `publicationPending:true`. Old queues
+without the field remain readable. The app writes this marker atomically before
+sending commit, off the main thread. Successful verified publication removes the
+queue item. A lost/malformed reply, cancellation, app exit, or local cleanup failure
+can leave the marker. Resume refuses to upload that item again. Check the reader,
+then explicitly remove the prepared copy before preparing a replacement. Removing
+prepared copies still never removes a published target. This is intentionally
+conservative even when commit was rejected or cancellation preceded the request.
+It is not a receipt or proof that the reader published the file.
+
+A future firmware receipt/idempotent-commit contract can resolve these records
+without manual inspection. Until that exists, the app must preserve uncertainty;
+it cannot promise that the previous target survived every client-side error.

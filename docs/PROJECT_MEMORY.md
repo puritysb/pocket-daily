@@ -6,6 +6,40 @@ with a dated note below.
 
 ## Repository split
 
+- 2026-09-30 Firmware integration follow-up at `ee188fe7`: imported a freshly
+  built/verified Apple host renderer (`apple-host-nx6umpg9`; exact hashes in
+  `docs/HOST_RENDERER.md`), including Pocket Reader's Articles action. ABI/header
+  unchanged; existing Swift/test changes preserved byte-for-byte. No transport
+  changes needed: BLE/upload/reading contracts remain v1 and firmware adapts
+  app font-size slots 0..3 to point sizes. iOS 408/408 and Mac tests pass; all
+  19 screenshots regenerated and inspected (5 content changes retained, date-only
+  changes omitted); App Store source validator passes. Previous renderer backed
+  up by importer. Firmware source and physical devices were not modified; physical
+  preview parity and the earlier server-side target/receipt follow-ups remain open.
+
+- 2026-09-29 App-side integration hardening: quiet reading exchange now owns the
+  shared operation lane (preemptible by user work, cancelled/drained on transitions);
+  iOS restores foreground state before nudging reading sync. Settings saves re-probe
+  known device identity. Generic transfers require existing Pocket upload/commit
+  advertisements; commit writes a durable `publicationPending` marker and unknown
+  outcomes cannot be blindly resumed. Preview compares font family/size and says
+  reader layout rather than exact match. iOS 408 unit tests and Mac build pass;
+  Mac firmware XPointer check 430/430. iPhone UI 22/22; iPad 17/22 initially,
+  all 5 failures pass after simulator restart without code changes. Screenshot
+  regeneration (19 captures, date-only differences omitted), Mac tests and App Store
+  source validation pass. No firmware protocol change or hardware
+  acceptance. Server-side target/CAS, publication receipts and renderer identity
+  remain joint follow-ups in `docs/APP_FIRMWARE_INTEGRATION_REVIEW.md`.
+
+- 2026-09-29 App/firmware integration review at app 2757e805 / firmware ccc601c5:
+  `docs/APP_FIRMWARE_INTEGRATION_REVIEW.md`. Source review identifies quiet
+  reading exchange outside operation ownership, foreground nudge ordering,
+  preferences without target identity, uncertain file-commit outcomes, missing
+  commit capability admission, and preview parity overstatement. Recommendations
+  at that review stage; follow-up implementation is recorded above. Initial iOS unit tests 400/400, Mac firmware
+  XPointer check 430/430, renderer artifact verification and 2 Python tests pass.
+  Hardware and release validation were not rerun.
+
 - 2026-09-29 Continue Reading with the reader: automatic Wi-Fi exchange with the
   last reader (same device ID, 1.5 s probe of its last address on app activation,
   book open/close); opening a book no longer counts as reading (keeps the saved

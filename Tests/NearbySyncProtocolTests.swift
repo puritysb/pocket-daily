@@ -1980,3 +1980,163 @@ private final class RecoveryURLProtocol: URLProtocol, @unchecked Sendable {
     }
     override func stopLoading() {}
 }
+
+
+@MainActor
+private final class QuietAuditDiscovery: ReaderDiscoveryIO {
+    var rememberedHost: String? { "reader.test" }
+    var entered = false
+    var pending: CheckedContinuation<CrossPointStatus, Error>?
+    func candidates() -> [String] { [] }
+    func firstBonjour(timeout: Duration) async -> (host: String, port: Int)? { nil }
+    func stop() {}
+    func status(host: String, port: Int, timeout: TimeInterval) async throws -> CrossPointStatus {
+        entered = true
+        return try await withCheckedThrowingContinuation { pending = $0 }
+    }
+    func release() throws {
+        let status = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"t","device":"X3","deviceID":"1234ABCD","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"readingProgress":1}"#.utf8))
+        pending?.resume(returning: status)
+        pending = nil
+    }
+}
+
+extension NearbySyncProtocolTests {
+    @MainActor
+    func testQuietProbeCannotContinueAfterDemoOrBackground() async throws {
+        let key = "Pocket.lastReaderDeviceID"
+        let previous = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(previous, forKey: key) }
+        UserDefaults.standard.set("1234ABCD", forKey: key)
+        for demo in [true, false] {
+            HeldReaderURLProtocol.reset()
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [HeldReaderURLProtocol.self]
+            let session = URLSession(configuration: config)
+            let discovery = QuietAuditDiscovery()
+            let model = PocketModel(discoveryIO: discovery, client: CrossPointClient(session: session))
+            defer { model.pauseForBackground(); session.invalidateAndCancel() }
+            model.quietReadingExchange(minimumInterval: 0, prepare: { _, _ in
+                XCTFail("Stale exchange prepared offers"); return []
+            }, finish: { _, _, _ in XCTFail("Stale exchange reported completion") })
+            for _ in 0..<100 where !discovery.entered { try await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertTrue(discovery.entered)
+            XCTAssertFalse(model.isWorking, "Background work must not disable user controls")
+            if demo { model.enterDemoMode(); XCTAssertTrue(model.isDemoMode) }
+            else { model.pauseForBackground() }
+            try discovery.release() // Simulates an OS operation ignoring cancellation.
+            try await Task.sleep(for: .milliseconds(30))
+            XCTAssertTrue(HeldReaderURLProtocol.requests.isEmpty)
+        }
+    }
+
+    @MainActor
+    func testForegroundEnablesQuietExchangeAndDemoCancelsItsActiveRead() async throws {
+        let key = "Pocket.lastReaderDeviceID"
+        let previous = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(previous, forKey: key) }
+        UserDefaults.standard.set("1234ABCD", forKey: key)
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        let discovery = QuietAuditDiscovery()
+        let model = PocketModel(discoveryIO: discovery, client: CrossPointClient(session: session))
+        defer { model.pauseForBackground(); session.invalidateAndCancel() }
+        model.pauseForBackground()
+        model.quietReadingExchange(minimumInterval: 0, prepare: { _, _ in [] }, finish: { _, _, _ in })
+        XCTAssertFalse(discovery.entered)
+        model.resumeForForeground()
+        model.quietReadingExchange(minimumInterval: 0, prepare: { _, _ in
+            XCTFail("Cancelled read prepared offers"); return []
+        }, finish: { _, _, _ in XCTFail("Cancelled read completed") })
+        for _ in 0..<100 where !discovery.entered { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(discovery.entered)
+        try discovery.release()
+        let request = try await heldRequest(0)
+        XCTAssertEqual(request.request.url?.path, "/api/pocket/v1/reading")
+        model.enterDemoMode()
+        for _ in 0..<100 where !request.wasStopped { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(request.wasStopped)
+        XCTAssertTrue(model.isDemoMode)
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+    }
+
+    @MainActor
+    func testUserConnectionDrainsQuietProbeBeforeOpeningSocket() async throws {
+        let key = "Pocket.lastReaderDeviceID"
+        let previous = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(previous, forKey: key) }
+        UserDefaults.standard.set("1234ABCD", forKey: key)
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        let discovery = QuietAuditDiscovery()
+        let model = PocketModel(discoveryIO: discovery, client: CrossPointClient(session: session))
+        defer { model.pauseForBackground(); session.invalidateAndCancel() }
+        model.quietReadingExchange(minimumInterval: 0, prepare: { _, _ in
+            XCTFail("Superseded exchange prepared offers"); return []
+        }, finish: { _, _, _ in XCTFail("Superseded exchange completed") })
+        for _ in 0..<100 where !discovery.entered { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(discovery.entered)
+        let next = Task { await model.verify(host: "new-reader.test", port: 80) }
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertTrue(model.isWorking)
+        XCTAssertTrue(HeldReaderURLProtocol.requests.isEmpty, "Must drain the predecessor")
+        try discovery.release()
+        let request = try await heldRequest(0)
+        XCTAssertEqual(request.request.url?.host, "new-reader.test")
+        XCTAssertEqual(request.olderActiveRequests, 0)
+        next.cancel()
+        await next.value
+    }
+
+    func testSettingsPreflightRejectsChangedIdentityBeforePost() async throws {
+        let body = Data(#"{"version":"t","device":"X3","deviceID":"BBBBBBBB","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8)
+        let client = recoveryClient([.success(body)])
+        do {
+            try await client.save(preferences: ReaderPreferences(), host: "reader.test", port: 80, expectedDeviceID: "AAAAAAAA")
+            XCTFail("Changed reader accepted settings")
+        } catch {}
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 1, "Only the identity probe, no POST")
+    }
+
+    func testAtomicTransferAdmissionRejectsPlainCrossPoint() throws {
+        let data = Data(#"{"version":"1.6.5","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8)
+        let plain = try JSONDecoder().decode(CrossPointStatus.self, from: data)
+        XCTAssertFalse(plain.supportsAtomicUpload)
+        var pocket = plain
+        pocket.transferControl = 1
+        XCTAssertTrue(pocket.supportsAtomicUpload)
+    }
+}
+
+
+extension NearbySyncProtocolTests {
+    func testLostCommitResponseIsUnconfirmedAndRunsWriteAheadMarker() async throws {
+        let fixture = try temporaryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let file = fixture.base.appendingPathComponent("book.epub")
+        let marker = fixture.base.appendingPathComponent("pending")
+        let bytes = Data("book".utf8)
+        try bytes.write(to: file)
+        var crc = CRC32()
+        crc.update(bytes)
+        let reply = Data("OK 4 \(String(format: "%08X", crc.finalized))\n".utf8)
+        let reader = try FakeUploadReader(expectedPayload: 4, onHeader: { _ in nil }, onPayload: { _ in reply })
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let client = recoveryClient([.failure(URLError(.networkConnectionLost))])
+        do {
+            _ = try await client.uploadAtomically(fileURL: file, host: "127.0.0.1", port: 80,
+                uploadStreamPort: Int(port), beforeCommit: { try Data("pending".utf8).write(to: marker) },
+                progress: { _, _ in })
+            XCTFail("Lost commit response reported success")
+        } catch CrossPointClient.ClientError.publicationUnconfirmed {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+        }
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 1, "Commit must not be retried")
+    }
+}

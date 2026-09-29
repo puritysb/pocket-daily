@@ -41,6 +41,12 @@ struct CrossPointStatus: Codable, Equatable {
     /// Reading positions exchanged without a server (docs/READING_PROGRESS.md,
     /// sibling docs/reading-progress-v1.md).
     var readingProgress: Int? = nil
+    /// These existing Pocket advertisements imply verified commit support.
+    /// A generic CrossPoint status or browser /upload alone is insufficient.
+    var supportsAtomicUpload: Bool {
+        transferControl == 1 || uploadStreamPort.map { (1...65535).contains($0) } == true
+            || uploadChunkBytes.map { $0 > 0 } == true
+    }
 }
 
 /// What the reader advertises about its live-studio listener. `mode` is
@@ -701,6 +707,7 @@ actor CrossPointClient {
         case invalidAddress
         case invalidFilename
         case unexpectedMessage(String)
+        case publicationUnconfirmed
         case verificationFailed
 
         var errorDescription: String? {
@@ -708,7 +715,8 @@ actor CrossPointClient {
             case .invalidAddress: "The reader address is invalid."
             case .invalidFilename: "The selected filename cannot be sent."
             case let .unexpectedMessage(message): "Unexpected reader response: \(message)"
-            case .verificationFailed: "The reader could not verify the transferred file. The previous file was kept."
+            case .publicationUnconfirmed: "The reader may have saved the file, but publication could not be confirmed. Check the reader before sending again."
+            case .verificationFailed: "The transfer could not be verified. Check the reader before sending again."
             }
         }
     }
@@ -988,7 +996,14 @@ actor CrossPointClient {
         return try ReaderPreferences.decode(data)
     }
 
-    func save(preferences: ReaderPreferences, host: String, port: Int) async throws {
+    func save(preferences: ReaderPreferences, host: String, port: Int, expectedDeviceID: String? = nil) async throws {
+        if let expectedDeviceID {
+            let current = try await status(host: host, port: port)
+            guard current.deviceID == expectedDeviceID else {
+                throw ClientError.unexpectedMessage("The reader changed. Reconnect before saving settings.")
+            }
+            try Task.checkCancellation()
+        }
         guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/preferences") else {
             throw ClientError.invalidAddress
         }
@@ -1087,6 +1102,7 @@ actor CrossPointClient {
         transferKind: TransferKind = .content,
         note: (@Sendable (String) -> Void)? = nil,
         reconnect: (@Sendable () async -> Bool)? = nil,
+        beforeCommit: (@Sendable () async throws -> Void)? = nil,
         progress: @escaping @Sendable (Int64, Int64) -> Void
     ) async throws -> String {
         let filename = publishedFilename ?? fileURL.lastPathComponent
@@ -1221,12 +1237,19 @@ actor CrossPointClient {
             "size": total,
             "crc32": String(format: "%08X", crc32),
         ])
-        let (commitData, commitResponse) = try await http.data(for: commitRequest, session: session)
+        try await beforeCommit?()
+        try Task.checkCancellation()
+        let commitData: Data
+        let commitResponse: URLResponse
+        do { (commitData, commitResponse) = try await http.data(for: commitRequest, session: session) }
+        catch { throw ClientError.publicationUnconfirmed }
         try Self.requireSuccess(commitResponse, body: commitData)
-        let committed = try JSONDecoder().decode(PocketCommitResponse.self, from: commitData)
+        guard let committed = try? JSONDecoder().decode(PocketCommitResponse.self, from: commitData) else {
+            throw ClientError.publicationUnconfirmed
+        }
         guard committed.size == total,
               committed.crc32.caseInsensitiveCompare(String(format: "%08X", crc32)) == .orderedSame else {
-            throw ClientError.verificationFailed
+            throw ClientError.publicationUnconfirmed
         }
         return targetPath
     }

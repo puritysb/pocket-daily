@@ -38,9 +38,22 @@ Static-library file hashes are checked at build time, not recomputed against
 the app executable at runtime. End-user devices never need the sibling checkout.
 These checks establish integrity/version agreement, not sender authentication.
 
+### CrossPoint 1.6.5 integration refresh — 2026-09-30
+
+The accepted package is built from sibling firmware commit `ee188fe7`
+(`build/apple-host-nx6umpg9`), after its CrossPoint 1.6.5 integration. The source
+digest is `671f5c1c31f91ab3cc5928dcec3fd2bbc80da57c34afd27ac6c485bce904e7c9`;
+the artifact digest is `6f7dd0b1871876b28af94753adb032153a06c95ba790b519f2f855ffc0e8f6dc`.
+Its source inventory includes the FreeInk SDK headers/font allocator used by
+the host build. The public C header, ABI 1 and package file layout are unchanged.
+The shared Home painter now includes the Articles action inside Pocket Reader.
+Existing Swift integration, font assets and transport contracts are preserved.
+The importer retains the prior package under `.build/host-renderer-backups/`.
+This updates offline previews; it neither changes nor installs device firmware.
+
 ## Calling the bridge
 
-The accepted `apple-host-0pvcfof1` package adds PDCT v2 card layouts through the
+The earlier `apple-host-0pvcfof1` package added PDCT v2 card layouts through the
 unchanged ABI1 document argument. Text-first v1 remains byte-compatible; image
 first and side-by-side use the same decoder and renderer as the device.48
 real-font mode comparisons and40 direct/C-ABI page comparisons cover both

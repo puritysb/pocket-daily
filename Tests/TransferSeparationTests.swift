@@ -8,10 +8,10 @@ final class TransferSeparationTests: XCTestCase {
         for folder in folders { try? FileManager.default.removeItem(at: folder) }
         super.tearDown()
     }
-    private func fixture(_ name: String, attempted: Bool = false) throws -> PreparedTransfer {
+    private func fixture(_ name: String, attempted: Bool = false, publicationPending: Bool? = nil) throws -> PreparedTransfer {
         let id = UUID()
         let item = PreparedTransfer(id: id, filename: name, firmwareVersion: name.hasSuffix(".bin") ? "test" : nil,
-                                    readerID: attempted ? "1234ABCD" : nil, remoteStagingID: attempted ? id : nil)
+                                    readerID: attempted ? "1234ABCD" : nil, remoteStagingID: attempted ? id : nil, publicationPending: publicationPending)
         let folder = TransferPreparation.file(item).deletingLastPathComponent()
         folders.append(folder)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -35,6 +35,19 @@ final class TransferSeparationTests: XCTestCase {
         for _ in 0..<300 where model.isWorking { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertFalse(model.isWorking)
     }
+    func testUnconfirmedPublicationSurvivesReloadAndCannotBeResent() async throws {
+        let item = try fixture("unconfirmed.epub", attempted: true, publicationPending: true)
+        let (model, session) = try setup()
+        defer { model.pauseForBackground(); session.invalidateAndCancel() }
+        XCTAssertEqual(model.preparedTransfers.first { $0.id == item.id }?.publicationPending, true)
+        model.sendPreparedFiles(kind: .content)
+        try await wait(model)
+        XCTAssertTrue(TransferControlProtocol.controls.isEmpty, "Must not even prepare another upload")
+        XCTAssertTrue(model.message.contains("may have saved"))
+        XCTAssertEqual(model.messageTone, .pending)
+        XCTAssertNotNil(model.preparedTransfers.first { $0.id == item.id })
+    }
+
     func testContentSendNeverStartsPendingFirmware() async throws {
         let book = try fixture("separation.epub")
         let firmware = try fixture("separation.bin")

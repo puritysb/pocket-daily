@@ -68,7 +68,13 @@ final class ReaderDisplayStateTests: XCTestCase {
         let state = try ReaderDisplayState.decode(body { $0["font"] = ["family": "PocketSansWorld", "pointSize": 14] },
                                                   deviceID: device)
         XCTAssertFalse(state.matchesPreviewFont)
-        XCTAssertTrue(PreviewStyle(reader: state).caption.contains("font size differs"))
+        XCTAssertTrue(PreviewStyle(reader: state).caption.contains("font differs"))
+    }
+
+    func testSameSizeDifferentFamilyDoesNotClaimFontMatch() throws {
+        let state = try ReaderDisplayState.decode(body { $0["font"] = ["family": "Other", "pointSize": 12] }, deviceID: device)
+        XCTAssertFalse(state.matchesPreviewFont)
+        XCTAssertFalse(PreviewStyle(reader: state).caption.contains("Matches this reader"))
     }
 
     func testReferenceMatchesTheDefaultDeviceThemeAndIsLabelled() {

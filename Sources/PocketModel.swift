@@ -79,6 +79,8 @@ struct PreparedTransfer: Codable, Identifiable, Equatable, Sendable {
     var readerID: String?
     /// Persisted before opening the stream, including readers without resume support.
     var remoteStagingID: UUID? = nil
+    /// Write-ahead marker: a missing commit response must not cause blind republication.
+    var publicationPending: Bool? = nil
     var stagingID: UUID? { remoteStagingID ?? (readerID == nil ? nil : id) }
     var kind: TransferKind { filename.lowercased().hasSuffix(".bin") ? .firmware : .content }
 }
@@ -368,7 +370,6 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// screen being edited: when the reader can draw screens inside Sync, it
     /// draws that one afterwards (and cards are not drawn separately, since
     /// the screen shows them).
-    private var quietExchangeTask: Task<Void, Never>?
     private var lastQuietExchange = Date.distantPast
 
     /// Exchanges reading positions with the last connected reader when it already
@@ -380,27 +381,32 @@ final class PocketModel: ObservableObject, DeviceSession {
                               prepare: @escaping @MainActor (ReaderReadingList, String) -> [PositionRecord],
                               finish: @escaping @MainActor (String, Int, Error?) -> Void) {
         guard !isDemoMode, !isInBackground, readerStatus == nil, !hasReaderWork, !isWorking,
-              !hasDirectSession, quietExchangeTask == nil,
+              !hasDirectSession, readerWorkTask == nil,
               Date().timeIntervalSince(lastQuietExchange) >= minimumInterval,
               let host = discoveryIO.rememberedHost, !host.isEmpty,
               let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return }
         lastQuietExchange = Date()
-        let discoveryIO = discoveryIO, client = client
-        quietExchangeTask = Task { [weak self] in
-            defer { self?.quietExchangeTask = nil }
+        let attempt = connectionAttempt
+        startReaderWork(attempt: attempt, kind: .quietReading) { [self] owner in
             // A reader that is reading, asleep or elsewhere simply does not answer.
             guard let status = try? await discoveryIO.status(host: host, port: 80, timeout: 1.5),
-                  status.readingProgress == 1, status.deviceID == identity, !Task.isCancelled else { return }
+                  status.readingProgress == 1, status.deviceID == identity,
+                  ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
             var sent = 0
             do {
                 let list = try await client.readingProgress(identity: identity, host: host, port: 80)
+                guard ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
                 for record in prepare(list, status.device).prefix(10) {
+                    guard ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
                     try await client.offerReadingProgress(record, identity: identity, host: host, port: 80)
+                    guard ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
                     sent += 1
                 }
                 finish(status.device, sent, nil)
             } catch {
-                if !(error is CancellationError) { finish(status.device, sent, error) }
+                if ownsReaderWork(owner, attempt: attempt), !isDemoMode, !(error is CancellationError) {
+                    finish(status.device, sent, error)
+                }
             }
         }
     }
@@ -484,7 +490,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                         }
                     }
                     if let settings {
-                        try await client.save(preferences: settings, host: host, port: port)
+                        try await client.save(preferences: settings, host: host, port: port, expectedDeviceID: identity)
                         guard ownsReaderWork(owner, attempt: attempt) else { return }
                         preferencesBaseline = settings
                         preferencesDirty = preferences != settings
@@ -711,7 +717,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     private var nearbyLease: HotspotLease?
     private var readerWorkTask: Task<Void, Never>?
     private var readerWorkOwner: UUID?
-    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage }
+    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage, quietReading }
     private var readerWorkKind: ReaderWorkKind?
     private var isInBackground = false
     private var expectedDeviceID: String?
@@ -726,7 +732,8 @@ final class PocketModel: ObservableObject, DeviceSession {
     var hasDirectSession: Bool { directConnectionRequested || nearbyLease != nil }
     var canPrepareFiles: Bool { !isDemoMode && !isWorking && !hasReaderWork && !isInBackground }
     var isTransferring: Bool { readerWorkTask != nil && readerWorkKind == .transfer }
-    private var hasReaderWork: Bool { readerWorkTask != nil }
+    // Quiet exchange owns I/O but remains preemptible by an explicit user action.
+    private var hasReaderWork: Bool { readerWorkTask != nil && readerWorkKind != .quietReading }
     private var canRequestConnection: Bool {
         !isInBackground && ((!isWorking && !hasReaderWork) || readerWorkKind == .connection)
     }
@@ -794,7 +801,11 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func post(_ error: Error) {
-        post(error.localizedDescription, tone: .failure)
+        if let error = error as? CrossPointClient.ClientError, case .publicationUnconfirmed = error {
+            post(error.localizedDescription, tone: .pending)
+        } else {
+            post(error.localizedDescription, tone: .failure)
+        }
     }
 
     var hardware: PocketHardware {
@@ -939,6 +950,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     func enterDemoMode() {
         guard !isWorking, !hasReaderWork, !hasDirectSession else { return }
+        if readerWorkKind == .quietReading { readerWorkTask?.cancel() }
         connectionAttempt += 1
         heartbeatTask?.cancel()
         discoveryIO.stop()
@@ -1414,9 +1426,10 @@ final class PocketModel: ObservableObject, DeviceSession {
         let host = activeHost
         let port = activeHTTPPort
         let attempt = connectionAttempt
+        let identity = readerStatus?.deviceID
         startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
             do {
-                try await client.save(preferences: preferences, host: host, port: port)
+                try await client.save(preferences: preferences, host: host, port: port, expectedDeviceID: identity)
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
                 preferencesBaseline = preferences
                 preferencesDirty = self.preferences != preferences
@@ -1630,8 +1643,14 @@ final class PocketModel: ObservableObject, DeviceSession {
                 if let expectedDeviceID, let actual = status.deviceID, expectedDeviceID != actual {
                     throw CrossPointClient.ClientError.unexpectedMessage("The reader does not match the paired identity.")
                 }
+                guard status.supportsAtomicUpload else {
+                    throw CrossPointClient.ClientError.unexpectedMessage("This reader does not advertise verified Pocket transfers. Update its firmware or copy the file to SD on Mac. Nothing was uploaded.")
+                }
                 while let index = preparedTransfers.firstIndex(where: { $0.kind == kind }) {
                     var item = preparedTransfers[index]
+                    guard item.publicationPending != true else {
+                        throw CrossPointClient.ClientError.publicationUnconfirmed
+                    }
                     try Task.checkCancellation()
                     if let bound = item.readerID, bound != status.deviceID {
                         throw CrossPointClient.ClientError.unexpectedMessage("This pending file belongs to another reader. Remove it and prepare it again to change readers.")
@@ -1655,6 +1674,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     uploadProgress = 0
                     post(kind == .content ? "Sending content to SD card: \(item.filename)…"
                          : "Sending firmware to SD card for installation later…")
+                    let transferID = item.id
                     let path = try await client.uploadAtomically(
                         fileURL: url, publishedFilename: isFirmware ? "update.bin" : nil,
                         destination: destination(for: url), host: host, port: port,
@@ -1669,7 +1689,10 @@ final class PocketModel: ObservableObject, DeviceSession {
                             guard let self, self.ownsReaderWork(owner, attempt: attempt) else { return }
                             self.post(text)
                         } },
-                        reconnect: { [weak self] in await self?.reconnectForTransfer(owner: owner, attempt: attempt) ?? false }
+                        reconnect: { [weak self] in await self?.reconnectForTransfer(owner: owner, attempt: attempt) ?? false },
+                        beforeCommit: { [self] in
+                            try await markPublicationPending(transferID, owner: owner, attempt: attempt)
+                        }
                     ) { [weak self] sent, total in
                         Task { @MainActor in
                             guard let self, self.ownsReaderWork(owner, attempt: attempt) else { return }
@@ -1697,6 +1720,20 @@ final class PocketModel: ObservableObject, DeviceSession {
                 else if !Task.isCancelled { post(error) }
             }
         }
+    }
+
+    private func markPublicationPending(_ id: UUID, owner: UUID, attempt: Int) async throws {
+        guard ownsReaderWork(owner, attempt: attempt),
+              let index = preparedTransfers.firstIndex(where: { $0.id == id }) else { throw CancellationError() }
+        var item = preparedTransfers[index]
+        item.publicationPending = true
+        let data = try JSONEncoder().encode(item)
+        let record = TransferPreparation.directory.appendingPathComponent(id.uuidString)
+            .appendingPathComponent("transfer.json")
+        // Keep the in-memory queue conservative even if persistence fails.
+        preparedTransfers[index] = item
+        try await Task.detached(priority: .utility) { try data.write(to: record, options: .atomic) }.value
+        guard ownsReaderWork(owner, attempt: attempt) else { throw CancellationError() }
     }
 
     @Published private(set) var activeTransferKind: TransferKind?
@@ -1761,6 +1798,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     func beginDirectConnection() {
         guard !isWorking, !hasReaderWork, !isDemoMode, readerStatus == nil else { return }
+        if readerWorkKind == .quietReading { readerWorkTask?.cancel() }
         connectionAttempt += 1
         heartbeatTask?.cancel()
         discoveryIO.stop()
@@ -1829,15 +1867,15 @@ final class PocketModel: ObservableObject, DeviceSession {
                                  operation: @escaping @MainActor (UUID) async -> Void) -> Task<Void, Never>? {
         let previous = readerWorkTask
         if previous != nil {
-            // Only an explicit connection request can supersede another one.
-            // Transfers, discovery and local file work cannot be displaced.
-            guard kind == .connection, readerWorkKind == .connection else { return nil }
+            // User work preempts quiet exchange; otherwise only a new connection
+            // can replace a connection. Always drain predecessor I/O below.
+            guard readerWorkKind == .quietReading || (kind == .connection && readerWorkKind == .connection) else { return nil }
             previous?.cancel()
         }
         let owner = UUID()
         readerWorkOwner = owner
         readerWorkKind = kind
-        isWorking = true
+        isWorking = kind != .quietReading
         readerWorkTask = Task {
             defer { finishReaderWork(owner: owner, attempt: attempt) }
             // Replacement reserves the lane immediately, but must drain every
@@ -1858,7 +1896,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     private func finishReaderWork(owner: UUID, attempt: Int) {
         guard readerWorkOwner == owner else { return }
-        let resumeTraffic = readerWorkKind != .local
+        let resumeTraffic = readerWorkKind != .local && readerWorkKind != .quietReading
         readerWorkOwner = nil
         readerWorkKind = nil
         readerWorkTask = nil
@@ -1886,7 +1924,6 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     func pauseForBackground() {
         isInBackground = true
-        quietExchangeTask?.cancel()
         readerWorkTask?.cancel()
         // joinOnce is released by iOS while in the background. Never rejoin there.
         connectionAttempt += 1

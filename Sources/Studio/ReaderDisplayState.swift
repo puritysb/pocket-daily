@@ -65,7 +65,7 @@ struct ReaderDisplayState: Equatable, Sendable {
                                         labels: page.labels))
     }
 
-    var matchesPreviewFont: Bool { fontPointSize == Self.previewFontPointSize }
+    var matchesPreviewFont: Bool { fontFamily == "PocketSansWorld" && fontPointSize == Self.previewFontPointSize }
 }
 
 /// What a preview renders with, and where those inputs came from.
@@ -100,8 +100,8 @@ struct PreviewStyle: Equatable, Sendable {
 
     var caption: String {
         switch source {
-        case let .reader(theme, true): "Matches this reader · \(theme) theme"
-        case let .reader(theme, false): "\(theme) theme · reader font size differs, line breaks may shift"
+        case let .reader(theme, true): "Reader layout · \(theme) theme"
+        case let .reader(theme, false): "\(theme) theme · reader font differs, line breaks may shift"
         case .reference: "Default theme · connect a reader to match it"
         }
     }

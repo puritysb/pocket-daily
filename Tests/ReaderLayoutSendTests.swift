@@ -34,8 +34,8 @@ final class ReaderLayoutSendTests: XCTestCase {
         model.sendReaderLayout(profile: profile, cards: nil)
         try await waitIdle(model)
         XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path),
-                       ["/api/pocket/v1/profile", "/api/pocket/v1/preferences"])
-        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.method), ["POST", "POST"])
+                       ["/api/pocket/v1/profile", "/api/status", "/api/pocket/v1/preferences"])
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.method), ["POST", "GET", "POST"])
         XCTAssertEqual(model.readerProfile?.profile.home.items, [.word, .study])
         XCTAssertFalse(model.preferencesDirty)
         XCTAssertEqual(model.messageTone, .success)
@@ -45,7 +45,7 @@ final class ReaderLayoutSendTests: XCTestCase {
         model.setFontSize(3)
         model.sendReaderLayout(profile: nil, cards: nil)
         try await waitIdle(model)
-        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/preferences"])
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/status", "/api/pocket/v1/preferences"])
 
         // Nothing changed: nothing is sent.
         LayoutSendURLProtocol.reset()
@@ -103,7 +103,7 @@ final class ReaderLayoutSendTests: XCTestCase {
         model.setFontSize(2)
         model.sendReaderLayout(profile: nil, cards: nil)
         try await waitIdle(model)
-        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/preferences", "/api/pocket/v1/glance"])
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/status", "/api/pocket/v1/preferences", "/api/pocket/v1/glance"])
     }
 
     /// A reader that draws screens inside Sync shows the edited Home after the
@@ -135,7 +135,7 @@ final class ReaderLayoutSendTests: XCTestCase {
         model.setFontSize(2)
         model.sendReaderLayout(profile: nil, cards: nil, show: .home)
         try await waitIdle(model)
-        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/preferences"])
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/status", "/api/pocket/v1/preferences"])
     }
 
     /// Readers without the capability are never asked to draw a screen.
@@ -189,6 +189,9 @@ private final class LayoutSendURLProtocol: URLProtocol, @unchecked Sendable {
             return data
         } ?? request.httpBody ?? Data()
         Self.lock.withLock { Self.body = sent }
+        if url.path == "/api/status" {
+            body = Data(#"{"version":"t","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8)
+        }
         if url.path.hasPrefix("/api/pocket/v1/screen/") {
             // The reader drew the requested screen for the requested generation.
             let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []

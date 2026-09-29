@@ -136,6 +136,9 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+#if os(iOS)
+                model.resumeForForeground()
+#endif
                 Task { await inbox.activate(allowNetwork: !model.isDemoMode) }
                 sync.nudgeReader()
             }
@@ -144,8 +147,6 @@ struct ContentView: View {
             if phase == .background {
                 nearby.disconnect()
                 model.pauseForBackground()
-            } else if phase == .active {
-                model.resumeForForeground()
             }
 #endif
         }
@@ -1092,6 +1093,10 @@ private struct PreparedTransferQueue: View {
                 Text("Ready · \(items.count)").font(.subheadline.weight(.semibold))
                 ForEach(items) { item in
                     Text(item.filename).font(.caption).lineLimit(2)
+                    if item.publicationPending == true {
+                        Text("Publication not confirmed. Check the file on the reader. Remove this prepared copy before preparing it again; removing it does not delete a published file.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Text(model.destinationLabel(for: item)).font(.caption2).foregroundStyle(.secondary)
                 }
                 if isActive {
