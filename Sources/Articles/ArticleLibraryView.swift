@@ -95,12 +95,13 @@ struct ArticleShelf: View {
                         .disabled(busy)
                     }
                     .padding(.vertical, 12)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 24, bottom: 0, trailing: 24))
                     .listRowBackground(Color.clear)
                     .contextMenu { actions(for: article) }
                     .swipeActions(edge: .leading) {
                         Button(article.isArchived ? "Unsave" : "Save", systemImage: article.isArchived ? "bookmark.slash" : "bookmark") {
                             Task { await inbox.setArchived(article, !article.isArchived) }
-                        }.tint(.brown)
+                        }.tint(PocketPalette.accent)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button("Delete", role: .destructive) { deleting = article }
@@ -124,6 +125,9 @@ struct ArticleShelf: View {
                 }
             }
         }
+        // The same measure as the Library header and the book grid, so the
+        // filter and the rows share one left edge on wide windows.
+        .frame(maxWidth: 1100)
         .frame(maxWidth: .infinity)
         .sheet(isPresented: $adding, onDismiss: { Task { await inbox.load() } }) {
             ArticleCaptureView(initialURL: "", store: inbox.store, completed: {})

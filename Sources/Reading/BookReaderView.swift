@@ -319,23 +319,32 @@ struct BookReaderView: View {
 
 struct ReaderAppearancePanel: View {
     @ObservedObject var store: ReaderAppearanceStore
+    @Environment(\.dismiss) private var dismiss
+
+    private var scales: [Int] { ReaderAppearance.fontScales }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+                Section("Text") {
                     HStack {
-                        Button { store.appearance.stepFont(-1) } label: {
-                            Image(systemName: "textformat.size.smaller").frame(maxWidth: .infinity)
+                        Text("Size")
+                        Spacer()
+                        HStack(spacing: 8) {
+                            Button { store.appearance.stepFont(-1) } label: {
+                                Image(systemName: "textformat.size.smaller").frame(minWidth: 36)
+                            }
+                            .accessibilityLabel("Smaller text")
+                            .disabled(store.appearance.fontScale == scales.first)
+                            Text("\(store.appearance.fontScale)%").monospacedDigit().frame(minWidth: 52)
+                            Button { store.appearance.stepFont(1) } label: {
+                                Image(systemName: "textformat.size.larger").frame(minWidth: 36)
+                            }
+                            .accessibilityLabel("Larger text")
+                            .disabled(store.appearance.fontScale == scales.last)
                         }
-                        .accessibilityLabel("Smaller text")
-                        Text("\(store.appearance.fontScale)%").monospacedDigit().frame(minWidth: 56)
-                        Button { store.appearance.stepFont(1) } label: {
-                            Image(systemName: "textformat.size.larger").frame(maxWidth: .infinity)
-                        }
-                        .accessibilityLabel("Larger text")
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
                     Picker("Font", selection: $store.appearance.fontFamily) {
                         ForEach(ReaderAppearance.FontFamily.allCases) { Text($0.title).tag($0) }
                     }
@@ -359,13 +368,19 @@ struct ReaderAppearancePanel: View {
                     Toggle("Two pages when wide", isOn: $store.appearance.allowsTwoColumns)
                 }
             }
+#if os(macOS)
+            .formStyle(.grouped)
+#endif
             .navigationTitle("Text & Page")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
         }
 #if os(macOS)
-        .frame(minWidth: 360, minHeight: 420)
+        .frame(minWidth: 400, minHeight: 470)
 #endif
     }
 }

@@ -122,6 +122,8 @@ struct LibraryView: View {
                     Label("Continue Reading", systemImage: "arrow.triangle.2.circlepath")
                 }
                 .accessibilityIdentifier("library-sync")
+                Divider()
+                AppAppearancePicker()
             } label: {
                 Image(systemName: "ellipsis.circle").foregroundStyle(.primary).frame(width: 44, height: 44)
             }
@@ -162,9 +164,13 @@ struct LibraryView: View {
                         .contextMenu { menu(for: book) }
                     }
                 }
-                if !library.books.contains(where: { !$0.isArticle }) && !library.isWorking {
-                    Text("Add DRM-free EPUB, TXT or Markdown files to start reading.")
-                        .foregroundStyle(.secondary)
+                if !library.books.contains(where: { !$0.isArticle && $0.origin != .welcome }) && !library.isWorking {
+                    // Until the first own book arrives, say how books get here.
+                    Label("Add your own books with +, or drop DRM-free EPUB, TXT or Markdown files here.",
+                          systemImage: "arrow.down.doc")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("library-add-hint")
                 }
             }
             .padding(.horizontal, 24)
@@ -245,7 +251,7 @@ private struct ContinueReadingCard: View {
                     if let chapter = book.position?.chapter {
                         Text(chapter).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    ProgressView(value: book.progress).tint(.primary)
+                    ProgressView(value: book.progress).progressViewStyle(.pocketBar)
                     Text(book.progress.formatted(.percent.precision(.fractionLength(0))))
                         .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 }
@@ -272,7 +278,7 @@ private struct BookTile: View {
                 Text(book.author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             if book.progress > 0 {
-                ProgressView(value: book.progress).tint(.secondary)
+                ProgressView(value: book.progress).progressViewStyle(.pocketBar)
             }
         }
         .contentShape(Rectangle())
@@ -290,7 +296,13 @@ struct BookCover: View {
             if let image {
                 Image(decorative: image, scale: 1).resizable().scaledToFill()
             } else {
-                LinearGradient(colors: [Color(white: 0.93), Color(white: 0.86)], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [PocketPalette.coverTop, PocketPalette.coverBottom], startPoint: .top, endPoint: .bottom)
+                // A spine along the left edge, like a bound book.
+                HStack(spacing: 0) {
+                    PocketPalette.ink.opacity(0.10).frame(width: compact ? 4 : 6)
+                    PocketPalette.ink.opacity(0.04).frame(width: 1)
+                    Spacer(minLength: 0)
+                }
                 VStack(spacing: 8) {
                     Text(book.title)
                         .font(.system(compact ? .caption2 : .footnote, design: .serif).weight(.semibold))
@@ -301,13 +313,13 @@ struct BookCover: View {
                         Text(book.author).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                     }
                 }
-                .foregroundStyle(Color(white: 0.15))
+                .foregroundStyle(PocketPalette.ink)
                 .padding(compact ? 6 : 10)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.black.opacity(0.08)))
-        .shadow(color: .black.opacity(0.08), radius: 3, y: 2)
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(PocketPalette.line))
+        .shadow(color: .black.opacity(0.12), radius: 3, y: 2)
         .task(id: book.id) {
             guard book.hasCover, let url = await library.cover(for: book) else { return }
             image = await Task.detached(priority: .utility) { Self.thumbnail(url) }.value

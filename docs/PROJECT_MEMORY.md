@@ -4,6 +4,75 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Sleep WAKE control — 2026-09-30
+
+- Screens → Sleep stages `sleepWakeIndicator` with reading preferences. Offline
+  and demo default on; GET absence/unknown values mean unsupported, with an
+  explanation and no POST key. Merge/discard preserve the capability boundary.
+- The sibling firmware persists the default-on setting in the Display registry;
+  GET advertises it and POST validates it atomically, including rollback on save
+  failure. It applies on the next sleep frame, including Brief, cover/custom,
+  transparent and Quick Resume modes. See sibling `docs/nearby-sync-v1.md`.
+- The rebuilt host ABI adds `pdui_render_sleep_brief` options for WAKE and cover;
+  legacy ABI behavior remains unchanged. Both app toggles update preview pixels.
+  The shared cue painter anchors to X3's top / X4's upper-right power switch;
+  portrait Brief content reserves its area to protect cover-free reading progress.
+- Verified 868 firmware host tests and a warning-free default build. Static RAM
+  remains 69,912 B; flash is 6,410,009 B (+3,722 B versus the preceding appearance
+  build). Strict cppcheck retains the same existing 2 medium/210 low findings.
+- macOS Release installed locally; UI toggle, device position and non-overlap
+  checked in the installed app. iOS preferences/renderer tests and the toggle/
+  discard UI flow passed. Mac tests: 11 run, 2 optional-fixture skips, zero failures.
+  All 19 store captures regenerated (Mac refreshed after final inset change) and
+  package validation passed. No firmware was installed; physical panel QA pending.
+
+## Appearance selection and Home cover layout — 2026-09-30
+
+- App chrome has a persisted System/Light/Dark choice (`appAppearance`), available
+  in the sidebar, Library options, Device, and macOS Settings. Reader page themes
+  remain independent; closing a book restores the app choice.
+- The sibling Home painter fits a 2:3 cover slot into a stable metadata column
+  for Daily Panel top/bottom/off. Actual bitmap aspect ratios are preserved;
+  their border follows the fitted image. Host preview uses the shared no-art
+  book illustration rather than a stretched hatch. No profile/wire change.
+- The app imports the rebuilt, provenance-verified host artifact. Physical X3/X4
+  rendering requires the corresponding firmware update; app installation alone
+  does not change the reader. No firmware was installed by this change.
+- Validation: 863 firmware host tests (including both geometries, four rotations,
+  and three panel placements), warning-free default firmware build, Mac tests,
+  iPhone reader UI flow, all 19 regenerated store captures with package validation,
+  and actual installed Mac appearance/panel controls.
+  Full strict cppcheck 2.20 remains failing on existing findings (including
+  `HttpDownloader.cpp` copy-constructor/assignment warnings); no suppression or
+  unrelated source changes were introduced to hide them. Physical panel QA pending.
+
+## Appearance refresh — 2026-09-30
+
+- `Sources/PocketPalette.swift` owns the app palette as adaptive colors
+  (warm paper in light mode, warm charcoal in dark mode); the app no longer
+  forces `.light`. The reader page keeps its own Paper/White/Night themes.
+  `AccentColor` (amber, with a dark variant) is the global accent, so iOS tab
+  bars, links, toggles and checkboxes match the icon and the Mac sidebar.
+- Value bars use `PocketBarProgressStyle` (`.pocketBar`) on both platforms
+  because the AppKit indicator ignores `tint` and vanished on paper.
+- `scripts/generate_app_icons.swift` renders macOS slots on the Big Sur grid
+  (824-pt rounded shape on a transparent 1024 canvas) and a thicker-stroke
+  variant at 64 px and below; iOS slots stay opaque squares.
+- Symbols: Device tab is `rectangle.portrait.inset.filled`, Connection uses
+  `antenna.radiowaves.left.and.right` (subscriptions keep the dot variant),
+  Files uses `tray.full`, so no two cards on one screen share a symbol.
+- Store captures: the Mac window is made key with `controlActiveState .key`
+  (switches still draw inactive; see `appstore/screenshots/README.md`), and
+  the simulators are pinned to `en_US` before boot. `testRendersDarkAppearance`
+  attaches dark QA renders that the publish step skips.
+- Flow polish from the QA renders (`testRendersUserFlowStates`): the Text &
+  Page sheet is a grouped form with a Done button on macOS; Articles rows share
+  the Library's 1100-pt measure and 24-pt gutter; the Firmware card stays
+  neutral until a reader is connected instead of showing a failed update check;
+  the Library shows an add-books hint until the first own book arrives.
+- Not done: localization (no `.xcstrings`; `appstore/metadata/ko-KR` exists),
+  and Icon Composer layered icons for iOS 26/macOS 26.
+
 ## Firmware product version migration — 2026-09-30
 
 - Pocket Daily firmware starts product version `1.0.0` on CrossPoint 1.6.5.

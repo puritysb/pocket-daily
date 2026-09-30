@@ -2,7 +2,8 @@
 
 Every file is actual Pocket Daily 1.0 demo-mode UI, produced by
 `scripts/capture_screenshots.sh` and flattened to an opaque PNG at an accepted
-size. Regenerated on 2026-09-28 for Library, Screens and Device navigation.
+size. All three sets were regenerated on 2026-09-30 after the appearance refresh
+(brand accent, adaptive palette, capsule progress bars, paper covers).
 
 | Destination | Directory | Dimensions | Files |
 |---|---|---:|---|
@@ -23,7 +24,13 @@ how a layout-dependent capture step silently no-ops.
 - iPhone and iPad come from `PocketUITests`, driven in the simulator with a
   fixed 9:41 status bar.
 - Mac comes from `PocketMacTests`, which hosts the shipping SwiftUI views in an
-  off-screen window and asks that window to draw itself. It is deliberately a
+  off-screen window and asks that window to draw itself. The window is made key
+  and the view is told it is active, otherwise AppKit draws every control in
+  the dimmed background style. macOS switches (`Toggle`) still follow the real
+  application activation, which a test runner cannot obtain, so they render
+  grey in the Mac set even though the app draws them in the accent color.
+- The iOS simulators are pinned to `en_US` before boot so the status-bar date
+  matches the en-US metadata. It is deliberately a
   unit test: the macOS UI-test runner needs the Accessibility permission to
   enable automation mode, which cannot be granted from a script or CI.
 

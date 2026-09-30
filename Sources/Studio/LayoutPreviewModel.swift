@@ -11,6 +11,8 @@ struct LayoutPreviewRequest: Equatable, Sendable {
     let hardware: PocketHardware
     /// The user's own cards; without any, Study falls back like the reader.
     var cards: ContentDraft = .init()
+    var wakeIndicator = true
+    var sleepCover = true
     var orientation: HostRendererBridge.Orientation = .portrait
 
     /// Sample content except the study card when the user has cards (theirs
@@ -33,7 +35,8 @@ private actor LayoutPreviewWorker {
         guard let renderer else { throw HostRendererBridge.Failure.unavailable }
         let frame = switch request.surface {
         case .home: try await renderer.renderHome(profile: request.profile, cards: request.cards, samples: request.samples)
-        case .brief: try await renderer.renderBrief(profile: request.profile, cards: request.cards, samples: request.samples)
+        case .brief: try await renderer.renderBrief(profile: request.profile, cards: request.cards, samples: request.samples,
+                                                    wakeIndicator: request.wakeIndicator, sleepCover: request.sleepCover)
         }
         try Task.checkCancellation()
         guard let image = frame.image() else { throw HostRendererBridge.Failure.invalidFrame }
