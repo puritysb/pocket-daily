@@ -52,6 +52,36 @@ final class ReaderPreferencesTests: XCTestCase {
         XCTAssertEqual(Set(try body(preferences).keys).count, 4)
     }
 
+    func testWakeIndicatorRoundTripAndLegacyCapability() throws {
+        for value in [0, 1, 2] {
+            let preferences = try decode("{\"startupApp\":1,\"pocketDailySleepCover\":1,\"sleepTimeoutMinutes\":10,\"fontSize\":1,\"sleepWakeIndicator\":\(value)}")
+            XCTAssertEqual(preferences.sleepWakeIndicator, value < 2 ? value == 1 : nil)
+            XCTAssertEqual(try body(preferences)["sleepWakeIndicator"], value < 2 ? value : nil)
+        }
+        XCTAssertNil(try decode(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#).sleepWakeIndicator)
+    }
+
+    @MainActor
+    func testWakeDraftMergesOnlyWhenSupportedAndCanBeDiscarded() {
+        let editor = ProfileEditorState()
+        editor.reading.sleepWakeIndicator = false
+        let supported = ReaderPreferences(sleepWakeIndicator: true)
+        editor.syncReading(supported)
+        XCTAssertEqual(editor.reading.sleepWakeIndicator, false)
+        XCTAssertTrue(editor.readingDirty)
+        editor.revert()
+        XCTAssertEqual(editor.reading.sleepWakeIndicator, true)
+        editor.reading.sleepWakeIndicator = false
+        editor.syncReading(ReaderPreferences())
+        XCTAssertNil(editor.reading.sleepWakeIndicator)
+        XCTAssertFalse(editor.readingDirty)
+        let model = PocketModel()
+        model.preferences = ReaderPreferences()
+        model.stageReadingPreferences(ReaderPreferences(sleepWakeIndicator: false))
+        XCTAssertNil(model.preferences?.sleepWakeIndicator)
+        XCTAssertFalse(model.preferencesDirty)
+    }
+
     func testMalformedDocumentIsRejected() {
         XCTAssertThrowsError(try decode(#"{"startupApp":"1","pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#))
         XCTAssertThrowsError(try decode(#"{"startupApp":1}"#))

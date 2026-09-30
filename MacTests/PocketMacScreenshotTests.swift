@@ -33,6 +33,43 @@ final class PocketMacScreenshotTests: XCTestCase {
         try await render(name: "05-articles", hardware: .x3, section: .library, shelf: .articles, inbox: inbox)
     }
 
+    @MainActor
+    func testCoverFramesWithAndWithoutDailyPanel() async throws {
+        let font = try await PreviewFontStore.shared.font()
+        for hardware in PocketHardware.allCases {
+            let renderer = try HostRendererBridge(font: font, hardware: hardware)
+            for placement in [PocketProfile.WeatherPanel.top, .bottom, .off] {
+                var profile = PocketProfile.defaults
+                profile.home.weather = placement
+                let frame = try await renderer.renderHome(profile: profile)
+                let image = try XCTUnwrap(frame.image())
+                let bitmap = NSBitmapImageRep(cgImage: image)
+                let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+                attachment.name = "qa-cover-\(hardware.rawValue)-\(placement.rawValue)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+            }
+        }
+    }
+
+    @MainActor
+    func testSleepWakeIndicatorPreviews() async throws {
+        let font = try await PreviewFontStore.shared.font()
+        for hardware in PocketHardware.allCases {
+            let renderer = try HostRendererBridge(font: font, hardware: hardware)
+            for enabled in [true, false] {
+                let frame = try await renderer.renderBrief(profile: .defaults, wakeIndicator: enabled)
+                let image = try XCTUnwrap(frame.image())
+                let png = try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+                let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+                attachment.name = "qa-wake-\(hardware.rawValue)-\(enabled ? "on" : "off")"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+            }
+        }
+    }
+
     /// QA captures of the dark palette; not part of the store set (names carry no
     /// leading number, so the capture script skips them).
     @MainActor
@@ -149,6 +186,12 @@ final class PocketMacScreenshotTests: XCTestCase {
     private func render(name: String, hardware: PocketHardware, section: StudioSection = .layout,
                         preview: ProfileStudioView.PreviewSurface = .home, shelf: LibraryView.Shelf = .books,
                         inbox: ArticleInboxModel? = nil, dark: Bool = false) async throws {
+        let savedAppearance = UserDefaults.standard.object(forKey: "appAppearance")
+        UserDefaults.standard.set(dark ? "dark" : "light", forKey: "appAppearance")
+        defer {
+            if let savedAppearance { UserDefaults.standard.set(savedAppearance, forKey: "appAppearance") }
+            else { UserDefaults.standard.removeObject(forKey: "appAppearance") }
+        }
         let model = PocketModel()
         model.preferredHardware = hardware
         model.enterDemoMode()

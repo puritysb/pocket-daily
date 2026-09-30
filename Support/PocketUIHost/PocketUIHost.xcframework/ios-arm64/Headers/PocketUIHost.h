@@ -91,6 +91,13 @@ int32_t pdui_render_home(pdui_context* context, const pdui_profile* profile, uin
 // Daily Brief (powered-off sleep frame) sections in profile order.
 int32_t pdui_render_brief(pdui_context* context, const pdui_profile* profile, uint32_t samples) PDUI_NOEXCEPT;
 
+// Version 1 additive: sleep preferences. Existing render_brief keeps its old
+// cover-on, cue-off behavior. options: bit 0 WAKE cue, bit 1 book cover.
+// The cue uses the same portrait-anchored painter as the physical reader.
+enum { PDUI_SLEEP_WAKE_INDICATOR = 1u, PDUI_SLEEP_BOOK_COVER = 2u, PDUI_SLEEP_ALL = 3u };
+int32_t pdui_render_sleep_brief(pdui_context* context, const pdui_profile* profile, uint32_t samples,
+                                uint32_t options) PDUI_NOEXCEPT;
+
 // Version 1 additive: the companion's own cards ("My cards") for the Home and
 // Daily Brief previews. Each entry is one PDCT card (docs/content-card-v1.md)
 // and, when the card names an image, its PBM bytes. They replace the sample

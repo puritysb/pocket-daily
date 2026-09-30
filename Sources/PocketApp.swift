@@ -28,6 +28,11 @@ struct PocketApp: App {
 #if os(macOS)
         .defaultSize(width: 1180, height: 780)
 #endif
+#if os(macOS)
+        Settings {
+            AppAppearanceSettings()
+        }
+#endif
     }
 
     private var mainView: some View {

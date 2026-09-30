@@ -137,6 +137,8 @@ struct ReaderPreferences: Equatable, Sendable {
     /// the app then neither offers nor sends it.
     var sideButtons: SideButtons? = nil
     var frontButtonsFollowOrientation: Bool? = nil
+    /// Absent on firmware that always shows the wake cue. Never sent to those readers.
+    var sleepWakeIndicator: Bool? = nil
 
     var hasButtonSettings: Bool { sideButtons != nil && frontButtonsFollowOrientation != nil }
 
@@ -150,6 +152,7 @@ struct ReaderPreferences: Equatable, Sendable {
             let fontSize: Int
             let sideButtonLayout: Int?
             let frontButtonFollowOrientation: Int?
+            let sleepWakeIndicator: Int?
         }
         let wire = try JSONDecoder().decode(Wire.self, from: data)
         var preferences = ReaderPreferences(
@@ -160,6 +163,9 @@ struct ReaderPreferences: Equatable, Sendable {
         )
         preferences.sideButtons = wire.sideButtonLayout.flatMap(SideButtons.init(rawValue:))
         preferences.frontButtonsFollowOrientation = wire.frontButtonFollowOrientation.flatMap {
+            $0 == 0 || $0 == 1 ? $0 == 1 : nil
+        }
+        preferences.sleepWakeIndicator = wire.sleepWakeIndicator.flatMap {
             $0 == 0 || $0 == 1 ? $0 == 1 : nil
         }
         return preferences
@@ -175,6 +181,7 @@ struct ReaderPreferences: Equatable, Sendable {
         ]
         if let sideButtons { body["sideButtonLayout"] = sideButtons.rawValue }
         if let frontButtonsFollowOrientation { body["frontButtonFollowOrientation"] = frontButtonsFollowOrientation ? 1 : 0 }
+        if let sleepWakeIndicator { body["sleepWakeIndicator"] = sleepWakeIndicator ? 1 : 0 }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
 }

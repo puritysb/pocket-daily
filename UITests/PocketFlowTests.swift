@@ -56,6 +56,30 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
     }
 
+    func testSleepWakeIndicatorCanBePreviewedAndDiscarded() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--hardware=X3"]
+        app.launch()
+        app.open("Screens")
+        app.openScreen("Sleep")
+        XCTAssertTrue(app.waitForLayoutPreview())
+        let wake = app.switches["profile-sleep-wake"]
+        app.revealInStudio(wake)
+        XCTAssertEqual(wake.value as? String, "1")
+        wake.tap()
+        XCTAssertEqual(wake.value as? String, "0")
+        XCTAssertTrue(app.waitForLayoutPreview())
+        XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
+        XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
+        attach(app, "qa-wake-off")
+        app.buttons["profile-revert"].tap()
+        app.buttons["Discard edits"].tap()
+        app.revealInStudio(wake)
+        XCTAssertEqual(wake.value as? String, "1")
+        XCTAssertFalse(app.buttons["profile-revert"].isEnabled)
+        attach(app, "qa-wake-on")
+    }
+
     func testScreensSeparateWeatherAndCalendarWithoutRequestingAccessInDemo() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]

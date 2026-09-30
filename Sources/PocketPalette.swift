@@ -111,3 +111,20 @@ struct AppAppearancePicker: View {
         .accessibilityIdentifier("app-appearance")
     }
 }
+
+#if os(macOS)
+struct AppAppearanceSettings: View {
+    @AppStorage("appAppearance") private var appearance = AppAppearance.system
+
+    var body: some View {
+        Form {
+            AppAppearancePicker().pickerStyle(.segmented)
+            Text("Book pages use the color you choose in Text & Page.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(24)
+        .frame(width: 400)
+        .preferredColorScheme(appearance.colorScheme)
+    }
+}
+#endif

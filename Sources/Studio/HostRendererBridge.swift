@@ -230,12 +230,14 @@ actor HostRendererBridge {
     }
 
     /// The powered-off Daily Brief in the profile's section order.
-    func renderBrief(profile: PocketProfile, cards: ContentDraft = .init(), samples: LayoutSamples = .all) throws -> Frame {
+    func renderBrief(profile: PocketProfile, cards: ContentDraft = .init(), samples: LayoutSamples = .all,
+                     wakeIndicator: Bool = true, sleepCover: Bool = true) throws -> Frame {
         try Task.checkCancellation()
         var native = try Self.nativeProfile(profile)
         let context = try nativeContext()
         try setCards(cards, on: context)
-        let status = pdui_render_brief(context.pointer, &native, samples.rawValue)
+        let options: UInt32 = (wakeIndicator ? UInt32(PDUI_SLEEP_WAKE_INDICATOR) : 0) | (sleepCover ? UInt32(PDUI_SLEEP_BOOK_COVER) : 0)
+        let status = pdui_render_sleep_brief(context.pointer, &native, samples.rawValue, options)
         guard status == PDUI_OK else { throw Failure.render(status) }
         return try copyFrame(context)
     }

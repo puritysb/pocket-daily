@@ -24,8 +24,8 @@ final class ProfileEditorState: ObservableObject {
         baseGeneration = reader.generation
     }
 
-    @Published var reading = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false)
-    @Published private(set) var readingBase = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false)
+    @Published var reading = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
+    @Published private(set) var readingBase = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
     var readingDirty: Bool { reading != readingBase }
 
     /// Adopt untouched fields, retaining edits made before connecting.
@@ -39,6 +39,9 @@ final class ProfileEditorState: ObservableObject {
         if loaded.sideButtons != nil, reading.sideButtons != readingBase.sideButtons { merged.sideButtons = reading.sideButtons }
         if loaded.frontButtonsFollowOrientation != nil, reading.frontButtonsFollowOrientation != readingBase.frontButtonsFollowOrientation {
             merged.frontButtonsFollowOrientation = reading.frontButtonsFollowOrientation
+        }
+        if loaded.sleepWakeIndicator != nil, reading.sleepWakeIndicator != readingBase.sleepWakeIndicator {
+            merged.sleepWakeIndicator = reading.sleepWakeIndicator
         }
         readingBase = loaded
         reading = merged
@@ -180,10 +183,13 @@ struct ProfileStudioView: View {
         let surface: PreviewSurface
         let hardware: PocketHardware
         let cards: ContentDraft
+        let wakeIndicator: Bool
+        let sleepCover: Bool
     }
 
     private var previewKey: PreviewKey {
-        .init(profile: editor.draft, surface: preview, hardware: model.hardware, cards: draftCards)
+        .init(profile: editor.draft, surface: preview, hardware: model.hardware, cards: draftCards,
+              wakeIndicator: editor.reading.sleepWakeIndicator ?? true, sleepCover: editor.reading.pocketDailySleepCover)
     }
 
     /// The reader's own sleep screen and a card page are not layouts.
@@ -191,7 +197,9 @@ struct ProfileStudioView: View {
         if preview == .card || (preview == .sleep && editor.draft.sleep.mode == .reader) { return nil }
         guard editor.draft.validationError == nil else { return nil }
         return LayoutPreviewRequest(profile: editor.draft, surface: preview == .home ? .home : .brief,
-                                    hardware: model.hardware, cards: draftCards)
+                                    hardware: model.hardware, cards: draftCards,
+                                    wakeIndicator: editor.reading.sleepWakeIndicator ?? true,
+                                    sleepCover: editor.reading.pocketDailySleepCover)
     }
 
     private var cardRequest: ContentPreviewRequest? {
@@ -719,6 +727,22 @@ struct ProfileStudioView: View {
         if editor.draft.sleep.mode == .brief,
            editor.draft.sleep.sections.contains(.weather) || editor.draft.sleep.sections.contains(.today) {
             GlanceDeliveryStatus(settings: model.glanceSettings, model: model)
+        }
+        ControlGroup(title: "Wake indicator", note: nil) {
+            if editor.reading.sleepWakeIndicator != nil,
+               let wake = setting({ $0.sleepWakeIndicator ?? true }, { $0.sleepWakeIndicator = $1 }, on: .sleep) {
+                Toggle("Show WAKE on sleep screen", isOn: wake)
+                    .accessibilityIdentifier("profile-sleep-wake")
+                Text(model.hardware == .x3
+                     ? "Marks the power button on the top edge of X3."
+                     : "Marks the power button on the upper-right edge of X4.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Applies to Daily Brief, book covers and the reader’s sleep screen. Press the physical power button to wake.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("This reader’s firmware does not offer a WAKE indicator setting. Update to firmware that supports it to change the display.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         if let timeout = setting({ $0.sleepTimeoutMinutes }, { $0.sleepTimeoutMinutes = $1 }, on: .sleep) {
             // The reader accepts 1-30 minutes; 31 means it never sleeps on its own.

@@ -982,7 +982,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             totalHeap: 262_144
         )
         // Demo shows every control a current reader offers.
-        preferences = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false)
+        preferences = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
         preferencesBaseline = preferences
         crashDiagnostic = nil
         preferencesDirty = false
@@ -1399,6 +1399,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     func stageReadingPreferences(_ draft: ReaderPreferences) {
         guard let loaded = preferences else { return }
         var supported = draft
+        if loaded.sleepWakeIndicator == nil { supported.sleepWakeIndicator = nil }
         if loaded.sideButtons == nil { supported.sideButtons = nil }
         if loaded.frontButtonsFollowOrientation == nil { supported.frontButtonsFollowOrientation = nil }
         preferencesDirty = supported != loaded

@@ -322,3 +322,18 @@ Per `AGENTS.md`, every phase verifies both sides of any contract change:
   afterthought.
 - Scope creep into reader rendering — explicitly out of scope; the editor
   only edits chrome metrics/strings/fonts.
+
+### Sleep wake indicator (2026-09-30)
+
+Screens → Sleep exposes “Show WAKE on sleep screen” as a staged reader
+preference. It defaults on for offline drafts/demo and takes effect only after
+Apply to a supporting reader. An absent/unknown `sleepWakeIndicator` in GET
+preferences disables editing with a firmware-support explanation and the app
+omits that key on POST. Draft merging, discard and readback use the same
+baseline as the other reading preferences. See sibling `docs/nearby-sync-v1.md`.
+
+Daily Brief previews use the shared firmware power-switch painter: X3 top edge,
+X4 upper-right edge. When WAKE is on, portrait Brief sections start below the tab so cover-free
+reading progress cannot be obscured. WAKE and book-cover toggles both rerender the preview;
+reader-selected custom sleep screens remain an explicitly labeled outline.
+The indicator labels the physical power button; it is not a touchscreen button.
