@@ -30,7 +30,8 @@ struct PocketApp: App {
 #endif
 #if os(macOS)
         Settings {
-            AppAppearanceSettings()
+            AppSettingsWindow()
+                .environmentObject(model)
         }
 #endif
     }

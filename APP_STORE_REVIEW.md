@@ -23,14 +23,17 @@ save an article from Safari's share sheet and read it under **Articles**. On
 Mac, a book opens in the same app window. No account, network or hardware is needed
 for reading.
 
-Library options (the ellipsis menu) → **Continue Reading** shows: iCloud
+**Settings** (the gear at the bottom of the sidebar, in the Library header on
+iPhone, or ⌘, on Mac) holds Appearance and **Continue Reading**: iCloud
 key-value storage between the user's own Apple devices (on by default, no
 setup) and exchange with a connected X3/X4 reader over the local connection.
-Neither needs an account.
+Neither needs an account. Pairing a reader for Bluetooth reading sync is in
+**Reader → Connection** and is hidden in demo mode.
 
 The companion has an explicit, local demo mode for review without a reader:
-open **Device** (a tab in compact windows, a sidebar item on iPad and Mac)
-and choose **Try demo**. **Screens** then
+open **Reader** (a tab in compact windows; on iPad and Mac the **Reader**
+group in the sidebar, with Connection, Screens and Files) and choose
+**Try demo** on Connection. **Screens** then
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
 from a device. Switch between the Home and Sleep screens above the preview;
@@ -41,11 +44,13 @@ connected reader already shows can be loaded back for review.
 
 Live hardware actions require a compatible reader:
 
-1. Prepare a file with Add → Choose a file… under Files before switching networks. Firmware requires
+1. Prepare a file with Add → Choose a file… in Reader → Files before switching networks. Firmware requires
    acknowledgement and is validated before entering the offline queue.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
    choose Find on same Wi-Fi. This requests local-network access without BLE or
-   automatic Wi-Fi switching.
+   automatic Wi-Fi switching. Afterwards the app reconnects by itself whenever
+   that reader answers again at its last address on the same Wi-Fi (Settings →
+   Reconnect on the same Wi-Fi); it asks only that address and never changes networks.
 3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
    choose Connect directly in the app, and confirm the Wi-Fi transition. BLE
    pairing supplies the temporary credentials. No router or internet is required.

@@ -82,14 +82,59 @@ reading-progress v1로 구현했다([READING_PROGRESS.md](READING_PROGRESS.md), 
 - `Sources/Library/`: 서재 레코드, 가져오기(파일·Articles·직접 작성), 문서 식별, 서재 화면.
 - `Sources/Reading/`: 렌더러 브리지(WKWebView), 읽기 화면, 모양 설정, 위치 저장.
 - `Sources/Sync/`: 위치 레코드, iCloud·리더 교환, 이어 읽기 제안.
-- 최상위 화면: Library(첫 화면) · Screens · Device(연결·파일·펌웨어).
-  넓은 화면은 왼쪽 사이드바의 Library 아래 Books·Articles, Your reader 아래 Screens·Device로 이동한다.
-  iPhone은 하단 탭을 유지하고, 서재 제목 메뉴에서 Books·Articles를 전환한다.
+- 최상위 화면: Library(첫 화면) · Reader. Reader 아래에 Connection(연결·펌웨어·Bluetooth) · Screens · Files가
+  온다(아래 "기기 중심 구조" 참고). 넓은 화면은 사이드바의 Library 아래 Books·Articles, Reader 아래 세 항목으로
+  이동한다. iPhone은 Library·Reader 두 탭이고, Reader 탭 위쪽에서 페이지를 고른다.
+  서재 제목 메뉴에서 Books·Articles를 전환한다.
 - 책은 모든 플랫폼에서 같은 앱 창의 읽기 화면으로 열린다. Library로 돌아오면 기존 분류와 스크롤 위치가 유지된다.
-  Continue Reading 설정은 서재 오른쪽 Library options 메뉴에서 연다.
+  Appearance·Continue Reading은 Settings 한 곳에 있다: 사이드바 아래 Settings, iPhone은 서재 머리의
+  톱니, macOS는 Settings 창(⌘,). 리더의 Bluetooth 페어링은 Reader → Connection에 있다.
 - 서재의 책은 "리더로 보내기"로 기존 전송 대기열을 사용한다.
 - 데모 모드는 기기 기능에만 적용된다. 서재·읽기는 실제 기능이며 기기를 바꾸지 않는다.
   처음 실행하면 원본 안내 책 한 권을 서재에 만든다.
+
+## 기기 중심 구조 — 2026-10-01 결정
+
+기기는 화면 두 개(Screens, Device)로 나뉜 기능 묶음이 아니라 하나의 대상이다. 앱은 기기 없이 완결되고,
+기기가 있으면 그 기기 아래에서 설정·파일·위치를 다룬다.
+
+- 이름은 제품명이 아니라 **Reader**다. 앱은 특정 제품을 공식 지원하는 것이 아니라 Pocket Daily 또는 호환
+  CrossPoint 기반 펌웨어를 쓰는 리더를 지원한다. 모델명(X3/X4)은 연결된 리더가 스스로 알려 줄 때만
+  상태에 붙는다("X4 · Same Wi-Fi"). 연결 전에는 "Reader · Not connected"이고, Connection 카드에 호환 범위를
+  한 줄로 밝힌다. Screens의 X3/X4 선택은 기기 정체가 아니라 "Preview" 크기다.
+- 사이드바 Reader 아래 Connection → Screens → Files 순서. Connection 행이 상태 점과 상태를 함께 보여 준다.
+  연결이 먼저, 화면 설정이 다음이다. Screens는 별도 페이지로 둔다: 미리보기를 고정한 긴 편집기라
+  연결·펌웨어 카드와 섞으면 둘 다 불편하고, 편집·미리보기는 연결 없이 되며 Apply만 연결을 요구한다.
+- 화면은 원시 `/api/status` 필드 대신 기기 스냅샷(`DeviceSnapshot`: 계열·보고된 모델·연결·기능 집합)을 본다.
+  기능 집합은 `screens`·`files`·`readingPositions`·`firmwareUpdate`·`bluetoothSync`이고, 현재 CrossPoint
+  계열(X3/X4) 어댑터가 상태 응답과 BLE `CAP`을 이 집합으로 바꾼다. 다른 펌웨어 계열은 어댑터와 하위 항목
+  목록만 더한다. 계약은 플랫폼 중립으로 두어 Android도 같은 구조를 쓴다.
+- 연결 상태는 앱 전체가 공유한다: 사이드바 Connection 행, iPhone Library 머리의 상태 표시, Reader 탭 머리.
+- 같은 Wi-Fi 자동 재연결: 마지막 리더가 마지막 주소에서 같은 기기 ID로 응답하면(리더에서 Sync → Same
+  Wi-Fi가 열려 있으면) 앱이 세션을 연다. 그 주소 하나만 묻고, 네트워크를 바꾸거나 훑지 않는다. 사용자가
+  End session하면 리더가 한 번 응답하지 않을 때까지 다시 붙지 않는다. Direct connection은 계속 명시적이다.
+  Settings에서 끌 수 있다.
+
+단계:
+
+1. 구조 개편, 기기 스냅샷과 기능 집합, 공유 상태 표시, 같은 Wi-Fi 자동 재연결 (앱만).
+2. 연결 중이면 서재에서 바로 보내기, 책별 "기기에 있음" 배지와 필터, 책별 기기 위치 표시.
+   리더 파일 목록이 서재와 대조할 식별값(부분 MD5)을 주지 않으면 펌웨어 계약 변경이 필요하다.
+3. 리더 → 서재 가져오기(파일 다운로드 계약), 두 번째 기기 계열.
+
+2단계 구현(2026-10-01, 앱만): 연결되면 앱은 리더 레인이 비었을 때 한 번(그리고 전송·삭제 뒤마다)
+`/` 와 `/Articles` 파일 목록과 `/api/pocket/v1/reading`(최근 EPUB 10권, 부분 MD5·진행률)을 읽어
+`ReaderInventory`로 둔다. 서재는 이를 `ReaderShelf`로 맞춘다: 지문이 있으면 지문, 없으면 파일 이름과 크기
+(앱은 서재 파일을 이름·바이트 그대로 보낸다). 책 타일에 "On reader · 43%", Books 아래 "Only on your reader"
+목록, 연결 중이면 책 메뉴 "Send to reader"가 Files를 거치지 않고 바로 보낸다. 세션이 끝나도 목록은
+"Seen on X4 …"로 남는다. 목록은 이름 기준이라 하위 폴더의 책은 최근 읽은 책일 때만 보인다.
+
+3단계 계약(펌웨어 `docs/reader-files.md` "Reader file download", PR #12): `readerFiles: 2`가
+`GET /api/pocket/v1/files/content?deviceID&path&size&offset`을 연다. 한 번에 한 조각(Same Wi-Fi ≤ 4 KiB,
+Direct ≤ 1 KiB), 받은 만큼 offset을 늘린다. 503은 0.5 s부터 4 s까지 두 배로 늘려 같은 offset 재시도, 409는
+0부터 한 번만 다시, 416·크기 불일치는 실패. 합이 `size`와 같고, 리더가 지문을 알려 준 책은 부분 MD5도
+같아야 서재에 넣는다. EPUB만 "Add to Library"를 보인다(TXT·MD는 가져오면 EPUB로 바뀌어 다시 맞지 않는다).
+앱 쪽은 구현·단위 시험 완료, 펌웨어 구현은 대기 중이라 실기기 검증 전이다. `readerFiles` 검사는 모두 `>= 1`이다.
 
 ## 구현 상태 (2026-09-27, 미커밋)
 

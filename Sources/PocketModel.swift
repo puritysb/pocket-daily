@@ -412,6 +412,58 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
+    /// The reader as every screen shows it (docs/READER_EXPANSION.md, 기기 중심 구조).
+    var device: DeviceSnapshot {
+        DeviceSnapshot.crossPoint(
+            status: readerStatus, isDemo: isDemoMode,
+            isConnecting: readerStatus == nil && (isSearchingForReader || canCancelConnection),
+            isDirect: hasDirectSession,
+            bluetoothPaired: ReaderBluetoothLink.shared.rememberedReader != nil)
+    }
+
+    /// A reader connected before, over Wi-Fi or Bluetooth: worth showing its
+    /// state outside the device pages even while it is away.
+    var hasKnownReader: Bool {
+        UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) != nil
+            || ReaderBluetoothLink.shared.rememberedReader != nil
+    }
+
+    static let autoReconnectKey = "Pocket.reconnectSameWiFi"
+    /// Set by End session; cleared once the reader stops answering, so ending a
+    /// session holds until the reader leaves Sync.
+    private var autoReconnectHeld = false
+    private var autoReconnectProbe: Task<Void, Never>?
+
+    /// Reopens the session with the last reader when it answers at its last
+    /// address on the current Wi-Fi with the same device ID, which it does while
+    /// Sync → Same Wi-Fi is open. Only that address is asked, outside the reader
+    /// lane so the Bluetooth link keeps its pending connection; no network is
+    /// joined or scanned. Direct connection stays explicit.
+    func reconnectRememberedReader() {
+        guard UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true,
+              autoReconnectProbe == nil, !isDemoMode, !isInBackground, readerStatus == nil,
+              readerWorkTask == nil, !isWorking, !hasDirectSession, !isCancellingConnection,
+              let host = discoveryIO.rememberedHost, !host.isEmpty,
+              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return }
+        let attempt = connectionAttempt
+        autoReconnectProbe = Task { [self] in
+            defer { autoReconnectProbe = nil }
+            let status = try? await discoveryIO.status(host: host, port: 80, timeout: 1.5)
+            guard let status, status.deviceID == identity else {
+                autoReconnectHeld = false
+                return
+            }
+            guard !autoReconnectHeld, !Task.isCancelled, attempt == connectionAttempt, readerStatus == nil,
+                  readerWorkTask == nil, !isWorking, !isDemoMode, !isInBackground, !hasDirectSession else { return }
+            connectionAttempt += 1
+            let session = connectionAttempt
+            startReaderWork(attempt: session, kind: .discovery) { [self] _ in
+                guard !Task.isCancelled, session == connectionAttempt else { return }
+                await accept(status: status, host: host, httpPort: 80)
+            }
+        }
+    }
+
     var canExchangeReadingPositions: Bool {
         !isDemoMode && readerStatus?.readingProgress == 1 && readerStatus?.deviceID != nil
     }
@@ -722,7 +774,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     var readerWorkActive: AnyPublisher<Bool, Never> {
         $readerWorkOwner.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
     }
-    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage, quietReading }
+    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage, inventory, download, quietReading }
     private var readerWorkKind: ReaderWorkKind?
     private var isInBackground = false
     private var expectedDeviceID: String?
@@ -1180,6 +1232,8 @@ final class PocketModel: ObservableObject, DeviceSession {
         preferencesDirty = false
         crashDiagnostic = nil
         readerStatus = status
+        if readerInventory?.deviceID != status.deviceID { readerInventory = nil }
+        readerInventoryWanted = true
         mirror.apply(.sessionStarted(status))
         UserDefaults.standard.set(host, forKey: Self.lastReaderHostKey)
         if let deviceID = status.deviceID {
@@ -1294,7 +1348,12 @@ final class PocketModel: ObservableObject, DeviceSession {
                     self.preferencesDirty = false
                     self.stopLiveSync()
                     self.mirror.apply(.connection(.disconnected))
-                    self.post("Pocket connection ended. Check the reader’s Sync screen, then reconnect using the same connection method.", tone: .failure)
+                    if !self.hasDirectSession, UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true {
+                        // Leaving Sync on the reader ends the session; it comes back on its own.
+                        self.post("The reader left Sync. Pocket Daily reconnects when Sync → Same Wi-Fi is open on it again.", tone: .pending)
+                    } else {
+                        self.post("Pocket connection ended. Check the reader’s Sync screen, then reconnect using the same connection method.", tone: .failure)
+                    }
                     return
                 }
             }
@@ -1315,7 +1374,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
     private func readerStorageOperation(folder: String?, cursor: Int, deletion: (String, Int64)?) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
-              readerStatus?.readerFiles == 1, let identity = readerStatus?.deviceID else { return }
+              (readerStatus?.readerFiles ?? 0) >= 1, let identity = readerStatus?.deviceID else { return }
         let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
         readerFilesError = nil
         if folder != nil { readerFilePage = nil }
@@ -1331,6 +1390,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     }
                     guard ownsReaderWork(owner, attempt: attempt) else { return }
                     readerSpace = nil
+                    readerInventoryWanted = true
                 }
                 if let folder {
                     let data = try await client.readerStorageRequest(endpoint: "files", identity: identity, host: host, port: port,
@@ -1366,6 +1426,113 @@ final class PocketModel: ObservableObject, DeviceSession {
                 readerFilesError = error.localizedDescription
             }
         }
+    }
+
+    /// What the connected reader holds; kept after the session ends as "last seen".
+    @Published private(set) var readerInventory: ReaderInventory?
+    /// Why the last read of the reader's books failed; the Library says so beside the reader shelf.
+    @Published private(set) var readerInventoryError: String?
+    /// Set on a new session and after anything that changes the reader's files.
+    private var readerInventoryWanted = false
+
+    /// Reads the files in the folders the app sends to and the reader's recent
+    /// books, once per session and after each change, whenever the reader lane is
+    /// free. A folder the reader does not have yet (`/Articles`) reads as empty.
+    func refreshReaderInventoryIfWanted() {
+        guard readerInventoryWanted, !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
+              let status = readerStatus, let identity = status.deviceID,
+              (status.readerFiles ?? 0) >= 1 || status.readingProgress == 1 else { return }
+        let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
+        let model = PocketHardware(deviceName: status.device)?.rawValue
+        let started = startReaderWork(attempt: attempt, kind: .inventory) { [self] owner in
+            var files: [ReaderInventory.File] = []
+            do {
+                if (status.readerFiles ?? 0) >= 1 {
+                    for folder in ReaderInventory.folders {
+                        do {
+                            files += try await readerFolder(folder, identity: identity, host: host, port: port)
+                        } catch where folder != "/" && !(error is CancellationError) {
+                            continue
+                        }
+                    }
+                }
+                let reading = status.readingProgress == 1
+                    ? try await client.readingProgress(identity: identity, host: host, port: port).books : []
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                readerInventory = ReaderInventory(deviceID: identity, model: model, files: files,
+                                                  reading: reading, readAt: Date())
+                readerInventoryError = nil
+            } catch {
+                guard ownsReaderWork(owner, attempt: attempt), !Task.isCancelled else { return }
+                readerInventoryError = error.localizedDescription
+            }
+        }
+        if started != nil { readerInventoryWanted = false }
+    }
+
+    /// A book being copied from the reader into the Library.
+    struct ReaderDownload: Equatable {
+        let path: String
+        let size: Int64
+        var received: Int64
+    }
+    @Published private(set) var readerDownload: ReaderDownload?
+
+    var canDownloadFromReader: Bool {
+        device.capabilities.contains(.fileDownload) && !isWorking && !hasReaderWork && !isInBackground
+    }
+
+    /// Copies one reader book to a temporary file, piece by piece, in the reader
+    /// lane (firmware docs/reader-files.md, "Reader file download"). Only on an
+    /// explicit request; `document`, when the reader reported one, must match the
+    /// copy. `completion` gets the file to import and then remove with its folder.
+    func downloadFromReader(path: String, size: Int64, document: String?,
+                            completion: @escaping @MainActor (Result<URL, Error>) -> Void) {
+        guard canDownloadFromReader, let identity = readerStatus?.deviceID else { return }
+        let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
+        readerDownload = ReaderDownload(path: path, size: size, received: 0)
+        let started = startReaderWork(attempt: attempt, kind: .download) { [self] owner in
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ReaderDownload-" + UUID().uuidString, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let file = folder.appendingPathComponent((path as NSString).lastPathComponent)
+                try await ReaderFileDownloader().download(size: size, to: file, fetch: { [client] offset in
+                    try await client.readerFilePiece(identity: identity, path: path, size: size, offset: offset,
+                                                     host: host, port: port)
+                }, progress: { [weak self] received in self?.readerDownload?.received = received })
+                guard ownsReaderWork(owner, attempt: attempt) else { throw CancellationError() }
+                try ReaderFileDownloader.verify(file, document: document)
+                readerDownload = nil
+                completion(.success(file))
+            } catch {
+                try? FileManager.default.removeItem(at: folder)
+                readerDownload = nil
+                if !(error is CancellationError), !Task.isCancelled { completion(.failure(error)) }
+            }
+        }
+        if started == nil { readerDownload = nil }
+    }
+
+    func cancelReaderDownload() { if readerWorkKind == .download { readerWorkTask?.cancel() } }
+
+    private func readerFolder(_ folder: String, identity: String, host: String, port: Int) async throws -> [ReaderInventory.File] {
+        var files: [ReaderInventory.File] = []
+        var cursor = 0
+        var pages = 0
+        repeat {
+            let data = try await client.readerStorageRequest(endpoint: "files", identity: identity, host: host, port: port,
+                                                             query: ["path": folder, "cursor": String(cursor)])
+            let page = try JSONDecoder().decode(ReaderFilePage.self, from: data)
+            try page.validate(identity: identity, folder: folder, cursor: cursor)
+            files += page.entries.filter { !$0.directory }.map {
+                ReaderInventory.File(path: folder == "/" ? "/" + $0.name : folder + "/" + $0.name, size: $0.size)
+            }
+            cursor = page.nextCursor
+            pages += 1
+            try Task.checkCancellation()
+        } while cursor != 0 && pages < 64
+        return files
     }
 
     func destinationLabel(for item: PreparedTransfer) -> String {
@@ -1859,6 +2026,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     func endConnection() {
         guard !isWorking, !hasReaderWork else { return }
+        autoReconnectHeld = true
         startReaderWork(attempt: connectionAttempt, kind: .session) { [self] _ in
             await finishConnection(preserveMessage: false)
         }
@@ -1904,6 +2072,8 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     private func finishReaderWork(owner: UUID, attempt: Int) {
         guard readerWorkOwner == owner else { return }
+        // A finished transfer changes what the reader holds.
+        if readerWorkKind == .transfer { readerInventoryWanted = true }
         let resumeTraffic = readerWorkKind != .local && readerWorkKind != .quietReading
         readerWorkOwner = nil
         readerWorkKind = nil

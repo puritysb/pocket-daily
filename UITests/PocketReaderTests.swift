@@ -26,11 +26,9 @@ final class PocketReaderTests: XCTestCase {
         let book = app.buttons["book-Welcome to Pocket Daily"]
         XCTAssertTrue(book.waitForExistence(timeout: 15), "The welcome book was not added to the library")
         attach(app, "library")
-        app.buttons["library-options"].tap()
-        let syncSettings = app.buttons["library-sync"]
-        XCTAssertTrue(syncSettings.waitForExistence(timeout: 5))
-        syncSettings.tap()
+        app.openSettings()
         XCTAssertTrue(app.switches["sync-icloud"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["app-appearance"].exists)
         app.buttons["Done"].tap()
         XCTAssertTrue(book.waitForExistence(timeout: 5))
         book.tap()

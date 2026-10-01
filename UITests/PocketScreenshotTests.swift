@@ -44,7 +44,7 @@ final class PocketScreenshotTests: XCTestCase {
         try save(name: "04-cards")
 
         if app.isCompact {
-            app.open("Device")
+            app.open("Reader")
             XCTAssertTrue(app.buttons["Exit demo"].waitForExistence(timeout: 5))
             try save(name: "05-device")
         } else {
@@ -53,7 +53,7 @@ final class PocketScreenshotTests: XCTestCase {
             x4.open("Screens")
             XCTAssertTrue(x4.waitForLayoutPreview(), "The X4 Home preview never rendered")
             try save(name: "05-home-x4")
-            x4.open("Device")
+            x4.open("Reader")
             try save(name: "07-device")
         }
     }

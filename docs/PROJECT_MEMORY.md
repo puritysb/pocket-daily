@@ -26,10 +26,67 @@ with a dated note below.
   All 19 store captures regenerated (Mac refreshed after final inset change) and
   package validation passed. No firmware was installed; physical panel QA pending.
 
+## Pending app cleanup after firmware PR #8–#10 — 2026-10-01
+
+- Firmware main removed UI packs (`/api/pocket/v1/ui-packs`, `ui-pack/apply`,
+  status `liveStudio.uiPacks/activePack*`), live frames (`screen-live`,
+  `dev/capture`, `dev/frame`, WS `frame`, `liveStudio.frameStream`) and saved
+  screen preview (`screen-preview`, `screenPreview*`). `liveStudio.mode`/`wsPort`
+  and WS status/prefs push remain; `mode` stays required in the decoder.
+- The current app still decodes these as optional and keeps working. To do: drop
+  LiveSyncClient `.frame` (subscribe `{}`), PocketModel frame handling, the
+  CrossPointClient/DeviceCore pack and preview fields and their test fixtures,
+  env-gated `MacTests/PocketParityTests` capture use; re-import PocketUIHost
+  (HomeRenderer label "Home"); update AGENTS.md, LIVE_STUDIO_DESIGN.md,
+  HOST_RENDERER.md, SYNC_SESSIONS.md. Source: firmware docs/PROJECT_MEMORY.md
+  "Delta alignment merged — 2026-10-01".
+- Bluetooth reading-sync windows now open only from Pocket Daily Home and
+  sleep, not stock Home/Library/File Browser.
+
+## Device-centric IA, phase 1 — 2026-10-01
+
+- Decision record: `docs/READER_EXPANSION.md` 기기 중심 구조. Sidebar: Library
+  (Books, Articles) then Reader → Connection (with status), Screens, Files.
+  iPhone: Library and Reader tabs; Reader pages are a segmented control
+  (`device-pages`). The UI says "Reader", never a fixed model: the model name
+  appears only once a reader reports it. `StudioSection` rawValues
+  Reader/Screens/Files; UI tests call `open("Reader" | "Screens" | "Files")`.
+- `DeviceSnapshot` (`Sources/Core/DeviceSnapshot.swift`) maps CrossPoint status
+  and Bluetooth pairing to capabilities; `PocketModel.device` is the shared state.
+- Same Wi-Fi reconnect: `PocketModel.reconnectRememberedReader()` every 8 s from
+  ContentView (skipped under XCTest), probe outside the reader lane, same
+  device ID only, held after End session until the reader stops answering.
+  Setting key `Pocket.reconnectSameWiFi`. Phases 2–3 (library ↔ device content)
+  are not started.
+- Phase 2 (app only) is implemented: `ReaderInventory`/`ReaderShelf`
+  (`Sources/Library/ReaderShelf.swift`), "On reader" badges, "Only on your
+  reader", direct "Send to reader" while connected. Phase 3 app side
+  (`Sources/Library/ReaderFileDownload.swift`, Add to Library for EPUB) follows
+  firmware PR #12's contract (`readerFiles: 2`, offset pieces); firmware side not
+  implemented yet, so no hardware verification. Joint X3/X4 check when it lands:
+  1 MB and 20 MB EPUB byte-identical over both bearers.
+- UI tests that touch Articles or the share extension need the App Group, so run
+  them signed ad hoc (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`, as
+  `scripts/capture_screenshots.sh` does). With `CODE_SIGNING_ALLOWED=NO` they fail
+  with "The shared article storage is unavailable" (verified 2026-10-01).
+
+## Settings placement — 2026-10-01
+
+- Appearance and Continue Reading live only in Settings: macOS Settings window
+  (⌘,, tabs General / Continue Reading) opened from the sidebar's Settings row;
+  iOS one sheet from the sidebar (wide) or the Library header gear (compact).
+  The Library ⋯ menu and Device's Appearance picker were removed.
+- Bluetooth reading-sync pairing moved to Device (`ReaderBluetoothPairingCard`).
+  The reader advertises only after Sync → Direct connection; the Sync button
+  itself opens a menu, so hints must name Direct connection.
+- Hardware (user, 2026-10-01): the Mac Release build paired an X3 from the Device
+  card after the Mac forgot a stale `Pocket-AF70` bond
+  (`CBError.peerRemovedPairingInformation`; the reader keeps two bonds). A
+  background BLE place exchange after pairing is not yet verified.
+
 ## Appearance selection and Home cover layout — 2026-09-30
 
-- App chrome has a persisted System/Light/Dark choice (`appAppearance`), available
-  in the sidebar, Library options, Device, and macOS Settings. Reader page themes
+- App chrome has a persisted System/Light/Dark choice (`appAppearance`). Reader page themes
   remain independent; closing a book restores the app choice.
 - The sibling Home painter fits a 2:3 cover slot into a stable metadata column
   for Daily Panel top/bottom/off. Actual bitmap aspect ratios are preserved;

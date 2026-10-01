@@ -196,7 +196,7 @@ final class PocketFlowTests: XCTestCase {
         // Give a prompt time to appear if one were going to.
         XCTAssertFalse(springboard.alerts.firstMatch.waitForExistence(timeout: 3),
                        "A permission prompt appeared at launch: \(springboard.alerts.firstMatch.label)")
-        app.open("Device")
+        app.open("Reader")
         XCTAssertTrue(app.buttons["Find on same Wi-Fi"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Try demo"].exists)
     }
@@ -205,22 +205,27 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-empty-discovery"]
         app.launch()
-        XCTAssertTrue(app.buttons["library-options"].waitForExistence(timeout: 10))
-        app.buttons["library-options"].tap()
-        app.buttons["library-sync"].tap()
+        app.openSettings()
         let enabled = app.switches["sync-reader-exchange"]
         XCTAssertTrue(enabled.waitForExistence(timeout: 5))
         if enabled.value as? String == "0" { enabled.tap() }
+        XCTAssertTrue(app.staticTexts["sync-bluetooth-hint"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["sync-bluetooth-setup"].exists, "Pairing belongs on Device, not in Settings")
+        app.buttons["Done"].tap()
+        // Pairing sits on Device, with the other ways of reaching the reader.
+        app.open("Reader")
         XCTAssertTrue(app.buttons["sync-bluetooth-setup"].waitForExistence(timeout: 5))
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
         attach(app, "ble-reading-sync-setup")
         app.terminate()
         app.launchArguments = ["--demo"]
         app.launch()
-        XCTAssertTrue(app.buttons["library-options"].waitForExistence(timeout: 10))
-        app.buttons["library-options"].tap()
-        app.buttons["library-sync"].tap()
+        app.openSettings()
         XCTAssertTrue(app.switches["sync-reader-exchange"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["sync-bluetooth-hint"].exists)
+        app.buttons["Done"].tap()
+        app.open("Reader")
+        XCTAssertTrue(app.buttons["try-demo"].exists || app.buttons["Exit demo"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["sync-bluetooth-setup"].exists)
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
         attach(app, "ble-reading-sync-demo")
@@ -229,10 +234,11 @@ final class PocketFlowTests: XCTestCase {
     func testDirectConnectionRequiresConfirmationAndOfflinePreparationIsAvailable() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Device")
+        app.open("Files")
         let add = app.buttons["files-add"]
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         XCTAssertTrue(add.isEnabled, "Files can be prepared before a reader is connected")
+        app.open("Reader")
         let help = app.buttons["How to connect"]
         XCTAssertTrue(help.waitForExistence(timeout: 5))
         help.tap()
@@ -252,7 +258,7 @@ final class PocketFlowTests: XCTestCase {
     func testFilePickerStaysOpenWhileSearching() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Device")
+        app.open("Files")
         let add = app.buttons["files-add"]
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         add.tap()
@@ -290,7 +296,7 @@ final class PocketFlowTests: XCTestCase {
     func testTypedTextCanBecomeAnOfflineEPUB() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Device")
+        app.open("Files")
         let add = app.buttons["files-add"]
         app.revealInReader(add)
         add.tap()
@@ -323,7 +329,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
         app.terminate()
         app.launch()
-        app.open("Device")
+        app.open("Files")
         XCTAssertTrue(filename.waitForExistence(timeout: 10), "Prepared EPUB must survive relaunch")
         let remove = app.buttons["Remove content…"]
         app.revealInReader(remove)
@@ -405,9 +411,9 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(saved.waitForExistence(timeout: 10))
         app.buttons["article-options-" + articleTitle].tap()
         app.buttons["Prepare for reader"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Ready in Device")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Ready in Reader")).firstMatch.waitForExistence(timeout: 10))
         attach(app, "article-library-prepared")
-        app.open("Device")
+        app.open("Files")
         let filename = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "pd-article-", ".epub")).firstMatch
         XCTAssertTrue(filename.waitForExistence(timeout: 10))
         app.terminate()
@@ -422,7 +428,7 @@ final class PocketFlowTests: XCTestCase {
         confirmDelete.tap()
         let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: saved)
         XCTAssertEqual(XCTWaiter().wait(for: [removed], timeout: 5), .completed)
-        app.open("Device")
+        app.open("Files")
         let remove = app.buttons["Remove content…"]
         app.revealInReader(remove)
         remove.tap()
@@ -434,13 +440,15 @@ final class PocketFlowTests: XCTestCase {
     func testDemoModeIsPopulatedButCannotTransfer() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Device")
+        app.open("Reader")
         let tryDemo = app.buttons["Try demo"]
         XCTAssertTrue(tryDemo.waitForExistence(timeout: 10))
         tryDemo.tap()
 
         XCTAssertTrue(app.staticTexts["Demo · nothing is sent"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Exit demo"].exists)
+        app.open("Files")
+        XCTAssertTrue(app.buttons["files-add"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["files-add"].isEnabled, "Nothing may reach a device")
         // Reader settings are populated in Home & Sleep so they are reviewable...
         app.open("Screens")
@@ -450,7 +458,7 @@ final class PocketFlowTests: XCTestCase {
         // ...but Apply stays off.
         XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
 
-        app.open("Device")
+        app.open("Reader")
         let exit = app.buttons["Exit demo"]
         app.revealInReader(exit, upward: true)
         exit.tap()
@@ -464,7 +472,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-empty-discovery"]
         app.launch()
-        app.open("Device")
+        app.open("Reader")
         let find = app.buttons["Find on same Wi-Fi"]
         XCTAssertTrue(find.waitForExistence(timeout: 10))
 
@@ -484,7 +492,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-slow-discovery"]
         app.launch()
-        app.open("Device")
+        app.open("Reader")
         let find = app.buttons["Find on same Wi-Fi"]
         find.tap()
         let cancel = app.buttons["cancel-reader-connection"]
@@ -538,7 +546,7 @@ final class PocketFlowTests: XCTestCase {
     func testAboutSheetStatesTheIndependenceAndPrivacyPosition() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Device")
+        app.open("Reader")
         let about = app.buttons["about-privacy"]
         app.revealInReader(about)
         XCTAssertTrue(about.waitForExistence(timeout: 5))

@@ -17,6 +17,14 @@ whose target is status JSON. The separate File Transfer browser flow is
 unchanged. No network is changed merely by showing these choices, and no
 automatic fallback from shared Wi-Fi to direct connection is permitted.
 
+Once a reader has connected over Same Wi-Fi, the app reconnects on its own
+when that reader answers again at its last address with the same device ID
+(Sync → Same Wi-Fi open on the reader). Only that one address is asked; the
+app never scans, joins or changes a network for this. After End session it
+waits until the reader stops answering once. The setting "Reconnect on the
+same Wi-Fi" turns it off; legacy readers without a device ID are never
+reconnected automatically.
+
 The existing BLE control plane and iOS NEHotspotConfiguration/macOS CoreWLAN
 association are reused. BLE is released before the reader starts its private
 AP. No account, cloud service or router is required for that direct path.

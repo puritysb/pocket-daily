@@ -89,6 +89,8 @@ final class PocketMacScreenshotTests: XCTestCase {
                              name: "qa-device-no-reader", size: Self.pointSize)
         try await renderView(ContentView(initialSection: .reader).environmentObject(model),
                              name: "qa-device-no-reader-dark", size: Self.pointSize, dark: true)
+        try await renderView(ContentView(initialSection: .files).environmentObject(model),
+                             name: "qa-files-no-reader", size: Self.pointSize)
 
         await LibraryModel.shared.load()
         let book = try XCTUnwrap(LibraryModel.shared.books.first { $0.origin == .welcome })
@@ -106,8 +108,12 @@ final class PocketMacScreenshotTests: XCTestCase {
         demo.enterDemoMode()
         try await renderView(ReaderAppearancePanel(store: ReaderAppearanceStore.shared),
                              name: "qa-reader-appearance", size: NSSize(width: 420, height: 520))
-        try await renderView(SyncSettingsView(sync: .shared, model: demo, library: .shared),
-                             name: "qa-sync-settings", size: NSSize(width: 520, height: 620))
+        try await renderView(AppSettingsWindow().environmentObject(demo),
+                             name: "qa-settings-window", size: NSSize(width: 520, height: 480))
+        try await renderView(AppSettingsSheet(model: demo),
+                             name: "qa-settings", size: NSSize(width: 520, height: 720))
+        try await renderView(ReaderBluetoothPairingCard(sync: .shared).padding(20),
+                             name: "qa-bluetooth-pairing", size: NSSize(width: 360, height: 300))
         try await renderView(ArticleCaptureView(initialURL: "", completed: {}),
                              name: "qa-article-add", size: NSSize(width: 520, height: 620))
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("qa-feeds-" + UUID().uuidString)

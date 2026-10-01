@@ -1079,6 +1079,33 @@ actor CrossPointClient {
         return body
     }
 
+    /// One piece of a reader file from `offset`. The reader caps a piece at
+    /// 4 KiB on Same Wi-Fi and 1 KiB over Direct connection.
+    func readerFilePiece(identity: String, path: String, size: Int64, offset: Int64,
+                         host: String, port: Int) async throws -> ReaderFilePiece {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/files/content", query: [
+            "deviceID": identity, "path": path, "size": String(size), "offset": String(offset),
+        ]) else { throw ClientError.invalidAddress }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        switch (response as? HTTPURLResponse)?.statusCode ?? -1 {
+        case 200:
+            guard body.count <= 4096 else { throw ReaderDownloadError.malformedPiece }
+            return .data(body)
+        case 503: return .busy
+        case 409: return .changed
+        case 403: throw ClientError.unexpectedMessage("The reader does not share this kind of file. EPUB, TXT and Markdown books can be added.")
+        case 404: throw ClientError.unexpectedMessage("The book is no longer on the reader. Refresh and try again.")
+        case 416: throw ReaderDownloadError.incomplete
+        default:
+            let detail = String(data: body.prefix(512), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw ClientError.unexpectedMessage(detail?.isEmpty == false ? detail! : "The reader could not send the book.")
+        }
+    }
+
     /// Only hidden UUID staging files can be discarded. Published content/update.bin is never a target.
     func controlTransfer(action: String, transferID: UUID, destination: String,
                          kind: TransferKind, host: String, port: Int) async throws {

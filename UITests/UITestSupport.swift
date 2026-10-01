@@ -1,12 +1,22 @@
 import XCTest
 
 /// Navigation shared by the flow and screenshot tests. The app opens on the
-/// Library. iPhone shows tabs (Library, Screens, Device); wide layouts
-/// show Books, Articles, Screens and Device in a sidebar. The studio switches between the Home and Sleep screens above its
-/// canvas.
+/// Library. iPhone shows two tabs (Library, Reader) with the Reader pages at the
+/// top of its tab; wide layouts show Books, Articles and the Reader pages
+/// (Connection, Screens, Files) in a sidebar. The studio switches between the
+/// Home and Sleep screens above its canvas.
 extension XCUIApplication {
     /// Compact layouts use tabs instead of the sidebar.
-    var isCompact: Bool { tabBars.firstMatch.buttons["Device"].exists }
+    var isCompact: Bool { tabBars.firstMatch.buttons["Reader"].exists }
+
+    /// Opens Settings: the sidebar's button on wide layouts, the Library
+    /// header's on iPhone.
+    func openSettings() {
+        if isCompact { open("Library") }
+        let settings = buttons["app-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.tap()
+    }
 
     /// Shows the Library's Books or Articles shelf.
     func openShelf(_ shelf: String) {
@@ -25,15 +35,26 @@ extension XCUIApplication {
     }
 
     /// Compact layouts use tabs; wide layouts use the navigation sidebar.
+    /// "Library", or a Reader page: "Reader" (its Connection page), "Screens",
+    /// "Files". On iPhone the Reader pages are a segmented control in the Reader tab.
     func open(_ section: String) {
         let tabs = tabBars.firstMatch
-        let sidebarLabel = section == "Library" ? "Books" : section
-        let sidebarItem = buttons["navigation-\(sidebarLabel)"]
+        let tab = section == "Library" ? "Library" : "Reader"
+        let page = section == "Reader" ? "Connection" : section
+        let sidebarItem = buttons["navigation-\(section == "Library" ? "Books" : page)"]
         let shown = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in tabs.buttons[section].exists || sidebarItem.exists }, object: self)
+            predicate: NSPredicate { _, _ in tabs.buttons[tab].exists || sidebarItem.exists }, object: self)
         XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 15), .completed)
-        let target = sidebarItem.exists ? sidebarItem : tabs.buttons[section].firstMatch
+        let target = sidebarItem.exists ? sidebarItem : tabs.buttons[tab].firstMatch
         XCTAssertTrue(target.exists, "Missing navigation item: \(section)")
+        select(target)
+        guard !sidebarItem.exists, section != "Library" else { return }
+        let segment = segmentedControls["device-pages"].buttons[page]
+        XCTAssertTrue(segment.waitForExistence(timeout: 5), "Missing Reader page: \(page)")
+        select(segment)
+    }
+
+    private func select(_ target: XCUIElement) {
         for _ in 0..<3 where !target.isSelected {
             target.tap()
             _ = XCTWaiter().wait(for: [XCTNSPredicateExpectation(

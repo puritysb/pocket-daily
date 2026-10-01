@@ -10,15 +10,17 @@ struct LibraryView: View {
 
     @ObservedObject var model: PocketModel
     @ObservedObject var library: LibraryModel
-    @ObservedObject var sync: ReadingSync
     @ObservedObject var inbox: ArticleInboxModel
     @Binding var shelf: Shelf
     var showsShelfMenu = true
+    /// Compact layouts have no sidebar, so the shelf header carries Settings.
+    var openSettings: (() -> Void)?
+    /// Compact layouts: the reader's state in the header, opening the Reader tab.
+    var openDevice: (() -> Void)?
     let open: (LibraryBook) -> Void
     @State private var importing = false
     @State private var addingArticle = false
     @State private var managingFeeds = false
-    @State private var showingSync = false
     @State private var removing: LibraryBook?
     @State private var targeted = false
     @State private var sharing: SharedBook?
@@ -27,6 +29,12 @@ struct LibraryView: View {
         let id = UUID()
         let title: String
         let url: URL
+    }
+
+    /// What the reader holds, matched against the Library; nil until a reader was read.
+    private var readerShelf: ReaderShelf? {
+        guard !model.isDemoMode, let inventory = model.readerInventory else { return nil }
+        return ReaderShelf(inventory: inventory, books: library.books)
     }
 
     static let importTypes: [UTType] = [.epub, .plainText, UTType("net.daringfireball.markdown") ?? .plainText]
@@ -62,7 +70,6 @@ struct LibraryView: View {
                 .padding(24)
                 .presentationDetents([.medium])
             }
-            .sheet(isPresented: $showingSync) { SyncSettingsView(sync: sync, model: model, library: library) }
             .confirmationDialog("Remove this book from the library?", isPresented: Binding(
                 get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
                     if let book = removing {
@@ -97,6 +104,12 @@ struct LibraryView: View {
                 }
                 Text(shelf == .books ? "Your own quiet corner." : "Saved for a slower moment.")
                     .font(.subheadline).foregroundStyle(.secondary)
+                if let openDevice, model.device.link != .offline || model.hasKnownReader {
+                    Button(action: openDevice) { DeviceStatusLabel(device: model.device) }
+                        .buttonStyle(.plain)
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("library-device-status")
+                }
             }
             Spacer(minLength: 0)
             if shelf == .books {
@@ -117,20 +130,13 @@ struct LibraryView: View {
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .accessibilityLabel("Add to Articles").accessibilityIdentifier("article-add-menu")
             }
-            Menu {
-                Button { showingSync = true } label: {
-                    Label("Continue Reading", systemImage: "arrow.triangle.2.circlepath")
+            if let openSettings {
+                Button(action: openSettings) {
+                    Image(systemName: "gearshape").frame(width: 44, height: 44).contentShape(Rectangle())
                 }
-                .accessibilityIdentifier("library-sync")
-                Divider()
-                AppAppearancePicker()
-            } label: {
-                Image(systemName: "ellipsis.circle").foregroundStyle(.primary).frame(width: 44, height: 44)
+                .accessibilityLabel("Settings")
+                .accessibilityIdentifier("app-settings")
             }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel("Library options")
-            .accessibilityIdentifier("library-options")
         }
         .buttonStyle(.plain)
         .tint(Color.primary)
@@ -153,16 +159,20 @@ struct LibraryView: View {
                 Text("On your bookshelf")
                     .font(.headline)
                     .padding(.top, 4)
+                let shelf = readerShelf
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 180), spacing: 18, alignment: .top)],
                           alignment: .leading, spacing: 22) {
                     ForEach(library.books.filter { !$0.isArticle }) { book in
                         Button { open(book) } label: {
-                            BookTile(book: book, library: library)
+                            BookTile(book: book, library: library, onReader: shelf?.item(for: book))
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("book-\(book.title)")
                         .contextMenu { menu(for: book) }
                     }
+                }
+                if let shelf {
+                    ReaderOnlyShelf(shelf: shelf, model: model, add: addFromReader)
                 }
                 if !library.books.contains(where: { !$0.isArticle && $0.origin != .welcome }) && !library.isWorking {
                     // Until the first own book arrives, say how books get here.
@@ -202,10 +212,33 @@ struct LibraryView: View {
     @ViewBuilder private func menu(for book: LibraryBook) -> some View {
         Button("Read", systemImage: "book") { open(book) }
         Button("Share book file…", systemImage: "square.and.arrow.up") { share(book) }
-        Button("Prepare for reader", systemImage: "arrow.up.doc") { prepare(book) }
-            .disabled(!model.canPrepareFiles)
+        if model.device.isConnected {
+            Button(readerShelf?.item(for: book) == nil ? "Send to reader" : "Send to reader again",
+                   systemImage: "arrow.up.doc") { prepare(book, send: true) }
+                .disabled(!model.canPrepareFiles)
+        } else {
+            Button("Prepare for reader", systemImage: "arrow.up.doc") { prepare(book) }
+                .disabled(!model.canPrepareFiles)
+        }
         Divider()
         Button("Remove from Library", systemImage: "trash", role: .destructive) { removing = book }
+    }
+
+    /// Copies a book the reader holds into the Library, unchanged.
+    private func addFromReader(_ item: ReaderShelf.Item) {
+        guard let size = item.size else { return }
+        model.downloadFromReader(path: item.path, size: size, document: item.document) { result in
+            switch result {
+            case let .success(file):
+                Task {
+                    let book = await library.importFiles([file])
+                    try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+                    if let book { library.notice = "\(book.title) is now in your Library." }
+                }
+            case let .failure(error):
+                library.error = error.localizedDescription
+            }
+        }
     }
 
     /// The exact library file, so another device opens the same book and can continue.
@@ -216,8 +249,9 @@ struct LibraryView: View {
         }
     }
 
-    /// Queues the exact library file for the reader; sending stays explicit.
-    private func prepare(_ book: LibraryBook) {
+    /// Queues the exact library file for the reader. With a reader connected,
+    /// `send` sends what is ready at once; otherwise sending stays in Reader → Files.
+    private func prepare(_ book: LibraryBook, send: Bool = false) {
         Task {
             do {
                 let url = try await library.fileURL(for: book)
@@ -228,7 +262,12 @@ struct LibraryView: View {
                     return
                 }
                 await work.value
-                library.notice = "\(book.title) is ready in Device → Files. Connect and choose Send."
+                if send, model.device.isConnected {
+                    model.sendPreparedFiles(kind: .content)
+                    library.notice = "Sending \(book.title) to the reader…"
+                } else {
+                    library.notice = "\(book.title) is ready in Reader → Files. Connect and choose Send."
+                }
             } catch {
                 library.error = error.localizedDescription
             }
@@ -268,6 +307,8 @@ private struct ContinueReadingCard: View {
 private struct BookTile: View {
     let book: LibraryBook
     @ObservedObject var library: LibraryModel
+    /// The reader's copy of this book, when the reader holds one.
+    var onReader: ReaderShelf.Item?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -280,8 +321,90 @@ private struct BookTile: View {
             if book.progress > 0 {
                 ProgressView(value: book.progress).progressViewStyle(.pocketBar)
             }
+            if let onReader {
+                Label(onReader.percentage.map { "On reader · \(Int(($0 * 100).rounded()))%" } ?? "On reader",
+                      systemImage: "checkmark.circle")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("on-reader-\(book.title)")
+            }
         }
         .contentShape(Rectangle())
+    }
+}
+
+/// Books the reader holds that this Library does not, last read from the reader.
+/// With download-capable firmware an EPUB can be copied into the Library.
+private struct ReaderOnlyShelf: View {
+    let shelf: ReaderShelf
+    @ObservedObject var model: PocketModel
+    let add: (ReaderShelf.Item) -> Void
+
+    private var books: [ReaderShelf.Item] { shelf.onlyOnReader.filter { !$0.isArticle } }
+    private var connected: Bool { model.device.isConnected }
+    private var canDownload: Bool { model.device.capabilities.contains(.fileDownload) }
+
+    private var seen: String {
+        let reader = shelf.readerModel ?? "the reader"
+        return connected ? "On \(reader) now"
+            : "Seen on \(reader) \(shelf.readAt.formatted(.relative(presentation: .named)))"
+    }
+
+    /// Why the books cannot be added right now, if they cannot.
+    private var hint: String? {
+        if !connected { return "Connect the reader to add these to your Library." }
+        if !canDownload { return "Adding books from the reader needs a newer reader firmware." }
+        if model.hasDirectSession { return "Copying is slower over Direct connection; Same Wi-Fi is faster." }
+        return nil
+    }
+
+    var body: some View {
+        if !books.isEmpty || model.readerInventoryError != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Only on your reader").font(.headline)
+                Text(seen).font(.caption).foregroundStyle(.secondary)
+                if let error = model.readerInventoryError {
+                    Label("Could not read the reader’s books: \(error)", systemImage: "exclamationmark.triangle")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                if let hint { Text(hint).font(.caption).foregroundStyle(.secondary) }
+                ForEach(books) { item in row(item) }
+            }
+            .padding(.top, 8)
+            .accessibilityIdentifier("reader-only-shelf")
+        }
+    }
+
+    @ViewBuilder private func row(_ item: ReaderShelf.Item) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "doc.text").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title).font(.subheadline).lineLimit(2)
+                Text(detail(item)).font(.caption).foregroundStyle(.secondary)
+                if let download = model.readerDownload, download.path == item.path, download.size > 0 {
+                    ProgressView(value: Double(download.received), total: Double(download.size))
+                        .progressViewStyle(.pocketBar)
+                }
+            }
+            Spacer(minLength: 8)
+            if model.readerDownload?.path == item.path {
+                Button("Cancel") { model.cancelReaderDownload() }
+                    .buttonStyle(.borderless).font(.callout)
+            } else if connected && canDownload && item.canAddToLibrary {
+                Button("Add to Library") { add(item) }
+                    .buttonStyle(.bordered).font(.callout)
+                    .disabled(!model.canDownloadFromReader)
+                    .accessibilityIdentifier("reader-add-\(item.name)")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("reader-only-\(item.name)")
+    }
+
+    private func detail(_ item: ReaderShelf.Item) -> String {
+        var parts = [item.path]
+        if let size = item.size { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
+        if let percentage = item.percentage { parts.append("\(Int((percentage * 100).rounded()))% read") }
+        return parts.joined(separator: " · ")
     }
 }
 

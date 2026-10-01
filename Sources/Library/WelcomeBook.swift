@@ -23,7 +23,7 @@ enum WelcomeBook {
                     "Books bought in other stores are usually protected with DRM, and Pocket Daily cannot open them. Many publishers and public-domain libraries offer DRM-free EPUB downloads.",
                 ]),
                 .init(title: "Continue on your reader", paragraphs: [
-                    "If you have an X3 or X4 reader running Pocket Daily or compatible CrossPoint-based firmware, Pocket Daily is also its companion. Arrange its Home and Sleep screens in Screens. Open Device to send books and articles or update its firmware.",
+                    "If you have an X3 or X4 reader running Pocket Daily or compatible CrossPoint-based firmware, Pocket Daily is also its companion. Under Reader, connect it, arrange its Home and Sleep screens in Screens, and send books and articles from Files.",
                     "A book you send from the Library is the same file you read here, so both devices recognize it as the same book.",
                     "No reader yet? That is fine. Everything in the Library works on its own.",
                 ]),

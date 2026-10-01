@@ -1,18 +1,34 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The Library (reading on this device) comes first; the reader companion
-/// follows: Home & Sleep (layout, My cards and reader settings), then the
-/// connection, files and firmware in their own Device destination.
+/// The Library (reading on this device) comes first; the reader follows with
+/// its own pages: Connection (connect, firmware, Bluetooth), Screens (Home &
+/// Sleep) and Files (docs/READER_EXPANSION.md, 기기 중심 구조). It is "Reader",
+/// not a product name: the app works with compatible readers.
 enum StudioSection: String, CaseIterable, Hashable {
-    case library = "Library", layout = "Screens", reader = "Device"
+    case library = "Library", reader = "Reader", layout = "Screens", files = "Files"
 
-    var symbol: String {
-        switch self {
-        case .library: "books.vertical"
-        case .layout: "rectangle.3.group"
-        case .reader: "rectangle.portrait.inset.filled"
+    init(_ page: DeviceSection) {
+        switch page {
+        case .connection: self = .reader
+        case .screens: self = .layout
+        case .files: self = .files
         }
+    }
+
+    /// The device page this section shows; nil for the Library.
+    var devicePage: DeviceSection? {
+        switch self {
+        case .library: nil
+        case .reader: .connection
+        case .layout: .screens
+        case .files: .files
+        }
+    }
+
+    /// Tab icons; the sidebar rows use each page's own symbol.
+    var symbol: String {
+        self == .library ? "books.vertical" : "rectangle.portrait.inset.filled"
     }
 }
 
@@ -51,6 +67,12 @@ struct ContentView: View {
     @State private var sdSource: URL?
     @State private var confirmingFirmwareUpdate = false
     @State private var showingProjectInfo = false
+    @State private var showingSettings = false
+    /// The page the compact Reader tab returns to.
+    @State private var lastDevicePage: DeviceSection = .connection
+#if os(macOS)
+    @Environment(\.openSettings) private var openSettingsWindow
+#endif
     @State private var firmwareDownloadTask: Task<Void, Never>?
 
     private let initialPreview: ProfileStudioView.PreviewSurface
@@ -167,14 +189,34 @@ struct ContentView: View {
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
         }
-        .onChange(of: model.isWorking) { _, working in if !working { exchangeReadingPositions() } }
-        .onChange(of: model.readerStatus?.deviceID) { _, _ in exchangeReadingPositions() }
+        .sheet(isPresented: $showingSettings) {
+            AppSettingsSheet(model: model)
+        }
+        .onChange(of: model.isWorking) { _, working in
+            guard !working else { return }
+            // Positions first; the reader's book list follows once the lane is free again.
+            exchangeReadingPositions()
+            model.refreshReaderInventoryIfWanted()
+        }
+        .onChange(of: model.readerStatus?.deviceID) { _, _ in
+            exchangeReadingPositions()
+            model.refreshReaderInventoryIfWanted()
+        }
         .task {
             model.refreshGlance()
             sync.attachReader(model: model, library: library)
             // Positions are matched against library books, so load them first.
             if library.books.isEmpty { await library.load() }
             sync.nudgeReader()
+        }
+        .task {
+            // Same Wi-Fi reconnect asks one remembered address every few seconds.
+            // Hosted tests (store renders) share the user's defaults; they must not reach a real reader.
+            guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+            while !Task.isCancelled {
+                model.reconnectRememberedReader()
+                try? await Task.sleep(for: .seconds(8))
+            }
         }
         .task(id: model.isDemoMode) {
             // Authenticated pairing: remember this reader for reading sync over Bluetooth.
@@ -211,8 +253,18 @@ struct ContentView: View {
     }
 
     private func libraryView(showsShelfMenu: Bool = true) -> some View {
-        LibraryView(model: model, library: library, sync: sync, inbox: inbox, shelf: $shelf,
-                    showsShelfMenu: showsShelfMenu, open: open)
+        LibraryView(model: model, library: library, inbox: inbox, shelf: $shelf,
+                    showsShelfMenu: showsShelfMenu, openSettings: showsShelfMenu ? showSettings : nil,
+                    openDevice: showsShelfMenu ? { section = .reader } : nil, open: open)
+    }
+
+    /// One place for app-wide preferences: the Settings window on macOS, a sheet elsewhere.
+    private func showSettings() {
+#if os(macOS)
+        openSettingsWindow()
+#else
+        showingSettings = true
+#endif
     }
 
     /// One navigation rail replaces the two stacked section pickers.
@@ -263,20 +315,28 @@ struct ContentView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text("Your reader")
+                Text("Reader")
                     .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     .padding(.horizontal, 12).padding(.bottom, 4)
-                sidebarRow(StudioSection.layout.rawValue, symbol: StudioSection.layout.symbol, selected: section == .layout) {
-                    section = .layout
-                }
-                sidebarRow(StudioSection.reader.rawValue, symbol: StudioSection.reader.symbol, selected: section == .reader) {
-                    section = .reader
+                ForEach(model.device.family.sections) { page in
+                    // Connection carries the reader's state wherever the sidebar is shown.
+                    sidebarRow(page.rawValue, symbol: page.symbol, selected: section == StudioSection(page),
+                               detail: page == .connection ? model.device : nil) {
+                        section = StudioSection(page)
+                    }
                 }
             }
             Spacer()
-            AppAppearancePicker()
-                .pickerStyle(.menu)
-                .font(.caption)
+            Button(action: showSettings) {
+                Label("Settings", systemImage: "gearshape")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12).padding(.vertical, 11)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Appearance and Continue Reading")
+            .accessibilityIdentifier("app-settings")
         }
         .padding(12)
         .padding(.top, 12)
@@ -286,13 +346,22 @@ struct ContentView: View {
         .accessibilityIdentifier("app-sidebar")
     }
 
-    private func sidebarRow(_ title: String, symbol: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func sidebarRow(_ title: String, symbol: String, selected: Bool, detail: DeviceSnapshot? = nil,
+                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: symbol)
-                .lineLimit(2)
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).lineLimit(2)
+                    if let detail {
+                        DeviceStatusLabel(device: detail, showsReader: false)
+                    }
+                }
+            } icon: {
+                Image(systemName: symbol)
+            }
                 .font(.subheadline.weight(selected ? .semibold : .regular))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12).padding(.vertical, 11)
+                .padding(.horizontal, 12).padding(.vertical, detail == nil ? 11 : 8)
                 .background(selected ? PocketPalette.selection : Color.clear, in: RoundedRectangle(cornerRadius: 8))
                 .contentShape(Rectangle())
         }
@@ -307,13 +376,19 @@ struct ContentView: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 14)
             Divider()
-            if section == .reader {
+            if section == .reader || section == .files {
                 GeometryReader { geometry in
                     ScrollView {
-                        deviceContents(twoColumns: geometry.size.width >= 980)
-                            .padding(24)
-                            .frame(maxWidth: 1100)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Group {
+                            if section == .files {
+                                filesContents(twoColumns: geometry.size.width >= 980)
+                            } else {
+                                connectionContents(twoColumns: geometry.size.width >= 980)
+                            }
+                        }
+                        .padding(24)
+                        .frame(maxWidth: 1100)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .accessibilityIdentifier("inspector")
                 }
@@ -328,45 +403,73 @@ struct ContentView: View {
         .background(PocketPalette.stage)
     }
 
+    /// iPhone: Library and one Reader tab; the tab's pages sit at its top.
     private var compactStudio: some View {
-        TabView(selection: $section) {
+        TabView(selection: Binding(
+            get: { section == .library ? StudioSection.library : StudioSection.reader },
+            set: { section = $0 == .library ? .library : StudioSection(lastDevicePage) })) {
             libraryView()
                 .tabItem { Label(StudioSection.library.rawValue, systemImage: StudioSection.library.symbol) }
                 .tag(StudioSection.library)
-            ForEach([StudioSection.layout, .reader], id: \.self) { tab in
-                NavigationStack {
-                    Group {
-                        if tab == .layout {
-                            // The preview and Apply stay visible while settings scroll.
-                            ProfileStudioView(model: model, editor: profileEditor, contentPadding: 12,
-                                              initialPreview: initialPreview)
-                        } else {
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 14) {
-                                    deviceContents()
-                                }
-                                .padding()
-                            }
-                            .scrollDismissesKeyboard(.interactively)
-                        }
-                    }
-                    .background(PocketPalette.workspace)
-                    .navigationTitle(tab == .layout ? "Reader screens" : "Device")
+            readerTab
+                .tabItem { Label(StudioSection.reader.rawValue, systemImage: StudioSection.reader.symbol) }
+                .tag(StudioSection.reader)
+        }
+        .onChange(of: section) { _, value in
+            if let page = value.devicePage { lastDevicePage = page }
+        }
+    }
+
+    private var readerTab: some View {
+        NavigationStack {
+            readerPage
+                .background(PocketPalette.workspace)
+                .navigationTitle("Reader")
 #if os(iOS)
-                    .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
 #endif
-                    .toolbar {
-                        if tab != .reader {
-                            ToolbarItem(placement: .primaryAction) {
-                                CompactReaderMenu(model: model) { section = .reader }
-                            }
+                .safeAreaInset(edge: .top, spacing: 0) { readerPagePicker }
+                .toolbar {
+                    if section == .layout {
+                        ToolbarItem(placement: .primaryAction) {
+                            CompactReaderMenu(model: model) { section = .reader }
                         }
                     }
                 }
-                .tabItem { Label(tab.rawValue, systemImage: tab.symbol) }
-                .tag(tab)
-            }
         }
+    }
+
+    @ViewBuilder private var readerPage: some View {
+        switch section.devicePage ?? lastDevicePage {
+        case .screens:
+            // The preview and Apply stay visible while settings scroll.
+            ProfileStudioView(model: model, editor: profileEditor, contentPadding: 12,
+                              initialPreview: initialPreview)
+        case .connection, .files:
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if section == .files { filesContents() } else { connectionContents() }
+                }
+                .padding()
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+    }
+
+    /// The reader's state and its pages, above whichever page is open.
+    private var readerPagePicker: some View {
+        VStack(spacing: 8) {
+            DeviceStatusLabel(device: model.device, showsReader: false)
+            Picker("Reader page", selection: Binding(
+                get: { section.devicePage ?? lastDevicePage },
+                set: { section = StudioSection($0) })) {
+                ForEach(model.device.family.sections) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("device-pages")
+        }
+        .padding(.horizontal).padding(.vertical, 8)
+        .background(PocketPalette.workspace)
     }
 
     /// The destination title and the current reader or preview hardware.
@@ -374,24 +477,72 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(section == .layout ? "Reader screens" : "Device").font(.title2.weight(.semibold))
-                    Text(section == .layout ? "Home, sleep and reading" : "Connection, files and firmware")
+                    Text(topBarTitle).font(.title2.weight(.semibold))
+                    Text(topBarSubtitle)
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 12)
-                ReaderChip(model: model)
+                // The sidebar's Connection row carries the state; the chip adds the preview size on Screens.
+                if section == .layout { ReaderChip(model: model) }
             }
+        }
+    }
+
+    private var topBarTitle: String {
+        switch section {
+        case .layout: "Reader screens"
+        case .files: "Files"
+        default: "Connection"
+        }
+    }
+
+    private var topBarSubtitle: String {
+        switch section {
+        case .layout: "Home, sleep and reading"
+        case .files: "Send books and documents, and see what the reader holds"
+        default: "Connect the reader, keep its firmware current and pair Bluetooth"
         }
     }
 
     // MARK: Inspector
 
-    private func deviceContents(twoColumns: Bool = false) -> some View {
-        let columns = twoColumns ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
-                                 : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
-        return columns {
+    private func columns(twoColumns: Bool) -> AnyLayout {
+        twoColumns ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+                   : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
+    }
+
+    /// Reaching the reader and keeping it current.
+    private func connectionContents(twoColumns: Bool = false) -> some View {
+        let layout = columns(twoColumns: twoColumns)
+        return layout {
             VStack(alignment: .leading, spacing: 20) {
                 ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
+                if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
+                FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
+                                   update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 20) {
+                if !model.isDemoMode {
+                    ReaderBluetoothPairingCard(sync: sync)
+                    TroubleshootingInspector(model: model, nearby: nearby)
+                }
+                Button { showingProjectInfo = true } label: {
+                    Label("About & Privacy", systemImage: "info.circle")
+                }
+                .buttonStyle(.borderless).font(.callout).foregroundStyle(.secondary)
+                .accessibilityIdentifier("about-privacy")
+            }
+            .frame(width: twoColumns ? 320 : nil)
+            .frame(maxWidth: twoColumns ? nil : .infinity, alignment: .topLeading)
+        }
+    }
+
+    /// What goes to the reader, and what it already holds.
+    private func filesContents(twoColumns: Bool = false) -> some View {
+        let layout = columns(twoColumns: twoColumns)
+        return layout {
+            VStack(alignment: .leading, spacing: 20) {
                 if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                 if model.isTransferring, model.activeTransferKind == nil {
                     Button("Pause transfer") { model.pauseTransfer() }
@@ -410,16 +561,17 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            VStack(alignment: .leading, spacing: 20) {
-                FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
-                                   update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate)
-                AppAppearancePicker().pickerStyle(.menu)
-                if !model.isDemoMode { TroubleshootingInspector(model: model, nearby: nearby) }
-                Button { showingProjectInfo = true } label: {
-                    Label("About & Privacy", systemImage: "info.circle")
+            InspectorCard(title: "On the reader", symbol: "internaldrive") {
+                if model.readerStatus != nil {
+                    ReaderStoragePanel(model: model)
+                } else {
+                    Text("Connect the reader to see its storage and the files on it.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Connect the reader") { section = .reader }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("files-connect")
                 }
-                .buttonStyle(.borderless).font(.callout).foregroundStyle(.secondary)
-                .accessibilityIdentifier("about-privacy")
             }
             .frame(width: twoColumns ? 320 : nil)
             .frame(maxWidth: twoColumns ? nil : .infinity, alignment: .topLeading)
@@ -482,6 +634,37 @@ struct ContentView: View {
     }
 }
 
+/// How the reader is reached, the same wherever it appears: the sidebar's
+/// Connection row, the Library header on iPhone, the Reader tab.
+struct DeviceStatusLabel: View {
+    let device: DeviceSnapshot
+    /// Off where a title or row already says Reader.
+    var showsReader = true
+
+    private var tint: Color {
+        switch device.link {
+        case .sameWiFi, .direct: PocketPalette.signal
+        case .connecting: .orange
+        case .demo, .offline: .secondary
+        }
+    }
+
+    private var text: String {
+        showsReader ? "Reader · \(device.statusText)" : device.statusText
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(tint).frame(width: 7, height: 7)
+                .opacity(device.link == .offline ? 0.5 : 1)
+            Text(text).font(.caption).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(showsReader ? "Reader, \(device.statusText)" : device.statusText)
+        .accessibilityIdentifier("device-status")
+    }
+}
+
 /// Wide header reader state: the connected reader and how it is reached, or
 /// the preview hardware choice when there is none.
 private struct ReaderChip: View {
@@ -495,16 +678,16 @@ private struct ReaderChip: View {
                 Text(model.hasDirectSession ? "Direct" : "Same Wi-Fi")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
-                Text(model.isDemoMode ? "Demo" : "No reader")
+                Text("Preview")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Picker("Preview device", selection: $model.preferredHardware) {
+                Picker("Preview size", selection: $model.preferredHardware) {
                     ForEach(PocketHardware.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(width: 100)
-                .help("Preview size when no reader is connected")
+                .help("Screen size to preview until a reader is connected")
             }
         }
         .accessibilityElement(children: .contain)
@@ -512,7 +695,7 @@ private struct ReaderChip: View {
     }
 }
 
-/// Compact toolbar reader state; opens the Device tab, or picks the preview
+/// Compact toolbar reader state; opens the Reader tab, or picks the preview
 /// hardware when no reader is connected.
 private struct CompactReaderMenu: View {
     @ObservedObject var model: PocketModel
@@ -528,14 +711,14 @@ private struct CompactReaderMenu: View {
             .accessibilityLabel("\(status.device) connected")
         } else {
             Menu {
-                Picker("Preview device", selection: $model.preferredHardware) {
+                Picker("Preview size", selection: $model.preferredHardware) {
                     ForEach(PocketHardware.allCases) { Text($0.rawValue).tag($0) }
                 }
                 Button("Connect a reader", systemImage: "antenna.radiowaves.left.and.right", action: openReader)
             } label: {
                 HStack(spacing: 5) {
+                    Text("Preview").font(.caption).foregroundStyle(.secondary)
                     Text(model.hardware.rawValue).font(.subheadline.weight(.semibold))
-                    Text(model.isDemoMode ? "Demo" : "No reader").font(.caption).foregroundStyle(.secondary)
                 }
                 .foregroundStyle(.primary)
             }
@@ -770,10 +953,17 @@ private struct ConnectionInspector: View {
     var body: some View {
         InspectorCard(title: "Connection", symbol: "antenna.radiowaves.left.and.right") {
             HStack {
-                Circle().fill(model.readerStatus == nil ? Color.secondary : PocketPalette.signal).frame(width: 9, height: 9)
+                Circle().fill(model.readerStatus == nil || model.isDemoMode ? Color.secondary : PocketPalette.signal)
+                    .frame(width: 9, height: 9)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.readerStatus?.device ?? model.hardware.displayName).fontWeight(.semibold)
+                    Text(model.readerStatus?.device ?? "Reader").fontWeight(.semibold)
                     Text(detail).font(.caption).foregroundStyle(.secondary)
+                    if model.readerStatus == nil && !model.isDemoMode {
+                        // Compatibility, stated precisely; no product is implied.
+                        Text("For X3 and X4 readers running Pocket Daily or compatible CrossPoint-based firmware.")
+                            .font(.caption).foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer()
                 if model.isWorking || model.canCancelConnection { ProgressView().controlSize(.small) }
@@ -789,7 +979,6 @@ private struct ConnectionInspector: View {
                 Text("Stopping connection…").font(.callout).foregroundStyle(.secondary)
             }
             actions
-            if model.readerStatus != nil { ReaderStoragePanel(model: model) }
             if let lease = nearby.hotspotLease, model.manualHotspotFallback {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))

@@ -8,6 +8,16 @@ import XCTest
 @testable import Pocket
 
 final class NearbySyncProtocolTests: XCTestCase {
+    func testStaleBondExplainsHowToRecover() {
+        let removed = CBError(.peerRemovedPairingInformation)
+        XCTAssertEqual(NearbySyncController.failureMessage(for: removed), NearbySyncController.staleBondMessage)
+        XCTAssertTrue(NearbySyncController.staleBondMessage.contains("Forget This Device"))
+        XCTAssertTrue(NearbySyncController.staleBondMessage.contains("Direct connection"))
+
+        let other = CBError(.connectionTimeout)
+        XCTAssertEqual(NearbySyncController.failureMessage(for: other), other.localizedDescription)
+    }
+
     @MainActor
     func testFailedBLEDiscoveryReleasesPendingDirectRequestWithoutWiFiChanges() {
         let io = HeldAssociationIO()
