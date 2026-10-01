@@ -106,9 +106,12 @@ The editor exposes the bundled notices. No font generation or download occurs.
 
 The reference uses Base layout metrics and English, unremapped button labels.
 Exact comparison requires matching device font bytes, metrics, labels, input
-mapping and orientation. Connected-reader configuration matching, other native
-theme surfaces, UI-pack application through the ABI and physical device pixel
-comparison remain pending. Do not treat the offline preview as a device receipt.
+mapping and orientation. Connected-reader configuration matching and other native
+theme surfaces remain pending. The firmware no longer captures its screen
+(`dev/capture`/`dev/frame` were removed 2026-10-01), so the former hardware
+pixel-parity test was deleted; comparison is by eye on the reader. Do not treat
+the offline preview as a device receipt. The artifact was re-imported on
+2026-10-02 from firmware `f1451016` (Home button label "Home").
 
 ## UI verification
 

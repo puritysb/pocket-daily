@@ -1,10 +1,17 @@
 # Pocket Daily Live Studio — application architecture and delivery design
 
-STATUS: PARTIALLY IMPLEMENTED; design agreed 2026-09-19, audited 2026-09-22. The
-firmware side of the contract (event protocol, `screen-live`, `.uipack`
-format, host renderer) is `docs/live-studio-v1.md` in the sibling
-`pocket-daily-firmware` repository. This document follows the shared
-multi-agent conventions in `AGENTS.md`.
+STATUS: PARTIALLY IMPLEMENTED; design agreed 2026-09-19, audited 2026-09-22.
+**2026-10-01: the firmware removed UI packs (`.uipack`, `ui-packs`,
+`ui-pack/apply`), live frames (`screen-live`, `dev/capture`, `dev/frame`, the
+WebSocket `frame` event) and the saved screen preview (firmware PR #8–#10).**
+What remains of the live contract is the `/api/status` `liveStudio`
+advertisement (`mode`, `wsPort`) and WebSocket status and preference pushes;
+the app subscribes with `{"subscribe":{}}` and keeps no frame or pack state.
+Sections below that describe packs, frames or `screen-live` are history, kept
+for the reasoning; previews come from the host renderer. The firmware side of
+the contract is `docs/live-studio-v1.md` in the sibling `pocket-daily-firmware`
+repository. This document follows the shared multi-agent conventions in
+`AGENTS.md`.
 
 Goal: the app becomes a live studio for the reader — real-time device state,
 an exact live preview of the reader screen, and a composer/editor for UI

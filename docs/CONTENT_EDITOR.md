@@ -153,13 +153,12 @@ fields beside it (below it when stacked).
   position, keeping later edits; restoring is refused (with a message) once
   the three-card limit is reached or the ID is in use.
 - Preview inputs come from the reader (2026-09-25): `ReaderDisplayState` reads
-  `GET /api/pocket/v1/display` once per connection and after a UI pack
-  apply/revert, inside the sequential reader lane, and the canvas renders with
+  `GET /api/pocket/v1/display` once per connection, inside the sequential reader lane, and the canvas renders with
   its theme spacing, language, button labels and orientation. Without it
   (demo, offline, older firmware) the canvas uses a labelled default-theme
   reference (Lyra 20/5/16). A caption under the canvas names the source.
-  `MacTests/PocketParityTests.swift` compares a host render with a captured
-  reader frame (hardware run only; see sibling docs/pocket-profile-v1.md).
+  (The hardware pixel-parity test was removed with the firmware's screen
+  capture on 2026-10-01.)
 - Other "Apply" labels were renamed for what they send: reading settings use
   **Save settings**, the theme inspector uses **Send theme**.
 

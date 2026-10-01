@@ -8,11 +8,9 @@ import Foundation
 enum DeviceEvent: Equatable {
     case sessionStarted(CrossPointStatus)
     case status(CrossPointStatus)
-    case frame(seq: Int, capturedAt: Date, data: Data)
     case preferences(ReaderPreferences?)
     case transferProgress(Double)
     case connection(DeviceConnectionPhase)
-    case packStateChanged(activePack: String?, version: String?)
 }
 
 /// Coarse session phase. In M1 it is fed from the session model's own
@@ -25,49 +23,30 @@ enum DeviceConnectionPhase: Equatable {
     case disconnected
 }
 
-struct DeviceFrame: Equatable {
-    let seq: Int
-    let capturedAt: Date
-    let data: Data
-}
-
 /// The immutable snapshot the studio surfaces render from.
 struct DeviceState: Equatable {
     var status: CrossPointStatus?
     var preferences: ReaderPreferences?
-    var latestFrame: DeviceFrame?
-    /// Monotonic frame counter across gaps in reader-reported sequence
-    /// numbers, so consumers can detect "a newer frame arrived" cheaply.
-    var frameSequence = 0
     var transferProgress: Double?
     var phase: DeviceConnectionPhase = .idle
-    var activePack: String?
-    var activePackVersion: String?
 }
 
 enum DeviceStateReducer {
     /// Pure application of one event. A disconnect clears device-derived
-    /// state, matching how a session ends today: stale status, preferences,
-    /// and frames must not survive into the next session.
+    /// state, matching how a session ends today: stale status and preferences
+    /// must not survive into the next session.
     static func apply(_ event: DeviceEvent, to state: DeviceState) -> DeviceState {
         var next = state
         switch event {
         case let .sessionStarted(status):
             next = apply(.status(status), to: DeviceState())
-            next.frameSequence = state.frameSequence
         case let .status(status):
             if let previous = state.status,
                previous.deviceID != status.deviceID || previous.device != status.device {
                 next = DeviceState()
-                next.frameSequence = state.frameSequence
             }
             next.status = status
             next.phase = .connected
-            next.activePack = status.liveStudio?.activePack
-            next.activePackVersion = status.liveStudio?.activePackVersion
-        case let .frame(seq, capturedAt, data):
-            next.frameSequence = max(state.frameSequence + 1, seq)
-            next.latestFrame = DeviceFrame(seq: seq, capturedAt: capturedAt, data: data)
         case let .preferences(preferences):
             next.preferences = preferences
         case let .transferProgress(progress):
@@ -75,14 +54,10 @@ enum DeviceStateReducer {
         case let .connection(phase):
             if phase != .connected {
                 // Searching/waiting is not evidence that the previous reader
-                // still owns the screen or pack shown by the mirror.
+                // is still the one the mirror shows.
                 next = DeviceState()
-                next.frameSequence = state.frameSequence
             }
             next.phase = phase
-        case let .packStateChanged(activePack, version):
-            next.activePack = activePack
-            next.activePackVersion = version
         }
         return next
     }

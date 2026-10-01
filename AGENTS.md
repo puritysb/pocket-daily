@@ -35,8 +35,10 @@ Current, changeable state lives in `docs/PROJECT_MEMORY.md`.
 3. `docs/PROJECT_MEMORY.md` when the task depends on history, repository
    boundaries, release state, or hardware constraints.
 4. For submission work, `APP_STORE_REVIEW.md` and `appstore/README.md`.
-5. For live-studio or UI-pack work, `docs/LIVE_STUDIO_DESIGN.md` and the
-   firmware contract `docs/live-studio-v1.md` in the sibling repository.
+5. For live-studio work (status and preference push; UI packs, live frames and
+   saved screen previews were removed from the firmware on 2026-10-01),
+   `docs/LIVE_STUDIO_DESIGN.md` and the firmware contract
+   `docs/live-studio-v1.md` in the sibling repository.
 
 ## Product identity
 

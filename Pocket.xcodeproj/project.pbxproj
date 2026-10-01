@@ -23,7 +23,6 @@
 		0934491AC370171C1E9A338D /* ContentQRCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BFBE3FDE61584947D95A326 /* ContentQRCode.swift */; };
 		09DD2182BEFDE3ADE4D1BD7D /* PreviewFontStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */; };
 		0BBC0567D7ADE7BA48A4C12E /* ContentRevisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9D87C009E70F5E9A8868771 /* ContentRevisionTests.swift */; };
-		0C0EDE732303CD3786BC50C7 /* PocketParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */; };
 		0C42F4A00F10A35B41A825F8 /* ScreenPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3675DAEF0E5E6DD18C170A9F /* ScreenPresentation.swift */; };
 		0CCF3E69C90776EBDDD5D1E9 /* ArticleShareTestHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AEBE29A7F5B451E8526132A /* ArticleShareTestHost.swift */; };
 		0EB919B8DC0F8B261A198D50 /* ContentPreviewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ECD37D9F915D53A73EDFF92 /* ContentPreviewModel.swift */; };
@@ -356,7 +355,6 @@
 		5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketMacScreenshotTests.swift; sourceTree = "<group>"; };
 		540552AB586FC81B89715EBF /* EPUBPackageReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBPackageReader.swift; sourceTree = "<group>"; };
 		563C489961B4EEA12A325671 /* ReaderGlanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderGlanceTests.swift; sourceTree = "<group>"; };
-		5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketParityTests.swift; sourceTree = "<group>"; };
 		5ABA54062866C26763CA71F9 /* HostRendererBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostRendererBridgeTests.swift; sourceTree = "<group>"; };
 		5B2746840614F4AE42957C88 /* ReaderContentPull.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentPull.swift; sourceTree = "<group>"; };
 		5B29D1A2197296E83A22AB67 /* FirmwareRelease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirmwareRelease.swift; sourceTree = "<group>"; };
@@ -765,7 +763,6 @@
 			children = (
 				E822A7A862B9E6419AEFACB1 /* PocketMacReaderTests.swift */,
 				5291BD3458209523E2981CBF /* PocketMacScreenshotTests.swift */,
-				5A393CCFACC571B7BBE3683F /* PocketParityTests.swift */,
 			);
 			path = MacTests;
 			sourceTree = "<group>";
@@ -1324,7 +1321,6 @@
 			files = (
 				4FE8262F7F07D37E69BE406D /* PocketMacReaderTests.swift in Sources */,
 				1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */,
-				0C0EDE732303CD3786BC50C7 /* PocketParityTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

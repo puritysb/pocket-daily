@@ -321,7 +321,6 @@ final class ContentApplyAdmissionTests: XCTestCase {
         .init(version: "test", ip: "reader.test", mode: "STA", rssi: -50,
               freeHeap: 20000, uptime: 1, device: device,
               crashReportAvailable: false, crashReportBytes: 0,
-              screenPreviewAvailable: false, screenPreviewBytes: 0,
               uploadChunkBytes: nil, uploadStreamPort: stream, uploadStreamResume: true,
               diagnosticsAffordable: false, deviceID: id)
     }

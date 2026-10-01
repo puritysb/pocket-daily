@@ -1,12 +1,10 @@
 import Foundation
-import CoreFoundation
 
 /// One decoded live-studio event off the WebSocket wire
 /// (`docs/live-studio-v1.md` in the firmware repository).
 enum LiveStudioEvent: Equatable {
     case hello(proto: String, deviceID: String, version: String)
     case status(CrossPointStatus)
-    case frame(seq: Int, bytes: Int)
     case prefsChanged
     case bye
 
@@ -25,24 +23,11 @@ enum LiveStudioEvent: Equatable {
            let decoded = try? JSONDecoder().decode(CrossPointStatus.self, from: json) {
             return .status(decoded)
         }
-        if let frame = object["frame"] as? [String: Any],
-           let seq = integer(frame["seq"], in: 0...Int(UInt32.max)),
-           let bytes = integer(frame["bytes"], in: 64...(128 * 1024)) {
-            return .frame(seq: seq, bytes: bytes)
-        }
         if let prefs = object["prefs"] as? [String: Any], prefs["changed"] as? Bool == true {
             return .prefsChanged
         }
         if object["bye"] != nil { return .bye }
         return nil
-    }
-
-    private static func integer(_ value: Any?, in range: ClosedRange<Int>) -> Int? {
-        // JSON booleans bridge through NSNumber too; a true sequence is not 1.
-        guard let number = value as? NSNumber,
-              CFGetTypeID(number) != CFBooleanGetTypeID(),
-              let integer = number as? Int, range.contains(integer) else { return nil }
-        return integer
     }
 }
 
@@ -94,7 +79,8 @@ final class LiveSyncClient: NSObject {
                     case let .string(text):
                         if let event = LiveStudioEvent.decode(text) {
                             if case let .hello(proto, _, _) = event, proto == "live-studio/1" {
-                                self.send(#"{"subscribe":{"frames":true,"minIntervalMs":300}}"#)
+                                // Status and preference pushes only; readers no longer stream frames.
+                                self.send(#"{"subscribe":{}}"#)
                             }
                             self.onEvent?(event)
                         }

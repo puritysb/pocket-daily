@@ -17,10 +17,10 @@ struct ConnectionHeartbeat {
     }
 }
 
-/// A no-PSRAM X3 keeps only ~6 KB of heap on its private hotspot. Fetching a
-/// 53 KB screen preview plus a crash report there tripped the reader's task
-/// watchdog (crash breadcrumb `nearby:screen-preview`). Below this floor the
-/// app skips both so the link stays available for the transfer itself.
+/// A no-PSRAM X3 keeps only ~6 KB of heap on its private hotspot. Large
+/// diagnostic reads there tripped the reader's task watchdog (crash breadcrumb
+/// `nearby:screen-preview` on older firmware). Below this floor the app skips
+/// the crash report so the link stays available for the transfer itself.
 enum ReaderDiagnosticsPolicy {
     static let minimumFreeHeap = 10 * 1024
 
@@ -192,9 +192,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             mirror.apply(.status(status))
         case .prefsChanged:
             reloadPreferencesFromReader()
-        case .frame, .hello, .bye:
-            // Frames are not fetched: no view shows them, and each fetch costs
-            // the reader a 50+ KB transfer.
+        case .hello, .bye:
             break
         }
     }
@@ -1025,8 +1023,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             device: preferredHardware.rawValue,
             crashReportAvailable: false,
             crashReportBytes: 0,
-            screenPreviewAvailable: false,
-            screenPreviewBytes: 0,
+
             uploadChunkBytes: nil,
             uploadStreamPort: nil,
             uploadStreamResume: nil,

@@ -1075,11 +1075,10 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertNil(status.uploadChunkBytes)
     }
 
-    func testStatusAdvertisesExactScreenPreview() throws {
+    func testStatusFromReadersWithTheRemovedScreenPreviewStillDecodes() throws {
         let data = Data(#"{"version":"test","ip":"192.168.4.1","mode":"AP","rssi":0,"freeHeap":16000,"uptime":4,"device":"X3","screenPreviewAvailable":true,"screenPreviewBytes":52342}"#.utf8)
         let status = try JSONDecoder().decode(CrossPointStatus.self, from: data)
-        XCTAssertEqual(status.screenPreviewAvailable, true)
-        XCTAssertEqual(status.screenPreviewBytes, 52_342)
+        XCTAssertEqual(status.device, "X3")
     }
 
     func testSubnetDiscoveryCoversSlash22AndStartsWithNeighbors() {

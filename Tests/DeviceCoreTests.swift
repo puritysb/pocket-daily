@@ -86,7 +86,6 @@ final class DeviceCoreTests: XCTestCase {
             version: "1.4.1", ip: "192.168.68.10", mode: "STA", rssi: -55,
             freeHeap: freeHeap, uptime: 120, device: device,
             crashReportAvailable: false, crashReportBytes: 0,
-            screenPreviewAvailable: false, screenPreviewBytes: 0,
             uploadChunkBytes: nil, uploadStreamPort: 82, uploadStreamResume: true,
             diagnosticsAffordable: true, deviceID: deviceID, sessionEnd: false,
             liveStudio: liveStudio
@@ -103,109 +102,51 @@ final class DeviceCoreTests: XCTestCase {
 
     func testNewLegacySessionClearsSnapshotEvenWithoutDistinctIdentity() {
         var state = DeviceStateReducer.apply(.status(status(deviceID: nil)), to: DeviceState())
-        state = DeviceStateReducer.apply(.frame(seq: 7, capturedAt: Date(), data: Data([9])), to: state)
         state = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: state)
         state = DeviceStateReducer.apply(.transferProgress(0.5), to: state)
         state = DeviceStateReducer.apply(.sessionStarted(status(deviceID: nil)), to: state)
         XCTAssertEqual(state.phase, .connected)
-        XCTAssertNil(state.latestFrame)
         XCTAssertNil(state.preferences)
         XCTAssertNil(state.transferProgress)
-        XCTAssertEqual(state.frameSequence, 7)
-    }
-
-    func testFrameEventReplacesLatestAndAdvancesSequence() {
-        var state = DeviceStateReducer.apply(
-            .frame(seq: 4, capturedAt: Date(timeIntervalSince1970: 100), data: Data([1])),
-            to: DeviceState()
-        )
-        XCTAssertEqual(state.frameSequence, 4)
-        XCTAssertEqual(state.latestFrame?.seq, 4)
-        state = DeviceStateReducer.apply(
-            .frame(seq: 2, capturedAt: Date(timeIntervalSince1970: 200), data: Data([2])),
-            to: state
-        )
-        // A stale reader sequence must not roll the counter back.
-        XCTAssertEqual(state.frameSequence, 5)
-        XCTAssertEqual(state.latestFrame?.seq, 2)
-        XCTAssertEqual(state.latestFrame?.data, Data([2]))
     }
 
     func testDisconnectClearsDeviceDerivedState() {
         var state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
-        state = DeviceStateReducer.apply(
-            .frame(seq: 1, capturedAt: Date(), data: Data([9])), to: state
-        )
         state = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: state)
         state = DeviceStateReducer.apply(.transferProgress(0.5), to: state)
-        state = DeviceStateReducer.apply(.packStateChanged(activePack: "old", version: "1"), to: state)
         state = DeviceStateReducer.apply(.connection(.disconnected), to: state)
         XCTAssertEqual(state.phase, .disconnected)
         XCTAssertNil(state.status)
         XCTAssertNil(state.preferences)
-        XCTAssertNil(state.latestFrame)
         XCTAssertNil(state.transferProgress)
-        XCTAssertNil(state.activePack)
-        XCTAssertNil(state.activePackVersion)
         // Preferences survive when a disconnect did not happen.
         var kept = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: DeviceState())
         kept = DeviceStateReducer.apply(.connection(.connected), to: kept)
         XCTAssertNotNil(kept.preferences)
     }
 
-    func testPackStateChanged() {
-        let state = DeviceStateReducer.apply(
-            .packStateChanged(activePack: "serenity", version: "1.2"), to: DeviceState()
-        )
-        XCTAssertEqual(state.activePack, "serenity")
-        XCTAssertEqual(state.activePackVersion, "1.2")
-        let cleared = DeviceStateReducer.apply(.packStateChanged(activePack: nil, version: nil), to: state)
-        XCTAssertNil(cleared.activePack)
-        XCTAssertNil(cleared.activePackVersion)
-    }
-
-    func testStatusRefreshUpdatesPackWithoutDiscardingSameReaderFrame() {
-        var state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
-        state = DeviceStateReducer.apply(.frame(seq: 2, capturedAt: Date(), data: Data([9])), to: state)
-        let advertisement = LiveStudioAdvertisement(wsPort: nil, mode: "poll", frameStream: false,
-            uiPacks: true, activePack: "new-pack", activePackVersion: "2")
-        state = DeviceStateReducer.apply(.status(status(liveStudio: advertisement)), to: state)
-        XCTAssertEqual(state.activePack, "new-pack")
-        XCTAssertEqual(state.activePackVersion, "2")
-        XCTAssertEqual(state.latestFrame?.data, Data([9]))
-        state = DeviceStateReducer.apply(.status(status()), to: state)
-        XCTAssertNil(state.activePack)
-        XCTAssertNil(state.activePackVersion)
-    }
-
     func testChangedIdentityClearsPreviousReaderDerivedState() {
         var state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
-        state = DeviceStateReducer.apply(.frame(seq: 7, capturedAt: Date(), data: Data([9])), to: state)
         state = DeviceStateReducer.apply(.preferences(ReaderPreferences()), to: state)
         state = DeviceStateReducer.apply(.transferProgress(0.5), to: state)
-        state = DeviceStateReducer.apply(.packStateChanged(activePack: "old", version: "1"), to: state)
         for replacement in [status(deviceID: "DIFFERENT"), status(deviceID: nil), status(device: "X4")] {
             let next = DeviceStateReducer.apply(.status(replacement), to: state)
             XCTAssertEqual(next.status, replacement)
             XCTAssertEqual(next.phase, .connected)
-            XCTAssertNil(next.latestFrame)
             XCTAssertNil(next.preferences)
             XCTAssertNil(next.transferProgress)
-            XCTAssertNil(next.activePack)
-            XCTAssertNil(next.activePackVersion)
-            XCTAssertEqual(next.frameSequence, 7)
         }
+        // The same reader refreshing its status keeps what was loaded for it.
+        let refreshed = DeviceStateReducer.apply(.status(status()), to: state)
+        XCTAssertNotNil(refreshed.preferences)
     }
 
-    func testNonconnectedPhasesClearPackAndStatus() {
-        var state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
-        state = DeviceStateReducer.apply(.packStateChanged(activePack: "old", version: "1"), to: state)
+    func testNonconnectedPhasesClearStatus() {
+        let state = DeviceStateReducer.apply(.status(status()), to: DeviceState())
         for phase in [DeviceConnectionPhase.idle, .searching, .waitingForReader, .disconnected] {
             let next = DeviceStateReducer.apply(.connection(phase), to: state)
             XCTAssertEqual(next.phase, phase)
             XCTAssertNil(next.status)
-            XCTAssertNil(next.activePack)
-            XCTAssertNil(next.activePackVersion)
         }
     }
 
@@ -229,19 +170,13 @@ final class DeviceCoreTests: XCTestCase {
         XCTAssertEqual(SyncModePolicy.syncMode(status: status(liveStudio: nil)), .poll)
         XCTAssertEqual(
             SyncModePolicy.syncMode(
-                status: status(liveStudio: LiveStudioAdvertisement(
-                    wsPort: nil, mode: "poll", frameStream: false, uiPacks: false,
-                    activePack: nil, activePackVersion: nil
-                ))
+                status: status(liveStudio: LiveStudioAdvertisement(wsPort: nil, mode: "poll"))
             ),
             .poll
         )
         XCTAssertEqual(
             SyncModePolicy.syncMode(
-                status: status(liveStudio: LiveStudioAdvertisement(
-                    wsPort: 0, mode: "push", frameStream: false, uiPacks: false,
-                    activePack: nil, activePackVersion: nil
-                ))
+                status: status(liveStudio: LiveStudioAdvertisement(wsPort: 0, mode: "push"))
             ),
             .poll
         )
@@ -250,20 +185,14 @@ final class DeviceCoreTests: XCTestCase {
     func testSyncModePushWhenListenerAdvertised() {
         XCTAssertEqual(
             SyncModePolicy.syncMode(
-                status: status(liveStudio: LiveStudioAdvertisement(
-                    wsPort: 81, mode: "push", frameStream: false, uiPacks: false,
-                    activePack: nil, activePackVersion: nil
-                ))
+                status: status(liveStudio: LiveStudioAdvertisement(wsPort: 81, mode: "push"))
             ),
             .push(wsPort: 81)
         )
     }
 
     func testAdvertisedListenerDoesNotOverrideCurrentMemoryAdmission() {
-        let live = LiveStudioAdvertisement(
-            wsPort: 81, mode: "push", frameStream: true, uiPacks: true,
-            activePack: nil, activePackVersion: nil
-        )
+        let live = LiveStudioAdvertisement(wsPort: 81, mode: "push")
         for heap in [0, 10_624, 12_056, SyncModePolicy.minimumPushFreeHeap - 1] {
             let reader = status(freeHeap: heap, liveStudio: live)
             XCTAssertEqual(SyncModePolicy.syncMode(status: reader), .poll)
@@ -293,7 +222,7 @@ final class DeviceCoreTests: XCTestCase {
                 XCTAssertEqual(decoded.contentPresentation, true)
                 XCTAssertEqual(decoded.uploadStreamPort, 82)
                 XCTAssertEqual(decoded.uploadStreamWindow, 4096)
-                XCTAssertEqual(decoded.liveStudio?.uiPacks, true)
+                XCTAssertEqual(decoded.liveStudio?.mode, "poll", "Older readers' pack keys are ignored")
             }
         }
     }

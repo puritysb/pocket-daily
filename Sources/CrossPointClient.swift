@@ -12,8 +12,6 @@ struct CrossPointStatus: Codable, Equatable {
     let device: String
     let crashReportAvailable: Bool?
     let crashReportBytes: Int?
-    let screenPreviewAvailable: Bool?
-    let screenPreviewBytes: Int?
     let uploadChunkBytes: Int?
     let uploadStreamPort: Int?
     let uploadStreamResume: Bool?
@@ -58,10 +56,6 @@ struct CrossPointStatus: Codable, Equatable {
 struct LiveStudioAdvertisement: Codable, Equatable {
     let wsPort: Int?
     let mode: String
-    let frameStream: Bool?
-    let uiPacks: Bool?
-    let activePack: String?
-    let activePackVersion: String?
 }
 
 struct CrashDiagnostic: Equatable, Sendable {

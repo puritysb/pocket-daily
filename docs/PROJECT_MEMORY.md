@@ -26,22 +26,15 @@ with a dated note below.
   All 19 store captures regenerated (Mac refreshed after final inset change) and
   package validation passed. No firmware was installed; physical panel QA pending.
 
-## Pending app cleanup after firmware PR #8–#10 — 2026-10-01
+## App cleanup after firmware PR #8–#10 — 2026-10-02
 
-- Firmware main removed UI packs (`/api/pocket/v1/ui-packs`, `ui-pack/apply`,
-  status `liveStudio.uiPacks/activePack*`), live frames (`screen-live`,
-  `dev/capture`, `dev/frame`, WS `frame`, `liveStudio.frameStream`) and saved
-  screen preview (`screen-preview`, `screenPreview*`). `liveStudio.mode`/`wsPort`
-  and WS status/prefs push remain; `mode` stays required in the decoder.
-- The current app still decodes these as optional and keeps working. To do: drop
-  LiveSyncClient `.frame` (subscribe `{}`), PocketModel frame handling, the
-  CrossPointClient/DeviceCore pack and preview fields and their test fixtures,
-  env-gated `MacTests/PocketParityTests` capture use; re-import PocketUIHost
-  (HomeRenderer label "Home"); update AGENTS.md, LIVE_STUDIO_DESIGN.md,
-  HOST_RENDERER.md, SYNC_SESSIONS.md. Source: firmware docs/PROJECT_MEMORY.md
-  "Delta alignment merged — 2026-10-01".
-- Bluetooth reading-sync windows now open only from Pocket Daily Home and
-  sleep, not stock Home/Library/File Browser.
+- Firmware removed UI packs, live frames and the saved screen preview. The app
+  now decodes only `liveStudio.mode` (required) and `wsPort`, subscribes with
+  `{"subscribe":{}}`, has no frame or pack state in `DeviceCore`, and dropped
+  `screenPreview*`. The hardware parity test (`dev/capture`) was deleted.
+- PocketUIHost re-imported from firmware main `f1451016` (Home label "Home").
+- Bluetooth reading-sync windows open only from Pocket Daily Home and sleep,
+  not stock Home/Library/File Browser.
 
 ## Device-centric IA, phase 1 — 2026-10-01
 

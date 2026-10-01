@@ -42,11 +42,11 @@ those SD files. This avoids optional listener/client/frame traffic competing
 with content and firmware transfers. Explicit diagnostic endpoints are not
 removed. File Transfer keeps its browser-compatible behavior for recovery.
 
-Theme list/apply registration is also independent of screen streaming now.
-Previously private AP advertised `uiPacks:true` but omitted both endpoints;
-the new firmware registers them for all profiles. A source-boundary host test
-guards their unconditional registration, and Swift fixtures cover poll-only
-X3/X4 advertisements on both STA and AP. These do not replace HTTP hardware tests.
+UI packs, live frames and the saved screen preview were removed from the
+firmware on 2026-10-01 (PR #8–#10); the app no longer decodes their status
+fields or subscribes to frames. Swift fixtures still cover poll-only X3/X4
+advertisements on both STA and AP, including older readers that send the
+removed keys. These do not replace HTTP hardware tests.
 
 This is a bounded change to the existing server, not a new TCP/IP stack or
 proof that the prior intermittent TCP failures are fixed. HTTP and the port-82
