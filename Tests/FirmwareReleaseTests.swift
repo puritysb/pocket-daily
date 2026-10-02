@@ -144,24 +144,59 @@ final class FirmwareReleaseTests: XCTestCase {
     }
 
     func testStableChannelRefusesPrereleasesButBetaAcceptsThem() throws {
-        XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(tag: "pocket-v1.0.0-beta.1", prerelease: true)))
-        let beta = try FirmwareReleaseSource.parse(document(tag: "pocket-v1.0.0-beta.1", prerelease: true),
+        XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(tag: "pocket-v0.2.0-beta.1", prerelease: true)))
+        let beta = try FirmwareReleaseSource.parse(document(tag: "pocket-v0.2.0-beta.1", prerelease: true),
                                                    allowingPrerelease: true)
-        XCTAssertEqual(beta.version, "1.0.0-beta.1")
+        XCTAssertEqual(beta.version, "0.2.0-beta.1")
         XCTAssertTrue(beta.isPrerelease)
+    }
+
+    /// Below 1.0 is the beta series, published as normal releases so GitHub's
+    /// latest endpoint (the reader's own updater) returns them.
+    func testZeroSeriesIsANormalReleaseLabelledBeta() throws {
+        let release = try FirmwareReleaseSource.parse(document(tag: "pocket-v0.1.0"))
+        XCTAssertEqual(release.version, "0.1.0")
+        XCTAssertFalse(release.isPrerelease)
+        XCTAssertTrue(release.isBeta)
+        XCTAssertFalse(try FirmwareReleaseSource.parse(document(tag: "pocket-v1.0.0")).isBeta)
+        XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(tag: "pocket-v1.0.0-beta.1", prerelease: true),
+                                                             allowingPrerelease: true),
+                             "Pre-reset 1.0.0 betas are retired")
+    }
+
+    /// The version reset: readers on lineage-1 1.0.0 betas and dev builds take 0.x
+    /// once; from lineage 2 on versions compare normally.
+    func testReadersFromBeforeTheResetAreOfferedZeroSeries() {
+        for running in ["1.0.0-beta.1", "1.0.0-dev-feat-reader-file-download-f6e3f243-w3ec1f022"] {
+            XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.1.0", to: running, channel: .stable, lineage: 1), running)
+            XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.1.0", to: running, channel: .beta, lineage: 1), running)
+        }
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.1.1", to: "0.1.0", channel: .stable, lineage: 2))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.1.0", to: "0.1.0", channel: .stable, lineage: 2))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.9.0", to: "1.0.0", channel: .stable, lineage: 2))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.9.0", to: "1.0.0-dev-main-abcd", channel: .beta, lineage: 2),
+                       "A dev build toward the real 1.0.0 is not migrated back")
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.1.0", to: "1.0.0", channel: .stable, lineage: 1),
+                       "Only pre-reset betas and dev builds migrate")
     }
 
     /// The beta channel takes the newest published release, skipping drafts
     /// and entries without an official image.
     func testBetaChannelPicksTheNewestUsableRelease() throws {
         let newest = try FirmwareReleaseSource.parseNewest(list([
-            (tag: "pocket-v1.0.0-beta.2", prerelease: true, draft: true),
+            (tag: "pocket-v0.2.0-beta.2", prerelease: true, draft: true),
             (tag: "nightly", prerelease: true, draft: false),
-            (tag: "pocket-v1.0.0-beta.1", prerelease: true, draft: false),
+            (tag: "pocket-v0.2.0-beta.1", prerelease: true, draft: false),
+            (tag: "pocket-v0.1.0", prerelease: false, draft: false),
             (tag: "v1.6.6", prerelease: false, draft: false),
         ]))
-        XCTAssertEqual(newest.version, "1.0.0-beta.1")
+        XCTAssertEqual(newest.version, "0.2.0-beta.1")
         XCTAssertTrue(newest.isPrerelease)
+        let afterRetired = try FirmwareReleaseSource.parseNewest(list([
+            (tag: "pocket-v1.0.0-beta.1", prerelease: true, draft: false),
+            (tag: "pocket-v0.1.0", prerelease: false, draft: false),
+        ]))
+        XCTAssertEqual(afterRetired.version, "0.1.0", "A retired pre-reset beta is skipped")
         XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(list([(tag: "v1.6.6", prerelease: false, draft: false)])))
         XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(list([(tag: "nightly", prerelease: true, draft: false)])))
         XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(Data("[]".utf8)))
@@ -169,22 +204,21 @@ final class FirmwareReleaseTests: XCTestCase {
     }
 
     func testBetaChannelOffersNewProductBuildsAndMigratesHistoricalReaders() {
-        let dev = "1.0.0-dev-main-3de13206-wafd75b32"
-        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.0.0-beta.1", to: dev, channel: .beta))
-        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.0.0", to: "1.0.0-beta.1", channel: .beta))
-        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.0.1-beta.1", to: "1.0.0", channel: .beta))
-        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.0.0-beta.1", to: "1.6.6", channel: .beta))
-        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.0.0-beta.1", to: "1.7.0-beta.4", channel: .beta))
-        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.0.0-beta.1", to: "1.0.0-beta.1", channel: .beta))
-        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.0.0-beta.1", to: "1.7.0", channel: .beta,
-                                                         lineage: 1))
-        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.0.0-beta.1", to: "weird", channel: .beta))
-        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("1.0.0-beta.1", to: dev, channel: .stable))
-        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("1.0.0", to: "1.6.6", channel: .stable))
+        let dev = "0.2.0-dev-main-3de13206-wafd75b32"
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.2.0-beta.1", to: dev, channel: .beta, lineage: 2))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.2.0", to: "0.2.0-beta.1", channel: .beta, lineage: 2))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.2.1-beta.1", to: "0.2.0", channel: .beta, lineage: 2))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.1.0", to: "1.6.6", channel: .beta))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.1.0", to: "1.7.0-beta.4", channel: .beta))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.2.0-beta.1", to: "0.2.0-beta.1", channel: .beta, lineage: 2))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.1.0", to: "1.7.0", channel: .beta, lineage: 1))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.2.0-beta.1", to: "weird", channel: .beta))
+        XCTAssertFalse(FirmwareReleaseSource.shouldOffer("0.2.0-beta.1", to: dev, channel: .stable, lineage: 2))
+        XCTAssertTrue(FirmwareReleaseSource.shouldOffer("0.1.0", to: "1.6.6", channel: .stable))
     }
 
     @MainActor func testBetaReleaseIsDownloadedForADevelopmentReader() async throws {
-        let release = FirmwareRelease(version: "1.0.0-beta.1", downloadURL: URL(string: "https://example.invalid")!,
+        let release = FirmwareRelease(version: "0.2.0-beta.1", downloadURL: URL(string: "https://example.invalid")!,
                                       byteCount: 1, isPrerelease: true)
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("beta-firmware.bin")
         let operations = PocketModel.ReleaseOperations(latest: { release }, download: { _, _ in file }, channel: .beta)
@@ -192,7 +226,7 @@ final class FirmwareReleaseTests: XCTestCase {
         model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
             #"{"version":"1.7.0-dev-main-3de13206-wafd75b32","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
         let result = await model.downloadLatestFirmware()
-        XCTAssertEqual(result?.version, "1.0.0-beta.1")
+        XCTAssertEqual(result?.version, "0.2.0-beta.1")
         XCTAssertEqual(result?.file, file)
 
         let stable = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(),

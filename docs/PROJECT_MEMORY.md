@@ -26,6 +26,21 @@ with a dated note below.
   All 19 store captures regenerated (Mac refreshed after final inset change) and
   package validation passed. No firmware was installed; physical panel QA pending.
 
+## Firmware 0.x series and saved studio edits — 2026-10-03
+
+- User decision: development firmware is `pocket-v0.1.0` (no suffix); every
+  version below 1.0 is beta, published as a normal GitHub release marked latest
+  so the reader's own updater (`/releases/latest`) finds it; 1.0.0 is the first
+  stable release. Before this, `/releases/latest` returned the historical
+  `v1.6.6`, so the reader and the app's stable channel found nothing.
+- Firmware PR #19 (`chore/release-0.1.0`): embedded 0.1.0, `firmwareLineage: 2`.
+  Not tagged until the firmware session's user approves after a device pass.
+- App: lineage-1 readers on `1.0.0-*` builds are offered 0.x once
+  (`FirmwareGuidance.isBeforeVersionReset`); `pocket-v1.0.0-beta.*` is retired;
+  below 1.0 shows "(beta)"; minimumRecommended 0.1.0.
+- Studio edits persist (`ProfileEditStore`) and merge per field
+  (`ProfileMerge`); see docs/CONTENT_EDITOR.md.
+
 ## App cleanup after firmware PR #8–#10 — 2026-10-02
 
 - Firmware removed UI packs, live frames and the saved screen preview. The app

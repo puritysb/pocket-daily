@@ -1695,7 +1695,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 return nil
             }
             readerUpdateState = .downloading(release.version)
-            post("Downloading Pocket Daily firmware \(release.version)\(release.isPrerelease ? " (pre-release)" : "")…")
+            post("Downloading Pocket Daily firmware \(release.version)\(release.isBeta ? " (beta)" : "")…")
             let file = try await releaseSource.download(release, Self.firmwareDownloads)
             if Task.isCancelled {
                 try? FileManager.default.removeItem(at: file.deletingLastPathComponent())

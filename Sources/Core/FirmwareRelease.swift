@@ -8,10 +8,12 @@ struct FirmwareRelease: Equatable, Sendable {
     let version: String
     let downloadURL: URL
     let byteCount: Int
-    /// A GitHub pre-release (for example `pocket-v1.0.0-beta.1`); only the beta
-    /// channel of development builds ever sees one.
+    /// A GitHub pre-release; only the beta channel of development builds ever
+    /// sees one. Releases below 1.0 are published normally but are still beta.
     var isPrerelease = false
     var publishedAt: Date? = nil
+
+    var isBeta: Bool { isPrerelease || FirmwareGuidance.isBeta(version) }
 }
 
 enum FirmwareReleaseError: LocalizedError, Equatable {
@@ -101,6 +103,7 @@ enum FirmwareReleaseSource {
         let tag = document.tag_name.trimmingCharacters(in: .whitespaces)
         guard tag.hasPrefix("pocket-v") else { throw FirmwareReleaseError.malformed }
         let version = String(tag.dropFirst("pocket-v".count))
+        guard !FirmwareGuidance.isRetiredRelease(version) else { throw FirmwareReleaseError.malformed }
         guard version.wholeMatch(of: /^\d+\.\d+\.\d+(?:-beta\.\d+)?$/) != nil,
               prerelease == version.contains("-beta."),
               let asset = document.assets.first(where: { $0.name == "firmware.bin" }) else {
@@ -162,7 +165,8 @@ enum FirmwareReleaseSource {
     /// release is not offered the same release again.
     static func isNewer(_ latest: String, than running: String, lineage: Int? = nil) -> Bool {
         guard let new = FirmwareGuidance.parse(latest), let old = FirmwareGuidance.parse(running) else { return false }
-        if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage) { return true }
+        if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage)
+            || FirmwareGuidance.isBeforeVersionReset(running, lineage: lineage) { return true }
         return new > old
     }
 
@@ -178,7 +182,8 @@ enum FirmwareReleaseSource {
             return isNewer(release, than: running, lineage: lineage)
         case .beta:
             guard let new = FirmwareGuidance.parse(release), let old = FirmwareGuidance.parse(running) else { return false }
-            if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage) { return true }
+            if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage)
+                || FirmwareGuidance.isBeforeVersionReset(running, lineage: lineage) { return true }
             return new > old || (new == old && release != running)
         }
     }

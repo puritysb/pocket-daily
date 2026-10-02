@@ -108,11 +108,11 @@ struct CrashDiagnostic: Equatable, Sendable {
     }
 }
 
-struct ReaderPreferences: Equatable, Sendable {
+struct ReaderPreferences: Equatable, Sendable, Codable {
     /// The reader's "never" value (CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES).
     static let neverSleepMinutes = 31
     /// What the side buttons do in a book (CrossPointSettings::SIDE_BUTTON_LAYOUT).
-    enum SideButtons: Int, CaseIterable, Sendable {
+    enum SideButtons: Int, CaseIterable, Sendable, Codable {
         case previousNext = 0, nextPrevious = 1, off = 2
         var title: String {
             switch self {

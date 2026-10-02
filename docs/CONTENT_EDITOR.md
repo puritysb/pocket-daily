@@ -162,6 +162,25 @@ fields beside it (below it when stacked).
 - Other "Apply" labels were renamed for what they send: reading settings use
   **Save settings**, the theme inspector uses **Send theme**.
 
+## Saved edits and merging with the reader (2026-10-03)
+
+Unsent Home & Sleep and reading-setting edits are saved to
+`Application Support/Pocket/Studio/profile-edits.json` (`ProfileEditStore`)
+with the reader state they started from (profile, its generation, reading
+settings) and restored at launch; the file is removed when nothing is unsent.
+Demo starts from a clean editor and never saves. Hosted tests use no file.
+
+When the reader's settings load, edits are merged field by field
+(`ProfileMerge`) against that saved base: a field the user did not touch takes
+the reader's value; a field the reader did not change keeps the edit; a field
+changed on both keeps the edit, which Apply then writes over the reader's. The
+Screens apply bar shows a "Merged with the reader's settings" notice listing
+what came from the reader and what changed in both places, with "Use the
+reader's for these", and otherwise names what Apply will change. The six
+profile fields are Home pages, Daily word, Daily panel, Next event, Sleep
+screen and Sleep sections; the reading settings merge the same way. A 409 on
+Apply reloads the reader's profile and merges it like any other load.
+
 ## Home & Sleep profile editor (P2, 2026-09-25)
 
 Home & Sleep is the first studio tab on every platform and edits the reader's

@@ -78,6 +78,7 @@
 		4DA17B5656864277C148A061 /* ContentCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35E5C23903D153A5C1161EE /* ContentCard.swift */; };
 		4E3860A4E2F67A8F46727524 /* ReaderBluetoothLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78643CA122DE82B8C818A327 /* ReaderBluetoothLink.swift */; };
 		4EB6223E991F88B72608FC1D /* ContentStudioSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DCF4874386633399B3E1EE2 /* ContentStudioSupport.swift */; };
+		4FE7EA5E888A71219BA3C675 /* ProfileMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACACD6E40018FB971E0023AF /* ProfileMerge.swift */; };
 		4FE8262F7F07D37E69BE406D /* PocketMacReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E822A7A862B9E6419AEFACB1 /* PocketMacReaderTests.swift */; };
 		5031638530A05ACC06BC51DD /* PocketReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB09B9253893CEDE90FD4DF7 /* PocketReaderTests.swift */; };
 		504D86E06A269F9D1A2C229D /* ReadingSyncBLETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E094594F1CB4B9E1D7E4FCB2 /* ReadingSyncBLETests.swift */; };
@@ -127,6 +128,7 @@
 		715A4DED1EA05944366B8767 /* MyCardsEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2438136E43779E85BB2ABEBA /* MyCardsEditor.swift */; };
 		71A8E7C92B39B1F48C5E90C2 /* ContentCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11D0FF030626566E51FE773 /* ContentCardTests.swift */; };
 		72148A8F34FDCB99485E47CA /* ArticleInboxModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8222B6BE7D8BFA048BAF8A5 /* ArticleInboxModel.swift */; };
+		765850E956FBA4E5BC45EF39 /* ProfileMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1889438F50BFEAB8B509F2B0 /* ProfileMergeTests.swift */; };
 		767273389E82E9C88794DF79 /* ReadingDocumentPreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F03F0B099EADC58A2D91DA7D /* ReadingDocumentPreparation.swift */; };
 		76B6B1FD45AE0FC9BAC63A96 /* ContentSendStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2C5D30FA431E642719D318 /* ContentSendStatus.swift */; };
 		786385E827CFDC159682CF34 /* DeviceSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7509F94EA1DECAB62F6D3B8 /* DeviceSnapshotTests.swift */; };
@@ -169,6 +171,7 @@
 		A0A560FFC6CEB57DF471B578 /* ContentRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FA699FD202B240470E8A0C /* ContentRevision.swift */; };
 		A0B124B096476FF24801D135 /* PreviewFontStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */; };
 		A34CDD9ABF00528639DC303B /* ReaderAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44D7685B864D19B6A2EFAC15 /* ReaderAppearance.swift */; };
+		A37DC34473121253C38E9576 /* ProfileMerge.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACACD6E40018FB971E0023AF /* ProfileMerge.swift */; };
 		A3C1DD8F0DC1C0E5968DE765 /* PocketFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */; };
 		A60599B14B2AE02DB68EEC5E /* ContentManifestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C0A23B6F3DB13FD2EEB751 /* ContentManifestTests.swift */; };
 		A6208CA1D1EDD27DDD132C2F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF86CD3C8490B57EB11E8071 /* ContentView.swift */; };
@@ -329,6 +332,7 @@
 		16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbySyncProtocolTests.swift; sourceTree = "<group>"; };
 		16F641890CC6E4A98000FD69 /* ReaderLayoutSendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderLayoutSendTests.swift; sourceTree = "<group>"; };
 		17315F0BDA2C370AC1F56ACA /* KOReaderDocumentDigestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KOReaderDocumentDigestTests.swift; sourceTree = "<group>"; };
+		1889438F50BFEAB8B509F2B0 /* ProfileMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileMergeTests.swift; sourceTree = "<group>"; };
 		1921597C30EF1ECE33916E94 /* ContentActivationJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentActivationJournal.swift; sourceTree = "<group>"; };
 		197D11D851B078BA98D06299 /* HostRendererBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostRendererBridge.swift; sourceTree = "<group>"; };
 		1AAC7D167DC4796E9883FA0B /* ContentStateReceipt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentStateReceipt.swift; sourceTree = "<group>"; };
@@ -406,6 +410,7 @@
 		A8547D34CCA5680363BDD47F /* HotspotJoiner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotspotJoiner.swift; sourceTree = "<group>"; };
 		A8D547F3D718D7EA62C2E1B5 /* PocketPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketPalette.swift; sourceTree = "<group>"; };
 		AB57FA3D554E7B96A58509E9 /* ContentPreparationHTTPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentPreparationHTTPTests.swift; sourceTree = "<group>"; };
+		ACACD6E40018FB971E0023AF /* ProfileMerge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileMerge.swift; sourceTree = "<group>"; };
 		AD78A7951FA2C31F35F344AA /* PocketFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PocketFlowTests.swift; sourceTree = "<group>"; };
 		AE5A510A17E41D4E44C7DC3C /* ProfileStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStudioView.swift; sourceTree = "<group>"; };
 		AF8BCB6818636601D3BCF82F /* KOReaderDocumentDigest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KOReaderDocumentDigest.swift; sourceTree = "<group>"; };
@@ -633,6 +638,7 @@
 				C5893AB01049A60E87A4353F /* LiveSyncTests.swift */,
 				16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */,
 				D61604ADB60E9E92E71D22DB /* PocketProfileTests.swift */,
+				1889438F50BFEAB8B509F2B0 /* ProfileMergeTests.swift */,
 				3CA5D4636B2C951D33693CD2 /* ReaderContentPullTests.swift */,
 				0276250491E92462800CC7CB /* ReaderContentTransportTests.swift */,
 				E79D36C5515C97C20FE566EF /* ReaderDisplayStateTests.swift */,
@@ -730,6 +736,7 @@
 				2438136E43779E85BB2ABEBA /* MyCardsEditor.swift */,
 				160776C46D2E827AC2D35B97 /* PocketProfile.swift */,
 				5FE1BE4223A86BAA92CE1863 /* PreviewFontStore.swift */,
+				ACACD6E40018FB971E0023AF /* ProfileMerge.swift */,
 				AE5A510A17E41D4E44C7DC3C /* ProfileStudioView.swift */,
 				5B2746840614F4AE42957C88 /* ReaderContentPull.swift */,
 				B0E3DC4EBC78C9155C40A9D4 /* ReaderContentTransport.swift */,
@@ -1095,6 +1102,7 @@
 				B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */,
 				894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */,
 				E9883E6E71F42D344D105192 /* PocketProfileTests.swift in Sources */,
+				765850E956FBA4E5BC45EF39 /* ProfileMergeTests.swift in Sources */,
 				E5EA5AA7C23D7870A10C8A8E /* ReaderContentPullTests.swift in Sources */,
 				BAC8BE97D29D857629A19653 /* ReaderContentTransportTests.swift in Sources */,
 				7114DD3B8C1CE6D7396959FB /* ReaderDisplayStateTests.swift in Sources */,
@@ -1181,6 +1189,7 @@
 				F607C9E3B6C903E094947518 /* PocketProfile.swift in Sources */,
 				79F9A2CBC8D5E2506C5BB557 /* PositionRecord.swift in Sources */,
 				A0B124B096476FF24801D135 /* PreviewFontStore.swift in Sources */,
+				4FE7EA5E888A71219BA3C675 /* ProfileMerge.swift in Sources */,
 				C6926A8E76B1E977CE66B1C7 /* ProfileStudioView.swift in Sources */,
 				47D0B8E2D65CE7A605747248 /* ReaderAppearance.swift in Sources */,
 				4E3860A4E2F67A8F46727524 /* ReaderBluetoothLink.swift in Sources */,
@@ -1288,6 +1297,7 @@
 				6ADF94350ACD700D5480F7F8 /* PocketProfile.swift in Sources */,
 				AB3036AB91949B5876833B51 /* PositionRecord.swift in Sources */,
 				09DD2182BEFDE3ADE4D1BD7D /* PreviewFontStore.swift in Sources */,
+				A37DC34473121253C38E9576 /* ProfileMerge.swift in Sources */,
 				AE703BCFF23C93CEAB083CEF /* ProfileStudioView.swift in Sources */,
 				A34CDD9ABF00528639DC303B /* ReaderAppearance.swift in Sources */,
 				1F1EF8E56D4F517685A74DA7 /* ReaderBluetoothLink.swift in Sources */,

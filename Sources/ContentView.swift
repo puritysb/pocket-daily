@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -217,6 +218,17 @@ struct ContentView: View {
                 model.reconnectRememberedReader()
                 try? await Task.sleep(for: .seconds(8))
             }
+        }
+        .task(id: model.isDemoMode) {
+            // Unsent layout and reading edits come back from disk; demo starts
+            // clean and its edits are never saved.
+            profileEditor.reset()
+            if !model.isDemoMode { profileEditor.restore(ProfileEditStore.live.load()) }
+        }
+        .onReceive(profileEditor.objectWillChange.debounce(for: .milliseconds(400), scheduler: RunLoop.main)) { _ in
+            guard !model.isDemoMode else { return }
+            do { try ProfileEditStore.live.save(profileEditor.snapshot) }
+            catch { model.post("Your layout edits could not be saved on this device: \(error.localizedDescription)", tone: .failure) }
         }
         .task(id: model.isDemoMode) {
             // Authenticated pairing: remember this reader for reading sync over Bluetooth.
@@ -1128,7 +1140,7 @@ struct FirmwareUpdateCard: View {
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 if let release = model.latestFirmwareRelease {
-                    Text("Latest · \(release.version)\(release.isPrerelease ? " (beta)" : "")")
+                    Text("Latest · \(release.version)\(release.isBeta ? " (beta)" : "")")
                         .font(.callout.weight(.medium))
                     if let date = release.publishedAt {
                         Text("Released \(date.formatted(date: .abbreviated, time: .omitted))")

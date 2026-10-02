@@ -1,50 +1,103 @@
 import SwiftUI
 import Combine
 
-/// Draft of the Home & Sleep profile. Lives with the app window so switching
-/// tabs keeps unsent edits.
+/// Draft of the Home & Sleep profile and reading settings. Lives with the app
+/// window so switching tabs keeps unsent edits, and is saved to disk
+/// (`ProfileEditStore`) so quitting does not lose them.
 @MainActor
 final class ProfileEditorState: ObservableObject {
     @Published var draft: PocketProfile = .defaults
     /// The reader profile the draft started from (defaults when none).
     @Published private(set) var base: PocketProfile = .defaults
     private var baseGeneration: UInt32?
+    /// What the last merge with the reader's settings did, until dismissed.
+    @Published private(set) var mergeReport: ProfileMerge.Report?
 
     var isDirty: Bool { draft != base }
 
-    /// Adopt a newly loaded or saved reader profile unless it would discard
-    /// unsent edits made against an older base.
+    /// Adopt a newly loaded or saved reader profile. Unsent edits are merged
+    /// field by field (`ProfileMerge`) instead of either side winning wholesale.
     func sync(with reader: ReaderProfileState?) {
         // Daemon-fed items are dropped on load, so they never count as edits.
         guard let reader else { return }
         let incoming = reader.profile.withoutRetiredItems
         guard reader.generation != baseGeneration || incoming != base else { return }
-        if !isDirty || draft == incoming { draft = incoming }
+        if isDirty && draft != incoming {
+            let merged = ProfileMerge.merge(base: base, mine: draft, reader: incoming)
+            draft = merged.profile
+            note(merged.report)
+        } else {
+            draft = incoming
+        }
         base = incoming
         baseGeneration = reader.generation
     }
+
+    private func note(_ report: ProfileMerge.Report) {
+        guard !report.isEmpty else { return }
+        var combined = mergeReport ?? ProfileMerge.Report()
+        combined.add(report)
+        mergeReport = combined
+    }
+
+    func dismissMergeReport() { mergeReport = nil }
+
+    /// Takes the reader's value for the fields both sides changed.
+    func useReaderForBothChanged() {
+        guard let fields = mergeReport?.bothChanged, !fields.isEmpty else { return }
+        ProfileMerge.take(fields, from: base, into: &draft)
+        ProfileMerge.take(fields, from: readingBase, into: &reading)
+        mergeReport?.bothChanged = []
+        if mergeReport?.isEmpty == true { mergeReport = nil }
+    }
+
+    /// What Apply would change on the reader, by field.
+    var pendingFields: [ProfileMerge.Field] {
+        ProfileMerge.pending(profile: draft, reader: base) + ProfileMerge.pending(preferences: reading, reader: readingBase)
+    }
+
+    /// Unsent edits to keep on disk; nil when there are none.
+    var snapshot: ProfileEditSnapshot? {
+        guard isDirty || readingDirty else { return nil }
+        return ProfileEditSnapshot(draft: draft, base: base, baseGeneration: baseGeneration,
+                                   reading: reading, readingBase: readingBase, savedAt: Date())
+    }
+
+    /// Restores saved edits; the next reader load merges them with what the reader holds.
+    func restore(_ snapshot: ProfileEditSnapshot?) {
+        guard let snapshot else { return }
+        draft = snapshot.draft
+        base = snapshot.base
+        baseGeneration = snapshot.baseGeneration
+        reading = snapshot.reading
+        readingBase = snapshot.readingBase
+    }
+
+    /// Demo starts from a clean editor; its edits are never saved.
+    func reset() {
+        draft = .defaults
+        base = .defaults
+        baseGeneration = nil
+        reading = Self.defaultReading
+        readingBase = Self.defaultReading
+        mergeReport = nil
+    }
+
+    private static let defaultReading = ReaderPreferences(sideButtons: .previousNext,
+                                                          frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
 
     @Published var reading = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
     @Published private(set) var readingBase = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
     var readingDirty: Bool { reading != readingBase }
 
-    /// Adopt untouched fields, retaining edits made before connecting.
+    /// Adopt untouched fields, retaining edits made before connecting
+    /// (`ProfileMerge`); fields both sides changed are reported.
     func syncReading(_ loaded: ReaderPreferences?) {
-        guard let loaded else { return }
-        var merged = loaded
-        if reading.startupApp != readingBase.startupApp { merged.startupApp = reading.startupApp }
-        if reading.pocketDailySleepCover != readingBase.pocketDailySleepCover { merged.pocketDailySleepCover = reading.pocketDailySleepCover }
-        if reading.sleepTimeoutMinutes != readingBase.sleepTimeoutMinutes { merged.sleepTimeoutMinutes = reading.sleepTimeoutMinutes }
-        if reading.fontSize != readingBase.fontSize { merged.fontSize = reading.fontSize }
-        if loaded.sideButtons != nil, reading.sideButtons != readingBase.sideButtons { merged.sideButtons = reading.sideButtons }
-        if loaded.frontButtonsFollowOrientation != nil, reading.frontButtonsFollowOrientation != readingBase.frontButtonsFollowOrientation {
-            merged.frontButtonsFollowOrientation = reading.frontButtonsFollowOrientation
-        }
-        if loaded.sleepWakeIndicator != nil, reading.sleepWakeIndicator != readingBase.sleepWakeIndicator {
-            merged.sleepWakeIndicator = reading.sleepWakeIndicator
-        }
+        guard let loaded, loaded != readingBase else { return }
+        let merged = ProfileMerge.merge(base: readingBase, mine: reading, reader: loaded)
+        if readingDirty { note(merged.report) }
         readingBase = loaded
-        reading = merged
+        reading = merged.preferences
     }
 
     func acceptReading(_ saved: ReaderPreferences?) {
@@ -332,7 +385,11 @@ struct ProfileStudioView: View {
 
     private var status: (text: String, symbol: String, color: Color) {
         if model.isDemoMode { return ("Demo · nothing is sent", "info.circle", .secondary) }
-        if model.readerStatus == nil { return ("Editing in the app · connect to reader Sync to apply", "info.circle", .secondary) }
+        if model.readerStatus == nil {
+            return (editor.isDirty || editor.readingDirty
+                        ? "Edits saved in the app · connect to reader Sync to apply"
+                        : "Editing in the app · connect to reader Sync to apply", "info.circle", .secondary)
+        }
         if editor.readingDirty && model.preferences == nil {
             return ("Reconnect to reader Sync to load settings before applying", "info.circle", .orange)
         }
@@ -407,6 +464,15 @@ struct ProfileStudioView: View {
                         applyControls
                     }
                 }
+            }
+            if let report = editor.mergeReport, !model.isDemoMode {
+                MergeNotice(report: report, useReader: editor.useReaderForBothChanged,
+                            dismiss: editor.dismissMergeReport)
+            } else if model.readerStatus != nil, !model.isDemoMode, !editor.pendingFields.isEmpty {
+                Text("Apply changes on the reader: " + editor.pendingFields.map(\.title).joined(separator: ", "))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("profile-pending")
             }
             if case .needsCheck = cardStatus, let deployment = model.contentDeployment {
                 ContentDeploymentStatus(deployment: deployment, model: model)
@@ -950,5 +1016,46 @@ struct PocketLayoutSchematic: View {
             .frame(height: height)
             .background(filled ? Color.black : Color.white)
             .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.black, lineWidth: filled ? 0 : 2))
+    }
+}
+
+/// What happened when unsent edits met the reader's own settings, and the rule
+/// that decided it (`ProfileMerge`).
+private struct MergeNotice: View {
+    let report: ProfileMerge.Report
+    let useReader: () -> Void
+    let dismiss: () -> Void
+
+    private func names(_ fields: [ProfileMerge.Field]) -> String { fields.map(\.title).joined(separator: ", ") }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Merged with the reader’s settings", systemImage: "arrow.triangle.merge")
+                .font(.callout.weight(.semibold))
+            if !report.fromReader.isEmpty {
+                Text("Taken from the reader, because you had not changed them: \(names(report.fromReader)).")
+            }
+            if !report.bothChanged.isEmpty {
+                Text("Changed in both places: \(names(report.bothChanged)). Your edits are kept and replace the reader’s when you apply.")
+                    .foregroundStyle(.orange)
+            }
+            Text("Each setting is merged on its own: one you did not touch follows the reader, one the reader did not change keeps your edit.")
+                .foregroundStyle(.secondary)
+            HStack {
+                if !report.bothChanged.isEmpty {
+                    Button("Use the reader’s for these", action: useReader)
+                        .accessibilityIdentifier("merge-use-reader")
+                }
+                Spacer()
+                Button("OK", action: dismiss).accessibilityIdentifier("merge-dismiss")
+            }
+            .buttonStyle(.bordered)
+        }
+        .font(.caption)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(10)
+        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("merge-notice")
     }
 }

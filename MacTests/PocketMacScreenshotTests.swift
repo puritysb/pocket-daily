@@ -91,6 +91,18 @@ final class PocketMacScreenshotTests: XCTestCase {
                              name: "qa-device-no-reader-dark", size: Self.pointSize, dark: true)
         try await renderView(ContentView(initialSection: .files).environmentObject(model),
                              name: "qa-files-no-reader", size: Self.pointSize)
+        // Saved offline edits meeting a reader that changed in the meantime.
+        let editor = ProfileEditorState()
+        var mine = PocketProfile.defaults
+        mine.home.weather = .top
+        editor.restore(ProfileEditSnapshot(draft: mine, base: .defaults, baseGeneration: 1,
+                                           reading: ReaderPreferences(), readingBase: ReaderPreferences(), savedAt: Date()))
+        var onReader = PocketProfile.defaults
+        onReader.home.weather = .off
+        onReader.sleep.mode = .reader
+        editor.sync(with: ReaderProfileState(deviceID: "1234ABCD", generation: 2, profile: onReader, maxHomeItems: 4))
+        try await renderView(ProfileStudioView(model: model, editor: editor),
+                             name: "qa-merge-notice", size: Self.pointSize)
 
         await LibraryModel.shared.load()
         let book = try XCTUnwrap(LibraryModel.shared.books.first { $0.origin == .welcome })
