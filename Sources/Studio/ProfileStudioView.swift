@@ -466,10 +466,10 @@ struct ProfileStudioView: View {
                 }
             }
             if let report = editor.mergeReport, !model.isDemoMode {
-                MergeNotice(report: report, useReader: editor.useReaderForBothChanged,
-                            dismiss: editor.dismissMergeReport)
-            } else if model.readerStatus != nil, !model.isDemoMode, !editor.pendingFields.isEmpty {
-                Text("Apply changes on the reader: " + editor.pendingFields.map(\.title).joined(separator: ", "))
+                MergeNotice(report: report, pending: pendingNames, describe: describe,
+                            useReader: editor.useReaderForBothChanged, dismiss: editor.dismissMergeReport)
+            } else if model.readerStatus != nil, !model.isDemoMode, let pendingNames {
+                Text("Apply changes on the reader: " + pendingNames)
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("profile-pending")
@@ -483,6 +483,19 @@ struct ProfileStudioView: View {
         .padding(.vertical, 10)
         .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(contentPadding > 0 ? 0.08 : 0), radius: 8, y: 2)
+    }
+
+    /// What Apply would change, named as on screen; a setting hidden by another
+    /// says why it is not visible. Nil when nothing would change.
+    private var pendingNames: String? {
+        let fields = editor.pendingFields
+        guard !fields.isEmpty else { return nil }
+        return fields.map(describe).joined(separator: ", ")
+    }
+
+    private func describe(_ field: ProfileMerge.Field) -> String {
+        if field == .nextEvent && editor.draft.home.weather == .off { return "Next event (shown when Daily panel is on)" }
+        return field.title
     }
 
     private var statusLabel: some View {
@@ -1023,10 +1036,13 @@ struct PocketLayoutSchematic: View {
 /// that decided it (`ProfileMerge`).
 private struct MergeNotice: View {
     let report: ProfileMerge.Report
+    /// What Apply would still change on the reader, if anything.
+    let pending: String?
+    let describe: (ProfileMerge.Field) -> String
     let useReader: () -> Void
     let dismiss: () -> Void
 
-    private func names(_ fields: [ProfileMerge.Field]) -> String { fields.map(\.title).joined(separator: ", ") }
+    private func names(_ fields: [ProfileMerge.Field]) -> String { fields.map(describe).joined(separator: ", ") }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1039,6 +1055,9 @@ private struct MergeNotice: View {
                 Text("Changed in both places: \(names(report.bothChanged)). Your edits are kept and replace the reader’s when you apply.")
                     .foregroundStyle(.orange)
             }
+            Text(pending.map { "Apply changes on the reader: \($0)." }
+                 ?? "Nothing else differs from the reader; Apply has nothing to send.")
+                .accessibilityIdentifier("merge-pending")
             Text("Each setting is merged on its own: one you did not touch follows the reader, one the reader did not change keeps your edit.")
                 .foregroundStyle(.secondary)
             HStack {

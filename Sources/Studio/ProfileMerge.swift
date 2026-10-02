@@ -14,7 +14,7 @@ enum ProfileMerge {
         var title: String {
             switch self {
             case .homeItems: "Home pages"
-            case .dailyWord: "Daily word"
+            case .dailyWord: "Daily word when there are no cards"
             case .weather: "Daily panel"
             case .nextEvent: "Next event"
             case .sleepMode: "Sleep screen"
