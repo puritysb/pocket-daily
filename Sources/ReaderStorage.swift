@@ -83,7 +83,7 @@ struct ReaderStoragePanel: View {
                     Button("Cancel") { model.cancelStorageRead() }
                 } else if model.isDemoMode {
                     Text("Connect a reader to browse its SD card.").font(.caption).foregroundStyle(.secondary)
-                } else if status.readerFiles == 1 {
+                } else if (status.readerFiles ?? 0) >= 1 {
                     HStack {
                         Button("Browse files") { browsing = true }.accessibilityIdentifier("reader-browse-files")
                         Spacer()

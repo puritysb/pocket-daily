@@ -12,8 +12,6 @@ struct CrossPointStatus: Codable, Equatable {
     let device: String
     let crashReportAvailable: Bool?
     let crashReportBytes: Int?
-    let screenPreviewAvailable: Bool?
-    let screenPreviewBytes: Int?
     let uploadChunkBytes: Int?
     let uploadStreamPort: Int?
     let uploadStreamResume: Bool?
@@ -58,10 +56,6 @@ struct CrossPointStatus: Codable, Equatable {
 struct LiveStudioAdvertisement: Codable, Equatable {
     let wsPort: Int?
     let mode: String
-    let frameStream: Bool?
-    let uiPacks: Bool?
-    let activePack: String?
-    let activePackVersion: String?
 }
 
 struct CrashDiagnostic: Equatable, Sendable {
@@ -114,11 +108,11 @@ struct CrashDiagnostic: Equatable, Sendable {
     }
 }
 
-struct ReaderPreferences: Equatable, Sendable {
+struct ReaderPreferences: Equatable, Sendable, Codable {
     /// The reader's "never" value (CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES).
     static let neverSleepMinutes = 31
     /// What the side buttons do in a book (CrossPointSettings::SIDE_BUTTON_LAYOUT).
-    enum SideButtons: Int, CaseIterable, Sendable {
+    enum SideButtons: Int, CaseIterable, Sendable, Codable {
         case previousNext = 0, nextPrevious = 1, off = 2
         var title: String {
             switch self {
@@ -1077,6 +1071,33 @@ actor CrossPointClient {
         try Self.requireSuccess(response, body: body)
         guard body.count <= 8192 else { throw ClientError.unexpectedMessage("Reader response is too large.") }
         return body
+    }
+
+    /// One piece of a reader file from `offset`. The reader caps a piece at
+    /// 4 KiB on Same Wi-Fi and 1 KiB over Direct connection.
+    func readerFilePiece(identity: String, path: String, size: Int64, offset: Int64,
+                         host: String, port: Int) async throws -> ReaderFilePiece {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/files/content", query: [
+            "deviceID": identity, "path": path, "size": String(size), "offset": String(offset),
+        ]) else { throw ClientError.invalidAddress }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let (body, response) = try await http.data(for: request, session: session)
+        try Task.checkCancellation()
+        switch (response as? HTTPURLResponse)?.statusCode ?? -1 {
+        case 200:
+            guard body.count <= 4096 else { throw ReaderDownloadError.malformedPiece }
+            return .data(body)
+        case 503: return .busy
+        case 409: return .changed
+        case 403: throw ClientError.unexpectedMessage("The reader does not share this kind of file. EPUB, TXT and Markdown books can be added.")
+        case 404: throw ClientError.unexpectedMessage("The book is no longer on the reader. Refresh and try again.")
+        case 416: throw ReaderDownloadError.incomplete
+        default:
+            let detail = String(data: body.prefix(512), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw ClientError.unexpectedMessage(detail?.isEmpty == false ? detail! : "The reader could not send the book.")
+        }
     }
 
     /// Only hidden UUID staging files can be discarded. Published content/update.bin is never a target.

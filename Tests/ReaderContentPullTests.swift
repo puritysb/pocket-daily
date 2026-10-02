@@ -159,7 +159,7 @@ final class ReaderContentPullTests: XCTestCase {
         defer { model.pauseForBackground() }
         var status = CrossPointStatus(version: "test", ip: "reader.test", mode: "STA", rssi: -50, freeHeap: 20000,
                                       uptime: 1, device: "X3", crashReportAvailable: false, crashReportBytes: 0,
-                                      screenPreviewAvailable: false, screenPreviewBytes: 0, uploadChunkBytes: nil,
+                                      uploadChunkBytes: nil,
                                       uploadStreamPort: 82, uploadStreamResume: true, diagnosticsAffordable: false,
                                       deviceID: "1234ABCD", contentPresentation: true)
         model.readerStatus = status

@@ -198,7 +198,7 @@ struct ArticleShelf: View {
     /// Sends the same EPUB the Library reads, so both devices see one book.
     private func prepare(_ article: ArticleSummary) {
         guard !model.preparedTransfers.contains(where: { $0.filename == "pd-article-\(article.id.uuidString.lowercased()).epub" }) else {
-            notice = "This article is already ready in Device → Files. Choose Send after connecting."
+            notice = "This article is already ready in Reader → Files. Choose Send after connecting."
             return
         }
         busy = true; error = nil; notice = nil
@@ -214,7 +214,7 @@ struct ArticleShelf: View {
                     throw PocketModel.ReadingPreparationFailure.unavailable
                 }
                 await work.value
-                notice = "Ready in Device → Files. Connect the reader, then choose Send. Sending again replaces the same article; deleted reader copies are never sent automatically."
+                notice = "Ready in Reader → Files. Connect the reader, then choose Send. Sending again replaces the same article; deleted reader copies are never sent automatically."
             } catch {
                 self.error = error.localizedDescription
             }

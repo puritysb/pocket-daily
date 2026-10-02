@@ -8,14 +8,18 @@ struct FirmwareRelease: Equatable, Sendable {
     let version: String
     let downloadURL: URL
     let byteCount: Int
-    /// A GitHub pre-release (for example `pocket-v1.0.0-beta.1`); only the beta
-    /// channel of development builds ever sees one.
+    /// A GitHub pre-release; only the beta channel of development builds ever
+    /// sees one. Releases below 1.0 are published normally but are still beta.
     var isPrerelease = false
     var publishedAt: Date? = nil
+
+    var isBeta: Bool { isPrerelease || FirmwareGuidance.isBeta(version) }
 }
 
 enum FirmwareReleaseError: LocalizedError, Equatable {
     case unavailable
+    /// GitHub answered, and nothing it lists is a Pocket Daily release this app installs.
+    case noRelease
     case malformed
     case untrustedLocation
     case tooLarge(Int)
@@ -25,6 +29,8 @@ enum FirmwareReleaseError: LocalizedError, Equatable {
         switch self {
         case .unavailable:
             return "Couldn't reach the Pocket Daily firmware releases. Check the internet connection and try again."
+        case .noRelease:
+            return "No Pocket Daily firmware update has been published yet."
         case .malformed:
             return "The latest firmware release could not be read. Try again later."
         case .untrustedLocation:
@@ -82,25 +88,29 @@ enum FirmwareReleaseSource {
 
     /// Parses GitHub's release list (newest first) and returns the newest
     /// usable release, pre-releases included. Entries without a valid official
-    /// image are skipped; with none usable, the newest entry's error is thrown.
+    /// image are skipped; with none usable, the newest product release's error
+    /// is thrown, or `noRelease` when the list holds no product release at all.
     static func parseNewest(_ data: Data) throws -> FirmwareRelease {
         guard let documents = try? JSONDecoder().decode([ReleaseDocument].self, from: data) else {
             throw FirmwareReleaseError.malformed
         }
-        var firstError: Error?
+        var firstProblem: Error?
         for document in documents where document.draft != true {
             do { return try release(from: document, allowingPrerelease: true) }
-            catch { firstError = firstError ?? error }
+            catch FirmwareReleaseError.noRelease { continue }
+            catch { firstProblem = firstProblem ?? error }
         }
-        throw firstError ?? FirmwareReleaseError.malformed
+        throw firstProblem ?? FirmwareReleaseError.noRelease
     }
 
     private static func release(from document: ReleaseDocument, allowingPrerelease: Bool) throws -> FirmwareRelease {
         let prerelease = document.prerelease == true
         guard document.draft != true, allowingPrerelease || !prerelease else { throw FirmwareReleaseError.malformed }
         let tag = document.tag_name.trimmingCharacters(in: .whitespaces)
-        guard tag.hasPrefix("pocket-v") else { throw FirmwareReleaseError.malformed }
+        // Historical `v…` tags and the retired pre-reset betas are not updates.
+        guard tag.hasPrefix("pocket-v") else { throw FirmwareReleaseError.noRelease }
         let version = String(tag.dropFirst("pocket-v".count))
+        guard !FirmwareGuidance.isRetiredRelease(version) else { throw FirmwareReleaseError.noRelease }
         guard version.wholeMatch(of: /^\d+\.\d+\.\d+(?:-beta\.\d+)?$/) != nil,
               prerelease == version.contains("-beta."),
               let asset = document.assets.first(where: { $0.name == "firmware.bin" }) else {
@@ -124,7 +134,10 @@ enum FirmwareReleaseSource {
         let response: URLResponse
         do { (data, response) = try await session.data(for: request) }
         catch { throw FirmwareReleaseError.unavailable }
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw FirmwareReleaseError.unavailable }
+        let status = (response as? HTTPURLResponse)?.statusCode
+        // GitHub answers 404 for `/releases/latest` while only pre-releases exist.
+        if status == 404, channel == .stable { throw FirmwareReleaseError.noRelease }
+        guard status == 200 else { throw FirmwareReleaseError.unavailable }
         return channel == .beta ? try parseNewest(data) : try parse(data)
     }
 
@@ -162,7 +175,8 @@ enum FirmwareReleaseSource {
     /// release is not offered the same release again.
     static func isNewer(_ latest: String, than running: String, lineage: Int? = nil) -> Bool {
         guard let new = FirmwareGuidance.parse(latest), let old = FirmwareGuidance.parse(running) else { return false }
-        if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage) { return true }
+        if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage)
+            || FirmwareGuidance.isBeforeVersionReset(running, lineage: lineage) { return true }
         return new > old
     }
 
@@ -178,7 +192,8 @@ enum FirmwareReleaseSource {
             return isNewer(release, than: running, lineage: lineage)
         case .beta:
             guard let new = FirmwareGuidance.parse(release), let old = FirmwareGuidance.parse(running) else { return false }
-            if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage) { return true }
+            if FirmwareGuidance.isPrelaunchVersion(running, lineage: lineage)
+                || FirmwareGuidance.isBeforeVersionReset(running, lineage: lineage) { return true }
             return new > old || (new == old && release != running)
         }
     }

@@ -9,14 +9,33 @@ Implemented locally 2026-09-27; physical acceptance remains required.
   files, even if firmware was prepared in an earlier session. Articles publish
   under `/Articles`, learning packs under `/pocket-daily/learning`, other books
   in the SD root. No content operation flashes the reader.
-- **Firmware** checks GitHub metadata once per launch and shows the latest version
+- **Firmware** checks GitHub metadata once per launch and again when a reader
+  connects: a failed or missing check is retried (at most once a minute), a
+  successful one refreshed after ten minutes. A refresh that gets no answer
+  keeps the earlier result; "nothing published yet" is shown as such, not as a
+  connection problem. The card shows the latest version
   and publication date. Update is offered against the connected reader; its
   acknowledgement starts download and transfer. Cancel stops and cleans up.
-  Local firmware import is not offered. Interrupted updates show Resume/Cancel,
+  Local firmware import is not offered in store builds. Interrupted updates show Resume/Cancel,
   with a local-only recovery action only after cleanup fails. The image
   is validated before preparation. Transfer publishes `/update.bin` on SD; it
   does not install it. The reader still requires its own confirmation before
   writing internal flash. Cancelling an app download sends nothing to the reader.
+- **Development builds only** (`#if DEBUG`, added 2026-10-03): the Firmware card
+  adds **Send a local build…** while a reader is connected, and a chosen or
+  dropped `.bin` takes the same route. The image is checked first, the
+  acknowledgement names its file, version and size, and it then uses the same
+  preparation, transfer, cancellation and on-reader confirmation as an official
+  update. The chosen file is copied, never moved or removed. It needs no
+  download, so it is not limited to Same Wi-Fi. The reader skips its prompt when
+  the staged version equals the running one; the acknowledgement says so.
+  Release builds compile none of this and still refuse a local `.bin`.
+- After an image is sent over Same Wi-Fi the reader is expected to leave Sync:
+  it restarts with Wi-Fi off to ask, install and restart again, and does not
+  return to Sync by itself. While the sent version is recorded, the status poll
+  runs every 3 s and two misses end the session with an on-reader notice instead
+  of the usual 15 s × 5. The Firmware card keeps the sent version for the last
+  reader until that reader reports its version again.
 - Content **Pause** closes the upload and retains its local copy and possible reader
   staging prefix. Send in that category retries/resumes it explicitly.
 - Content **Stop and remove** waits for the cancelled request to drain, then removes

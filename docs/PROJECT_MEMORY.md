@@ -26,10 +26,114 @@ with a dated note below.
   All 19 store captures regenerated (Mac refreshed after final inset change) and
   package validation passed. No firmware was installed; physical panel QA pending.
 
+## Installing unreleased firmware from the app — 2026-10-03
+
+- User decision: development builds (`#if DEBUG`) can send a local firmware
+  image; store builds keep official releases only (docs/TRANSFERS.md). Reason:
+  as of 2026-10-03 no release the app accepts exists (`/releases/latest` is
+  `v1.6.6`, `pocket-v1.0.0-beta.1` is retired), so Update reader offers nothing
+  until `pocket-v0.1.0` is tagged, and the tag waits for an X3 pass.
+- Use: signed Debug Mac build (see "Resume on another machine"), reader in Sync →
+  Same Wi-Fi, Reader → Connection → Firmware → Send a local build…, choose the
+  sibling `firmware/update.bin`, then Back and Confirm on the reader.
+- Hardware (user, 2026-10-03): the signed Debug Mac build sent the local
+  gh_release 0.1.0 image (built from `67828475`, SHA-256 `8fa5f4a9…`, not the
+  CI image) to X3 `5B09AF70` over Same Wi-Fi; the reader installed it after
+  its own Confirm and the app confirmed the version on reconnect.
+  `/api/status` afterwards: `0.1.0`, `firmwareLineage: 2`, no crash report.
+- While a sent image waits, the heartbeat polls every 3 s and two misses end
+  the session with "The reader left Sync to install …" (it was 15 s × 5, so the
+  app kept showing the reader as connected during flashing). The Firmware card
+  keeps the sent version for the last reader until it reports back. This part
+  is unit-tested only.
+- The release check also runs when a reader connects (retry floor 60 s,
+  refresh after 10 min; PRIVACY.md, the public privacy page and
+  APP_STORE_REVIEW.md say so). `FirmwareReleaseError.noRelease` covers historical
+  `v…` tags, retired betas, an empty list and a stable-channel 404, shown as
+  "No Pocket Daily firmware update has been published yet." Unit-tested only.
+- Open, needs the firmware session: on Same Wi-Fi the reader still needs Back
+  before its install prompt. `session/end` is registered only for the private
+  AP (`PocketEndpoints.cpp`, `POCKET_SYNC && apMode`). Proposal: after a verified
+  `/update.bin` commit, advertise a session end for STA too and let the app call
+  it, so the reader restarts into its prompt and one Confirm remains. No
+  flashing without Confirm; needs a status capability and a new firmware release.
+- Also open: Update reader is unavailable in a direct session because the
+  download needs internet; a pre-downloaded image would lift that.
+
+## Firmware 0.x series and saved studio edits — 2026-10-03
+
+- User decision: development firmware is `pocket-v0.1.0` (no suffix); every
+  version below 1.0 is beta, published as a normal GitHub release marked latest
+  so the reader's own updater (`/releases/latest`) finds it; 1.0.0 is the first
+  stable release. Before this, `/releases/latest` returned the historical
+  `v1.6.6`, so the reader and the app's stable channel found nothing.
+- Firmware PR #19 merged 2026-10-02 (`a96170e1`): embedded 0.1.0,
+  `firmwareLineage: 2`. As of 2026-10-03 no `pocket-v0.1.0` tag exists and
+  `/releases/latest` is still `v1.6.6`; the tag follows a short X3 pass of the
+  CI-built image (firmware session). The reader on lineage 1 must take 0.1.0 once
+  through the app; its own updater cannot see a lower number.
+- App: lineage-1 readers on `1.0.0-*` builds are offered 0.x once
+  (`FirmwareGuidance.isBeforeVersionReset`); `pocket-v1.0.0-beta.*` is retired;
+  below 1.0 shows "(beta)"; minimumRecommended 0.1.0.
+- User decision 2026-10-03: compatibility with older firmware (pre-0.x builds,
+  "Nearby Sync"/"Join a Network" names, removed status keys) need not be kept.
+  Legacy branches and "on older firmware" copy may be removed; not yet done.
+- Studio edits persist (`ProfileEditStore`) and merge per field
+  (`ProfileMerge`); see docs/CONTENT_EDITOR.md.
+
+## App cleanup after firmware PR #8–#10 — 2026-10-02
+
+- Firmware removed UI packs, live frames and the saved screen preview. The app
+  now decodes only `liveStudio.mode` (required) and `wsPort`, subscribes with
+  `{"subscribe":{}}`, has no frame or pack state in `DeviceCore`, and dropped
+  `screenPreview*`. The hardware parity test (`dev/capture`) was deleted.
+- PocketUIHost re-imported from firmware main `f1451016` (Home label "Home").
+- Bluetooth reading-sync windows open only from Pocket Daily Home and sleep,
+  not stock Home/Library/File Browser.
+
+## Device-centric IA, phase 1 — 2026-10-01
+
+- Decision record: `docs/READER_EXPANSION.md` 기기 중심 구조. Sidebar: Library
+  (Books, Articles) then Reader → Connection (with status), Screens, Files.
+  iPhone: Library and Reader tabs; Reader pages are a segmented control
+  (`device-pages`). The UI says "Reader", never a fixed model: the model name
+  appears only once a reader reports it. `StudioSection` rawValues
+  Reader/Screens/Files; UI tests call `open("Reader" | "Screens" | "Files")`.
+- `DeviceSnapshot` (`Sources/Core/DeviceSnapshot.swift`) maps CrossPoint status
+  and Bluetooth pairing to capabilities; `PocketModel.device` is the shared state.
+- Same Wi-Fi reconnect: `PocketModel.reconnectRememberedReader()` every 8 s from
+  ContentView (skipped under XCTest), probe outside the reader lane, same
+  device ID only, held after End session until the reader stops answering.
+  Setting key `Pocket.reconnectSameWiFi`.
+- Phase 2 (app only) is implemented: `ReaderInventory`/`ReaderShelf`
+  (`Sources/Library/ReaderShelf.swift`), "On reader" badges, "Only on your
+  reader", direct "Send to reader" while connected. Phase 3 app side
+  (`Sources/Library/ReaderFileDownload.swift`, Add to Library for EPUB) follows
+  firmware PR #12's contract (`readerFiles: 2`, offset pieces); firmware side not
+  implemented yet, so no hardware verification. Joint X3/X4 check when it lands:
+  1 MB and 20 MB EPUB byte-identical over both bearers.
+- UI tests that touch Articles or the share extension need the App Group, so run
+  them signed ad hoc (`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-`, as
+  `scripts/capture_screenshots.sh` does). With `CODE_SIGNING_ALLOWED=NO` they fail
+  with "The shared article storage is unavailable" (verified 2026-10-01).
+
+## Settings placement — 2026-10-01
+
+- Appearance and Continue Reading live only in Settings: macOS Settings window
+  (⌘,, tabs General / Continue Reading) opened from the sidebar's Settings row;
+  iOS one sheet from the sidebar (wide) or the Library header gear (compact).
+  The Library ⋯ menu and Device's Appearance picker were removed.
+- Bluetooth reading-sync pairing moved to Device (`ReaderBluetoothPairingCard`).
+  The reader advertises only after Sync → Direct connection; the Sync button
+  itself opens a menu, so hints must name Direct connection.
+- Hardware (user, 2026-10-01): the Mac Release build paired an X3 from the Device
+  card after the Mac forgot a stale `Pocket-AF70` bond
+  (`CBError.peerRemovedPairingInformation`; the reader keeps two bonds). A
+  background BLE place exchange after pairing is not yet verified.
+
 ## Appearance selection and Home cover layout — 2026-09-30
 
-- App chrome has a persisted System/Light/Dark choice (`appAppearance`), available
-  in the sidebar, Library options, Device, and macOS Settings. Reader page themes
+- App chrome has a persisted System/Light/Dark choice (`appAppearance`). Reader page themes
   remain independent; closing a book restores the app choice.
 - The sibling Home painter fits a 2:3 cover slot into a stable metadata column
   for Daily Panel top/bottom/off. Actual bitmap aspect ratios are preserved;

@@ -166,6 +166,70 @@ final class TransferSeparationTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: downloadFolder.path))
     }
 
+    func testLocalFirmwareBuildUsesTheFirmwareLaneAndKeepsTheChosenFile() async throws {
+        let item = PreparedTransfer(id: UUID(), filename: "update.bin", firmwareVersion: "0.1.0-dev-test", readerID: nil)
+        let folder = TransferPreparation.file(item).deletingLastPathComponent()
+        folders.append(folder)
+        let sourceFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        folders.append(sourceFolder)
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+        let source = sourceFolder.appendingPathComponent("update.bin")
+        try Data("fixture".utf8).write(to: source)
+        let (model, session) = try setup(localFiles: .init(prepare: { _ in
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: TransferPreparation.file(item))
+            return item
+        }), releases: .init(latest: { throw FirmwareReleaseError.unavailable }))
+        defer { model.pauseForBackground(); session.invalidateAndCancel() }
+        XCTAssertTrue(model.canSendLocalFirmware)
+        TransferControlProtocol.holdPrepare()
+        let task = Task { await model.updateFirmware(fromLocalImage: source) }
+        for _ in 0..<300 where TransferControlProtocol.controls.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(model.activeTransferKind, .firmware)
+        XCTAssertFalse(model.canSendLocalFirmware, "One image at a time")
+        task.cancel()
+        await task.value
+        try await wait(model)
+        XCTAssertEqual(TransferControlProtocol.controls.compactMap { $0["action"] }, ["prepare", "discard"])
+        XCTAssertTrue(TransferControlProtocol.controls.allSatisfy { $0["kind"] == "firmware" })
+        XCTAssertFalse(model.preparedTransfers.contains { $0.id == item.id })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertEqual(try Data(contentsOf: source), Data("fixture".utf8), "The chosen build is never moved or removed")
+    }
+
+    func testLocalFirmwareInspectionRejectsANonImageAndNeedsAReader() async throws {
+        let sourceFolder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        folders.append(sourceFolder)
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+        let source = sourceFolder.appendingPathComponent("notes.bin")
+        try Data("not a firmware image".utf8).write(to: source)
+        let (model, session) = try setup()
+        defer { model.pauseForBackground(); session.invalidateAndCancel() }
+        let rejected = await model.inspectLocalFirmware(source)
+        XCTAssertNil(rejected)
+        XCTAssertEqual(model.message, FirmwareValidationError.tooSmall.errorDescription)
+        XCTAssertEqual(model.messageTone, .failure)
+        model.readerStatus = nil
+        let offline = await model.inspectLocalFirmware(source)
+        XCTAssertNil(offline)
+        XCTAssertTrue(model.message.contains("Connect a reader"))
+        await model.updateFirmware(fromLocalImage: source)
+        XCTAssertTrue(TransferControlProtocol.controls.isEmpty)
+        XCTAssertFalse(model.preparedTransfers.contains { $0.kind == .firmware })
+    }
+
+    func testLocalFirmwareConfirmationNamesTheImageAndWarnsWhenTheReaderAlreadyRunsIt() {
+        let image = PocketModel.LocalFirmwareImage(file: URL(fileURLWithPath: "/tmp/update.bin"),
+                                                   version: "0.1.0", byteCount: 6_331_344)
+        let newer = image.confirmation(readerVersion: "1.0.0-dev-main-433b3e7d")
+        XCTAssertTrue(newer.contains("update.bin reports 0.1.0"))
+        XCTAssertTrue(newer.contains("not an official release"))
+        XCTAssertTrue(newer.contains("only after you confirm on the reader"))
+        XCTAssertFalse(newer.contains("already reports"))
+        XCTAssertTrue(image.confirmation(readerVersion: " 0.1.0\n").contains("SD Card Firmware Update"))
+        XCTAssertFalse(image.confirmation(readerVersion: nil).contains("already reports"))
+    }
+
     func testBackgroundDoesNotStartDeferredCleanup() async throws {
         let book = try fixture("background.epub", attempted: true)
         let (model, session) = try setup()

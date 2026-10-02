@@ -216,7 +216,7 @@ final class ReadingSync: ObservableObject {
     /// Called once the offers reached the reader, or the exchange failed.
     func exchangeFinished(readerName: String, sent: Int, error: Error?, now: Date = Date()) {
         if let error {
-            readerExchangeError = error.localizedDescription
+            readerExchangeError = NearbySyncController.failureMessage(for: error)
         } else {
             readerExchangeError = nil
             lastReaderExchange = ReaderExchange(device: readerName, date: now, received: pendingReceived, sent: sent)

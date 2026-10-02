@@ -20,7 +20,7 @@ percentage, device, device_id, timestamp)를 쓴다.
   한 기기가 앞부분을 읽어도 다른 기기의 레코드를 덮어쓰지 않는다.
 - 1 MB·1024키 한도: 최근 갱신 순으로 최대 800개를 유지하고 오래된 키부터 지운다.
 - 다른 기기에서 값이 바뀌면(`didChangeExternallyNotification`) 열린 책이 제안을 다시 확인한다.
-- iCloud 계정이 없거나 꺼져 있으면 조용히 건너뛴다. 사용자는 Library → Library options → Continue Reading에서 끌 수 있다.
+- iCloud 계정이 없거나 꺼져 있으면 조용히 건너뛴다. 사용자는 Settings → Continue Reading에서 끌 수 있다.
 - 엔타이틀먼트 `com.apple.developer.ubiquity-kvstore-identifier`. 계정 소유자가 App ID의 iCloud
   기능을 켜야 서명 빌드에서 동작한다(스토어 제출 전 확인).
 
@@ -89,6 +89,12 @@ iOS 활성화에서는 foreground 상태 복원을 먼저 처리한 뒤 위치 �
 펌웨어 계약 원본은 형제 저장소 `docs/reading-sync-ble-v1.md`다. 같은 목록·오퍼 JSON을 본딩된
 Nearby Sync 서비스로 나른다. 하드웨어 검증 전이다.
 
+- 페어링: Device → Reading sync over Bluetooth → Pair reader, 또는 Connect directly. 리더는
+  Pocket Daily → Sync 메뉴에서 **Direct connection**을 골라야 BLE 광고를 시작한다(Sync 메뉴 자체는
+  광고하지 않는다).
+- 리더는 본딩을 2개까지 저장하고(`CONFIG_BT_NIMBLE_MAX_BONDS 2`) 세 번째 기기가 페어링하면 가장 오래된 것을
+  지운다. 펌웨어 재설치로 NVS가 지워져도 같다. 이때 Apple 기기는 옛 키로 `CBError.peerRemovedPairingInformation`을
+  받으며, 앱은 시스템 Bluetooth 설정에서 `Pocket-…`를 Forget This Device한 뒤 다시 페어링하라고 안내한다.
 - 기억: Connect directly(Nearby Sync)에서 인증된 연결(암호화 상태 읽기 + 이벤트 구독)이 되면 앱은
   주변기기 식별자와 상태의 `ID`, `MODEL`만 UserDefaults `readerLink.remembered.v1`에 저장한다.
   패스키·핫스팟 정보는 저장하지 않는다. 페어링한 리더가 없으면 Bluetooth를 켜지 않는다(권한 창 없음).

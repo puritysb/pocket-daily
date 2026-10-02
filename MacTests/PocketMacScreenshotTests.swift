@@ -89,6 +89,20 @@ final class PocketMacScreenshotTests: XCTestCase {
                              name: "qa-device-no-reader", size: Self.pointSize)
         try await renderView(ContentView(initialSection: .reader).environmentObject(model),
                              name: "qa-device-no-reader-dark", size: Self.pointSize, dark: true)
+        try await renderView(ContentView(initialSection: .files).environmentObject(model),
+                             name: "qa-files-no-reader", size: Self.pointSize)
+        // Saved offline edits meeting a reader that changed in the meantime.
+        let editor = ProfileEditorState()
+        var mine = PocketProfile.defaults
+        mine.home.weather = .top
+        editor.restore(ProfileEditSnapshot(draft: mine, base: .defaults, baseGeneration: 1,
+                                           reading: ReaderPreferences(), readingBase: ReaderPreferences(), savedAt: Date()))
+        var onReader = PocketProfile.defaults
+        onReader.home.weather = .off
+        onReader.sleep.mode = .reader
+        editor.sync(with: ReaderProfileState(deviceID: "1234ABCD", generation: 2, profile: onReader, maxHomeItems: 4))
+        try await renderView(ProfileStudioView(model: model, editor: editor),
+                             name: "qa-merge-notice", size: Self.pointSize)
 
         await LibraryModel.shared.load()
         let book = try XCTUnwrap(LibraryModel.shared.books.first { $0.origin == .welcome })
@@ -106,8 +120,12 @@ final class PocketMacScreenshotTests: XCTestCase {
         demo.enterDemoMode()
         try await renderView(ReaderAppearancePanel(store: ReaderAppearanceStore.shared),
                              name: "qa-reader-appearance", size: NSSize(width: 420, height: 520))
-        try await renderView(SyncSettingsView(sync: .shared, model: demo, library: .shared),
-                             name: "qa-sync-settings", size: NSSize(width: 520, height: 620))
+        try await renderView(AppSettingsWindow().environmentObject(demo),
+                             name: "qa-settings-window", size: NSSize(width: 520, height: 480))
+        try await renderView(AppSettingsSheet(model: demo),
+                             name: "qa-settings", size: NSSize(width: 520, height: 720))
+        try await renderView(ReaderBluetoothPairingCard(sync: .shared).padding(20),
+                             name: "qa-bluetooth-pairing", size: NSSize(width: 360, height: 300))
         try await renderView(ArticleCaptureView(initialURL: "", completed: {}),
                              name: "qa-article-add", size: NSSize(width: 520, height: 620))
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("qa-feeds-" + UUID().uuidString)
@@ -161,11 +179,21 @@ final class PocketMacScreenshotTests: XCTestCase {
         await model.checkFirmwareAtLaunch()
         XCTAssertTrue(model.firmwareUpdateAvailable)
         XCTAssertTrue(model.canUpdateReader)
-        let content = FirmwareUpdateCard(model: model, isUpdating: false, update: {}, cancel: {})
-            .padding(16).frame(width: 360, height: 230).background(PocketPalette.workspace)
+        try await renderCard(FirmwareUpdateCard(model: model, isUpdating: false, update: {}, cancel: {}),
+                             name: "firmware-update-available", height: 230)
+        // Development builds add the local-build action under the official one.
+        XCTAssertTrue(model.canSendLocalFirmware)
+        try await renderCard(FirmwareUpdateCard(model: model, isUpdating: false, update: {}, cancel: {},
+                                                sendLocalBuild: {}),
+                             name: "firmware-local-build", height: 330)
+    }
+
+    @MainActor
+    private func renderCard(_ card: some View, name: String, height: CGFloat) async throws {
+        let content = card.padding(16).frame(width: 360, height: height).background(PocketPalette.workspace)
             .preferredColorScheme(.light)
         let hosting = NSHostingView(rootView: content)
-        let frame = NSRect(x: 0, y: -20_000, width: 360, height: 230)
+        let frame = NSRect(x: 0, y: -20_000, width: 360, height: height)
         let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = hosting
         window.setFrame(frame, display: true)
@@ -177,7 +205,7 @@ final class PocketMacScreenshotTests: XCTestCase {
         let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         let attachment = XCTAttachment(data: try opaquePNG(rep), uniformTypeIdentifier: "public.png")
-        attachment.name = "firmware-update-available"
+        attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
     }

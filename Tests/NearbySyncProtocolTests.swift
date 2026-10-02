@@ -8,6 +8,16 @@ import XCTest
 @testable import Pocket
 
 final class NearbySyncProtocolTests: XCTestCase {
+    func testStaleBondExplainsHowToRecover() {
+        let removed = CBError(.peerRemovedPairingInformation)
+        XCTAssertEqual(NearbySyncController.failureMessage(for: removed), NearbySyncController.staleBondMessage)
+        XCTAssertTrue(NearbySyncController.staleBondMessage.contains("Forget This Device"))
+        XCTAssertTrue(NearbySyncController.staleBondMessage.contains("Direct connection"))
+
+        let other = CBError(.connectionTimeout)
+        XCTAssertEqual(NearbySyncController.failureMessage(for: other), other.localizedDescription)
+    }
+
     @MainActor
     func testFailedBLEDiscoveryReleasesPendingDirectRequestWithoutWiFiChanges() {
         let io = HeldAssociationIO()
@@ -276,6 +286,40 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertEqual(HeldReaderURLProtocol.requests.count, 3)
         XCTAssertEqual(model.readerStatus?.deviceID, "test-reader")
         XCTAssertFalse(model.isWorking)
+    }
+
+    @MainActor
+    func testReaderLeavingToInstallStagedFirmwareIsNoticedWithinSeconds() async throws {
+        let stagedKey = "Pocket.stagedFirmwareVersion.install-reader"
+        UserDefaults.standard.set("9.9.9", forKey: stagedKey)
+        defer { UserDefaults.standard.removeObject(forKey: stagedKey) }
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(client: CrossPointClient(session: session))
+        defer { model.pauseForBackground() }
+        let statusData = Data(#"{"version":"1.6.6","device":"X3","deviceID":"install-reader","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":12000,"uptime":1}"#.utf8)
+        let connecting = Task { await model.verify(host: "reader.local", port: 80) }
+        defer { connecting.cancel() }
+        try await heldRequest(0).succeed(statusData)
+        try await heldRequest(1).succeed(Data(#"{"startupApp":1,"pocketDailySleepCover":1,"sleepTimeoutMinutes":10,"fontSize":1}"#.utf8))
+        await connecting.value
+        XCTAssertEqual(model.firmwareAwaitingInstallation, "9.9.9")
+        XCTAssertNil(model.firmwareLeftForInstallation)
+
+        // Two missed polls three seconds apart end the session, not five at fifteen.
+        try await heldRequest(2, attempts: 600).respond(status: 503)
+        XCTAssertNotNil(model.readerStatus, "One miss can be a weak link")
+        try await heldRequest(3, attempts: 600).respond(status: 503)
+        for _ in 0..<100 where model.readerStatus != nil { try await Task.sleep(for: .milliseconds(10)) }
+
+        XCTAssertNil(model.readerStatus)
+        XCTAssertEqual(model.message, PocketModel.installingFirmwareMessage(version: "9.9.9"))
+        XCTAssertEqual(model.messageTone, .onReader)
+        XCTAssertEqual(model.firmwareLeftForInstallation, "9.9.9")
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 4)
     }
 
     @MainActor
@@ -1037,6 +1081,16 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertTrue(heartbeat.recordFailure())
     }
 
+    func testHeartbeatWatchesAStagedInstallationMoreClosely() {
+        let steady = ConnectionHeartbeat.Pace.steady
+        let awaiting = ConnectionHeartbeat.Pace.awaitingInstallation
+        XCTAssertEqual(steady.failureLimit, ConnectionHeartbeat.failureLimit)
+        XCTAssertLessThan(awaiting.interval, steady.interval)
+        var heartbeat = ConnectionHeartbeat()
+        XCTAssertFalse(heartbeat.recordFailure(limit: awaiting.failureLimit))
+        XCTAssertTrue(heartbeat.recordFailure(limit: awaiting.failureLimit))
+    }
+
     func testPocketAdvertisementFallbackAcceptsServiceOrNameOnly() {
         XCTAssertTrue(NearbySyncController.isPocketAdvertisement(
             name: nil,
@@ -1065,11 +1119,10 @@ final class NearbySyncProtocolTests: XCTestCase {
         XCTAssertNil(status.uploadChunkBytes)
     }
 
-    func testStatusAdvertisesExactScreenPreview() throws {
+    func testStatusFromReadersWithTheRemovedScreenPreviewStillDecodes() throws {
         let data = Data(#"{"version":"test","ip":"192.168.4.1","mode":"AP","rssi":0,"freeHeap":16000,"uptime":4,"device":"X3","screenPreviewAvailable":true,"screenPreviewBytes":52342}"#.utf8)
         let status = try JSONDecoder().decode(CrossPointStatus.self, from: data)
-        XCTAssertEqual(status.screenPreviewAvailable, true)
-        XCTAssertEqual(status.screenPreviewBytes, 52_342)
+        XCTAssertEqual(status.device, "X3")
     }
 
     func testSubnetDiscoveryCoversSlash22AndStartsWithNeighbors() {
@@ -1249,6 +1302,25 @@ final class NearbySyncProtocolTests: XCTestCase {
 
         XCTAssertEqual(metadata.byteCount, image.count)
         XCTAssertEqual(metadata.version, "1.4.1-test")
+    }
+
+    @MainActor
+    func testInspectsALocalFirmwareBuildWithoutPreparingIt() async throws {
+        let fixture = try temporaryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let source = fixture.base.appendingPathComponent("update.bin")
+        let image = makeFirmwareImage()
+        try image.write(to: source)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO())
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.7.0","device":"X3","deviceID":"1234ABCD","ip":"192.0.2.1","mode":"STA","rssi":-40,"freeHeap":20000,"uptime":1}"#.utf8))
+        let before = model.preparedTransfers
+
+        let inspected = await model.inspectLocalFirmware(source)
+
+        XCTAssertEqual(inspected, PocketModel.LocalFirmwareImage(file: source, version: "1.4.1-test", byteCount: image.count))
+        XCTAssertEqual(model.preparedTransfers, before, "Inspection prepares nothing")
+        XCTAssertEqual(try Data(contentsOf: source), image)
     }
 
     func testRejectsFirmwareForAnotherChip() {

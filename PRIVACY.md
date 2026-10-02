@@ -55,8 +55,10 @@ local copy; deleting the app deletes the library.
   system's permission, today's event titles and times are read on-device and
   sent only to the user's reader over the local connection. They are not
   stored by the app.
-- Firmware availability: once per app launch outside demo mode, the app asks
-  GitHub for the latest official release metadata (version and publication date).
+- Firmware availability: outside demo mode, the app asks GitHub for the latest
+  official release metadata (version and publication date) once per app launch
+  and again when a reader connects, at most once every ten minutes after an
+  answer and once a minute after a failed check.
   The firmware file is downloaded and sent to the reader only after the user
   chooses Update and confirms. Requests contain no reader identity or file
   contents; GitHub receives the device's network address.
@@ -99,7 +101,7 @@ sends the selected URL to its publisher, as described above. Direct
 transfers stay on the local Bluetooth/Wi-Fi connection selected by the user.
 Weather requests carry only the chosen city's coordinates to Apple WeatherKit
 and Apple's geocoder, operated by Apple under its own privacy policy. Firmware
-metadata checks go to api.github.com once per launch or on explicit retry.
+metadata checks go to api.github.com at launch, when a reader connects, or on explicit retry.
 User-requested downloads go to github.com and its download servers. These
 requests are governed by GitHub's privacy statement. A downloaded firmware file is deleted once it has been sent or the
 update is cancelled.

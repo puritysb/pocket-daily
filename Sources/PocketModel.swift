@@ -5,22 +5,37 @@ import Foundation
 /// not end the session: allow five consecutive misses with a generous timeout.
 struct ConnectionHeartbeat {
     static let failureLimit = 5
+
+    /// How closely the session is watched. Once a firmware image was sent the
+    /// reader is expected to leave Sync to install it and turns its Wi-Fi off,
+    /// so its absence has to show within seconds rather than after the weak-link
+    /// allowance. A wrong guess heals itself: Same Wi-Fi reconnect picks the
+    /// reader up again while Sync is still open.
+    struct Pace: Equatable {
+        let interval: Duration
+        let timeout: TimeInterval
+        let failureLimit: Int
+
+        static let steady = Pace(interval: .seconds(15), timeout: 6, failureLimit: ConnectionHeartbeat.failureLimit)
+        static let awaitingInstallation = Pace(interval: .seconds(3), timeout: 3, failureLimit: 2)
+    }
+
     private(set) var consecutiveFailures = 0
 
     mutating func recordSuccess() {
         consecutiveFailures = 0
     }
 
-    mutating func recordFailure() -> Bool {
+    mutating func recordFailure(limit: Int = failureLimit) -> Bool {
         consecutiveFailures += 1
-        return consecutiveFailures >= Self.failureLimit
+        return consecutiveFailures >= limit
     }
 }
 
-/// A no-PSRAM X3 keeps only ~6 KB of heap on its private hotspot. Fetching a
-/// 53 KB screen preview plus a crash report there tripped the reader's task
-/// watchdog (crash breadcrumb `nearby:screen-preview`). Below this floor the
-/// app skips both so the link stays available for the transfer itself.
+/// A no-PSRAM X3 keeps only ~6 KB of heap on its private hotspot. Large
+/// diagnostic reads there tripped the reader's task watchdog (crash breadcrumb
+/// `nearby:screen-preview` on older firmware). Below this floor the app skips
+/// the crash report so the link stays available for the transfer itself.
 enum ReaderDiagnosticsPolicy {
     static let minimumFreeHeap = 10 * 1024
 
@@ -192,9 +207,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             mirror.apply(.status(status))
         case .prefsChanged:
             reloadPreferencesFromReader()
-        case .frame, .hello, .bye:
-            // Frames are not fetched: no view shows them, and each fetch costs
-            // the reader a 50+ KB transfer.
+        case .hello, .bye:
             break
         }
     }
@@ -408,6 +421,58 @@ final class PocketModel: ObservableObject, DeviceSession {
                 if ownsReaderWork(owner, attempt: attempt), !isDemoMode, !(error is CancellationError) {
                     finish(status.device, sent, error)
                 }
+            }
+        }
+    }
+
+    /// The reader as every screen shows it (docs/READER_EXPANSION.md, 기기 중심 구조).
+    var device: DeviceSnapshot {
+        DeviceSnapshot.crossPoint(
+            status: readerStatus, isDemo: isDemoMode,
+            isConnecting: readerStatus == nil && (isSearchingForReader || canCancelConnection),
+            isDirect: hasDirectSession,
+            bluetoothPaired: ReaderBluetoothLink.shared.rememberedReader != nil)
+    }
+
+    /// A reader connected before, over Wi-Fi or Bluetooth: worth showing its
+    /// state outside the device pages even while it is away.
+    var hasKnownReader: Bool {
+        UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) != nil
+            || ReaderBluetoothLink.shared.rememberedReader != nil
+    }
+
+    static let autoReconnectKey = "Pocket.reconnectSameWiFi"
+    /// Set by End session; cleared once the reader stops answering, so ending a
+    /// session holds until the reader leaves Sync.
+    private var autoReconnectHeld = false
+    private var autoReconnectProbe: Task<Void, Never>?
+
+    /// Reopens the session with the last reader when it answers at its last
+    /// address on the current Wi-Fi with the same device ID, which it does while
+    /// Sync → Same Wi-Fi is open. Only that address is asked, outside the reader
+    /// lane so the Bluetooth link keeps its pending connection; no network is
+    /// joined or scanned. Direct connection stays explicit.
+    func reconnectRememberedReader() {
+        guard UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true,
+              autoReconnectProbe == nil, !isDemoMode, !isInBackground, readerStatus == nil,
+              readerWorkTask == nil, !isWorking, !hasDirectSession, !isCancellingConnection,
+              let host = discoveryIO.rememberedHost, !host.isEmpty,
+              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return }
+        let attempt = connectionAttempt
+        autoReconnectProbe = Task { [self] in
+            defer { autoReconnectProbe = nil }
+            let status = try? await discoveryIO.status(host: host, port: 80, timeout: 1.5)
+            guard let status, status.deviceID == identity else {
+                autoReconnectHeld = false
+                return
+            }
+            guard !autoReconnectHeld, !Task.isCancelled, attempt == connectionAttempt, readerStatus == nil,
+                  readerWorkTask == nil, !isWorking, !isDemoMode, !isInBackground, !hasDirectSession else { return }
+            connectionAttempt += 1
+            let session = connectionAttempt
+            startReaderWork(attempt: session, kind: .discovery) { [self] _ in
+                guard !Task.isCancelled, session == connectionAttempt else { return }
+                await accept(status: status, host: host, httpPort: 80)
             }
         }
     }
@@ -722,7 +787,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     var readerWorkActive: AnyPublisher<Bool, Never> {
         $readerWorkOwner.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
     }
-    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage, quietReading }
+    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage, inventory, download, quietReading }
     private var readerWorkKind: ReaderWorkKind?
     private var isInBackground = false
     private var expectedDeviceID: String?
@@ -973,8 +1038,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             device: preferredHardware.rawValue,
             crashReportAvailable: false,
             crashReportBytes: 0,
-            screenPreviewAvailable: false,
-            screenPreviewBytes: 0,
+
             uploadChunkBytes: nil,
             uploadStreamPort: nil,
             uploadStreamResume: nil,
@@ -1180,6 +1244,8 @@ final class PocketModel: ObservableObject, DeviceSession {
         preferencesDirty = false
         crashDiagnostic = nil
         readerStatus = status
+        if readerInventory?.deviceID != status.deviceID { readerInventory = nil }
+        readerInventoryWanted = true
         mirror.apply(.sessionStarted(status))
         UserDefaults.standard.set(host, forKey: Self.lastReaderHostKey)
         if let deviceID = status.deviceID {
@@ -1260,7 +1326,10 @@ final class PocketModel: ObservableObject, DeviceSession {
         heartbeatTask = Task { @MainActor [weak self] in
             var heartbeat = ConnectionHeartbeat()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
+                // A sent image waits for its installation, which ends this session.
+                let staged = self?.hasDirectSession == false ? self?.firmwareAwaitingInstallation : nil
+                let pace: ConnectionHeartbeat.Pace = staged == nil ? .steady : .awaitingInstallation
+                try? await Task.sleep(for: pace.interval)
                 guard let self, !Task.isCancelled,
                       !self.isInBackground,
                       attempt == self.connectionAttempt,
@@ -1268,7 +1337,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 if self.isWorking { continue }
 
                 do {
-                    let status = try await self.client.status(host: host, port: port, timeout: 6)
+                    let status = try await self.client.status(host: host, port: port, timeout: pace.timeout)
                     guard !Task.isCancelled, attempt == self.connectionAttempt else { return }
                     heartbeat.recordSuccess()
                     if let id = self.readerStatus?.deviceID, status.deviceID != id {
@@ -1288,13 +1357,20 @@ final class PocketModel: ObservableObject, DeviceSession {
                     }
                 } catch {
                     guard !Task.isCancelled, attempt == self.connectionAttempt else { return }
-                    guard heartbeat.recordFailure() else { continue }
+                    guard heartbeat.recordFailure(limit: pace.failureLimit) else { continue }
                     self.readerStatus = nil
                     self.preferences = nil
                     self.preferencesDirty = false
                     self.stopLiveSync()
                     self.mirror.apply(.connection(.disconnected))
-                    self.post("Pocket connection ended. Check the reader’s Sync screen, then reconnect using the same connection method.", tone: .failure)
+                    if let staged {
+                        self.post(Self.installingFirmwareMessage(version: staged), tone: .onReader)
+                    } else if !self.hasDirectSession, UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true {
+                        // Leaving Sync on the reader ends the session; it comes back on its own.
+                        self.post("The reader left Sync. Pocket Daily reconnects when Sync → Same Wi-Fi is open on it again.", tone: .pending)
+                    } else {
+                        self.post("Pocket connection ended. Check the reader’s Sync screen, then reconnect using the same connection method.", tone: .failure)
+                    }
                     return
                 }
             }
@@ -1315,7 +1391,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
     private func readerStorageOperation(folder: String?, cursor: Int, deletion: (String, Int64)?) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
-              readerStatus?.readerFiles == 1, let identity = readerStatus?.deviceID else { return }
+              (readerStatus?.readerFiles ?? 0) >= 1, let identity = readerStatus?.deviceID else { return }
         let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
         readerFilesError = nil
         if folder != nil { readerFilePage = nil }
@@ -1331,6 +1407,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     }
                     guard ownsReaderWork(owner, attempt: attempt) else { return }
                     readerSpace = nil
+                    readerInventoryWanted = true
                 }
                 if let folder {
                     let data = try await client.readerStorageRequest(endpoint: "files", identity: identity, host: host, port: port,
@@ -1366,6 +1443,113 @@ final class PocketModel: ObservableObject, DeviceSession {
                 readerFilesError = error.localizedDescription
             }
         }
+    }
+
+    /// What the connected reader holds; kept after the session ends as "last seen".
+    @Published private(set) var readerInventory: ReaderInventory?
+    /// Why the last read of the reader's books failed; the Library says so beside the reader shelf.
+    @Published private(set) var readerInventoryError: String?
+    /// Set on a new session and after anything that changes the reader's files.
+    private var readerInventoryWanted = false
+
+    /// Reads the files in the folders the app sends to and the reader's recent
+    /// books, once per session and after each change, whenever the reader lane is
+    /// free. A folder the reader does not have yet (`/Articles`) reads as empty.
+    func refreshReaderInventoryIfWanted() {
+        guard readerInventoryWanted, !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
+              let status = readerStatus, let identity = status.deviceID,
+              (status.readerFiles ?? 0) >= 1 || status.readingProgress == 1 else { return }
+        let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
+        let model = PocketHardware(deviceName: status.device)?.rawValue
+        let started = startReaderWork(attempt: attempt, kind: .inventory) { [self] owner in
+            var files: [ReaderInventory.File] = []
+            do {
+                if (status.readerFiles ?? 0) >= 1 {
+                    for folder in ReaderInventory.folders {
+                        do {
+                            files += try await readerFolder(folder, identity: identity, host: host, port: port)
+                        } catch where folder != "/" && !(error is CancellationError) {
+                            continue
+                        }
+                    }
+                }
+                let reading = status.readingProgress == 1
+                    ? try await client.readingProgress(identity: identity, host: host, port: port).books : []
+                guard ownsReaderWork(owner, attempt: attempt) else { return }
+                readerInventory = ReaderInventory(deviceID: identity, model: model, files: files,
+                                                  reading: reading, readAt: Date())
+                readerInventoryError = nil
+            } catch {
+                guard ownsReaderWork(owner, attempt: attempt), !Task.isCancelled else { return }
+                readerInventoryError = error.localizedDescription
+            }
+        }
+        if started != nil { readerInventoryWanted = false }
+    }
+
+    /// A book being copied from the reader into the Library.
+    struct ReaderDownload: Equatable {
+        let path: String
+        let size: Int64
+        var received: Int64
+    }
+    @Published private(set) var readerDownload: ReaderDownload?
+
+    var canDownloadFromReader: Bool {
+        device.capabilities.contains(.fileDownload) && !isWorking && !hasReaderWork && !isInBackground
+    }
+
+    /// Copies one reader book to a temporary file, piece by piece, in the reader
+    /// lane (firmware docs/reader-files.md, "Reader file download"). Only on an
+    /// explicit request; `document`, when the reader reported one, must match the
+    /// copy. `completion` gets the file to import and then remove with its folder.
+    func downloadFromReader(path: String, size: Int64, document: String?,
+                            completion: @escaping @MainActor (Result<URL, Error>) -> Void) {
+        guard canDownloadFromReader, let identity = readerStatus?.deviceID else { return }
+        let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
+        readerDownload = ReaderDownload(path: path, size: size, received: 0)
+        let started = startReaderWork(attempt: attempt, kind: .download) { [self] owner in
+            let folder = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ReaderDownload-" + UUID().uuidString, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let file = folder.appendingPathComponent((path as NSString).lastPathComponent)
+                try await ReaderFileDownloader().download(size: size, to: file, fetch: { [client] offset in
+                    try await client.readerFilePiece(identity: identity, path: path, size: size, offset: offset,
+                                                     host: host, port: port)
+                }, progress: { [weak self] received in self?.readerDownload?.received = received })
+                guard ownsReaderWork(owner, attempt: attempt) else { throw CancellationError() }
+                try ReaderFileDownloader.verify(file, document: document)
+                readerDownload = nil
+                completion(.success(file))
+            } catch {
+                try? FileManager.default.removeItem(at: folder)
+                readerDownload = nil
+                if !(error is CancellationError), !Task.isCancelled { completion(.failure(error)) }
+            }
+        }
+        if started == nil { readerDownload = nil }
+    }
+
+    func cancelReaderDownload() { if readerWorkKind == .download { readerWorkTask?.cancel() } }
+
+    private func readerFolder(_ folder: String, identity: String, host: String, port: Int) async throws -> [ReaderInventory.File] {
+        var files: [ReaderInventory.File] = []
+        var cursor = 0
+        var pages = 0
+        repeat {
+            let data = try await client.readerStorageRequest(endpoint: "files", identity: identity, host: host, port: port,
+                                                             query: ["path": folder, "cursor": String(cursor)])
+            let page = try JSONDecoder().decode(ReaderFilePage.self, from: data)
+            try page.validate(identity: identity, folder: folder, cursor: cursor)
+            files += page.entries.filter { !$0.directory }.map {
+                ReaderInventory.File(path: folder == "/" ? "/" + $0.name : folder + "/" + $0.name, size: $0.size)
+            }
+            cursor = page.nextCursor
+            pages += 1
+            try Task.checkCancellation()
+        } while cursor != 0 && pages < 64
+        return files
     }
 
     func destinationLabel(for item: PreparedTransfer) -> String {
@@ -1460,9 +1644,23 @@ final class PocketModel: ObservableObject, DeviceSession {
     @Published private(set) var firmwareCheckError: String?
     private var didCheckFirmwareAtLaunch = false
     private var firmwareCheckTask: Task<FirmwareRelease, Error>?
+    private var firmwareCheckedAt: Date?
+    /// A reader that connects gets a current answer: a missing or failed check
+    /// is retried, and a successful one is refreshed once it is this old. The
+    /// floor keeps reconnects within GitHub's unauthenticated allowance.
+    static let firmwareCheckFreshness: TimeInterval = 10 * 60
+    static let firmwareCheckRetryFloor: TimeInterval = 60
 
     var firmwareAwaitingInstallation: String? {
         firmwareKey.flatMap { UserDefaults.standard.string(forKey: $0) }
+    }
+
+    /// The same record once the reader has left to install it: shown for the
+    /// reader this device last connected to until that reader reports back.
+    var firmwareLeftForInstallation: String? {
+        guard readerStatus == nil, !isDemoMode,
+              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return nil }
+        return UserDefaults.standard.string(forKey: Self.stagedFirmwareVersionKey + "." + identity)
     }
 
     var firmwareUpdateAvailable: Bool {
@@ -1478,7 +1676,19 @@ final class PocketModel: ObservableObject, DeviceSession {
         await checkFirmwareRelease()
     }
 
-    func checkFirmwareRelease() async {
+    /// Metadata only, when a reader connects; `checkFirmwareAtLaunch` may have
+    /// run long before, offline, or before a release was published.
+    func refreshFirmwareReleaseForReader(at now: Date = Date()) async {
+        guard readerStatus != nil else { return }
+        let settled = latestFirmwareRelease != nil && firmwareCheckError == nil
+        if let last = firmwareCheckedAt,
+           now.timeIntervalSince(last) < (settled ? Self.firmwareCheckFreshness : Self.firmwareCheckRetryFloor) {
+            return
+        }
+        await checkFirmwareRelease(at: now, keepingKnownRelease: true)
+    }
+
+    func checkFirmwareRelease(at now: Date = Date(), keepingKnownRelease: Bool = false) async {
         guard !isDemoMode, !hasDirectSession, !isCheckingFirmware, readerUpdateState == .idle else { return }
         isCheckingFirmware = true
         firmwareCheckError = nil
@@ -1488,16 +1698,26 @@ final class PocketModel: ObservableObject, DeviceSession {
             return release
         }
         firmwareCheckTask = work
-        defer { isCheckingFirmware = false; firmwareCheckTask = nil }
+        defer { isCheckingFirmware = false; firmwareCheckTask = nil; firmwareCheckedAt = now }
         do {
             let release = try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
             try Task.checkCancellation()
             if work.isCancelled { throw CancellationError() }
             latestFirmwareRelease = release
         } catch {
-            firmwareCheckError = work.isCancelled || Task.isCancelled
-                ? "Update check cancelled. Try again when ready."
-                : "Couldn't check for updates. Try again with an internet connection."
+            let cancelled = work.isCancelled || Task.isCancelled
+            if !cancelled, let answer = error as? FirmwareReleaseError, answer != .unavailable {
+                // GitHub answered: say what it said instead of blaming the
+                // connection, and stop offering an earlier result.
+                latestFirmwareRelease = nil
+                firmwareCheckError = answer.errorDescription
+            } else if keepingKnownRelease, latestFirmwareRelease != nil {
+                // An unanswered refresh leaves the earlier result in place.
+            } else {
+                firmwareCheckError = cancelled
+                    ? "Update check cancelled. Try again when ready."
+                    : "Couldn't check for updates. Try again with an internet connection."
+            }
         }
     }
 
@@ -1531,7 +1751,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 return nil
             }
             readerUpdateState = .downloading(release.version)
-            post("Downloading Pocket Daily firmware \(release.version)\(release.isPrerelease ? " (pre-release)" : "")…")
+            post("Downloading Pocket Daily firmware \(release.version)\(release.isBeta ? " (beta)" : "")…")
             let file = try await releaseSource.download(release, Self.firmwareDownloads)
             if Task.isCancelled {
                 try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
@@ -1561,8 +1781,14 @@ final class PocketModel: ObservableObject, DeviceSession {
             post("The reader connection changed. Choose Update again for the connected reader.", tone: .pending)
             return
         }
+        await prepareAndSendFirmware(download.file, attempt: attempt, readerID: readerID)
+    }
+
+    /// Copies and validates an acknowledged image, then sends it to the reader
+    /// the acknowledgement was given for. `file` itself is left in place.
+    private func prepareAndSendFirmware(_ file: URL, attempt: Int, readerID: String?) async {
         let previous = Set(preparedTransfers.map(\.id))
-        guard let preparation = upload(download.file) else { return }
+        guard let preparation = upload(file) else { return }
         await preparation.value
         guard preparedTransfers.contains(where: { !previous.contains($0.id) && $0.kind == .firmware }) else { return }
         if Task.isCancelled {
@@ -1583,6 +1809,63 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
         if Task.isCancelled { removePreparedFiles(kind: .firmware) }
     }
+
+#if DEBUG
+    /// A firmware image built on this machine that passed the image checks and
+    /// has not been sent. Development builds only; store builds install
+    /// official releases and nothing else.
+    struct LocalFirmwareImage: Equatable {
+        let file: URL
+        let version: String
+        let byteCount: Int
+
+        /// What the acknowledgement says before anything is sent.
+        func confirmation(readerVersion: String?) -> String {
+            let size = ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file)
+            var text = "\(file.lastPathComponent) reports \(version) (\(size)). This is a local build, not an official release; only the image checks have passed. Keep a recovery method available. Installation starts only after you confirm on the reader."
+            if let readerVersion, readerVersion.trimmingCharacters(in: .whitespacesAndNewlines) == version {
+                text += " The reader already reports this version, so it will not ask to install it after Sync closes. Use Settings → System → SD Card Firmware Update on the reader instead."
+            }
+            return text
+        }
+    }
+
+    /// A local image needs no download, so a direct session can send one too.
+    var canSendLocalFirmware: Bool {
+        canPrepareFiles && readerStatus != nil && readerUpdateState == .idle
+            && !preparedTransfers.contains { $0.kind == .firmware }
+    }
+
+    /// Runs the image checks on a file chosen on this device. Nothing is
+    /// prepared or sent; the caller asks for an acknowledgement first.
+    func inspectLocalFirmware(_ file: URL) async -> LocalFirmwareImage? {
+        guard readerStatus != nil else {
+            post("Connect a reader before sending a local firmware build.", tone: .pending)
+            return nil
+        }
+        guard canSendLocalFirmware else {
+            post("Finish or cancel the current reader work before sending a local firmware build.", tone: .pending)
+            return nil
+        }
+        do {
+            let metadata = try await Task.detached(priority: .userInitiated) {
+                try FirmwareImageValidator.validate(fileURL: file)
+            }.value
+            return LocalFirmwareImage(file: file, version: metadata.version ?? "unknown version",
+                                      byteCount: metadata.byteCount)
+        } catch {
+            post(error)
+            return nil
+        }
+    }
+
+    /// Sends an acknowledged local image over the same path as an official
+    /// update. The caller owns cancellation, as with `updateFirmware()`.
+    func updateFirmware(fromLocalImage file: URL) async {
+        guard canSendLocalFirmware else { return }
+        await prepareAndSendFirmware(file, attempt: connectionAttempt, readerID: readerStatus?.deviceID)
+    }
+#endif
 
     /// Retained for callers that already validated and acknowledged an image.
     func stageDownloadedFirmware(_ file: URL) {
@@ -1859,6 +2142,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     func endConnection() {
         guard !isWorking, !hasReaderWork else { return }
+        autoReconnectHeld = true
         startReaderWork(attempt: connectionAttempt, kind: .session) { [self] _ in
             await finishConnection(preserveMessage: false)
         }
@@ -1904,6 +2188,8 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     private func finishReaderWork(owner: UUID, attempt: Int) {
         guard readerWorkOwner == owner else { return }
+        // A finished transfer changes what the reader holds.
+        if readerWorkKind == .transfer { readerInventoryWanted = true }
         let resumeTraffic = readerWorkKind != .local && readerWorkKind != .quietReading
         readerWorkOwner = nil
         readerWorkKind = nil
@@ -1981,6 +2267,17 @@ final class PocketModel: ObservableObject, DeviceSession {
         1. Press Back on the reader to leave Sync.
         2. Choose Install and wait for the reader to restart.
         Then reconnect and the app confirms the new version. You can also install it later from Settings → System → SD Card Firmware Update.
+        """
+    }
+
+    /// The reader left Sync with an image waiting: it is off Wi-Fi while it
+    /// asks, installs and restarts, and it does not return to Sync by itself.
+    static func installingFirmwareMessage(version: String) -> String {
+        """
+        The reader left Sync to install \(version); it is off Wi-Fi until it restarts.
+        1. Choose Install on the reader if it is still asking.
+        2. After it restarts, open Pocket Daily → Sync → Same Wi-Fi again.
+        The app then confirms the version the reader runs.
         """
     }
 

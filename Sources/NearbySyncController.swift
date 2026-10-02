@@ -113,8 +113,8 @@ final class NearbySyncController: NSObject, ObservableObject {
         )
         scanTimeout?.cancel()
         scanTimeout = Task { [weak self] in
-            // A Pocket Daily Sync press performs a clean-heap reader restart
-            // before BLE advertising. Prefer the low-noise service-filtered
+            // The reader advertises only after Sync → Direct connection, which
+            // performs a clean-heap restart first. Prefer the low-noise service-filtered
             // scan, but fall back to the authenticated Pocket name when macOS
             // omits a 128-bit service UUID from its filtered scan cache.
             try? await Task.sleep(for: .seconds(8))
@@ -130,7 +130,7 @@ final class NearbySyncController: NSObject, ObservableObject {
             guard !Task.isCancelled, self.state == .scanning else { return }
             central.stopScan()
             self.record("BLE scan timed out after service and Pocket name searches")
-            self.state = .failed("No Pocket Sync signal. Open Pocket Daily on the reader, press Sync, then try again.")
+            self.state = .failed("No Pocket Sync signal. On the reader, open Pocket Daily → Sync → Direct connection (Nearby Sync on older firmware), then try again.")
         }
     }
 
@@ -170,7 +170,26 @@ final class NearbySyncController: NSObject, ObservableObject {
     private func fail(_ error: Error) {
         record("BLE operation failed: \(error.localizedDescription)")
         disconnect()
-        state = .failed(error.localizedDescription)
+        state = .failed(Self.failureMessage(for: error))
+    }
+
+    /// The reader keeps two bonds and drops the oldest when a third device pairs,
+    /// and a firmware reinstall can erase them; this device then still holds keys
+    /// the reader refuses. Only the system can forget them.
+    nonisolated static let staleBondMessage: String = {
+#if os(macOS)
+        "The reader no longer has this Mac’s pairing: it keeps two devices, or its firmware was reinstalled. In System Settings → Bluetooth, choose ⓘ next to the Pocket reader → Forget This Device, then pair again with Direct connection open on the reader."
+#else
+        "The reader no longer has this device’s pairing: it keeps two devices, or its firmware was reinstalled. In Settings → Bluetooth, tap ⓘ next to the Pocket reader → Forget This Device, then pair again with Direct connection open on the reader."
+#endif
+    }()
+
+    /// What a person can do about a Bluetooth failure; system text otherwise.
+    nonisolated static func failureMessage(for error: Error) -> String {
+        if let error = error as? CBError, error.code == .peerRemovedPairingInformation {
+            return staleBondMessage
+        }
+        return error.localizedDescription
     }
 
     private func record(_ message: String) {

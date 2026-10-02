@@ -1,8 +1,8 @@
 import XCTest
 @testable import Pocket
 
-/// M2: live-studio event decoding and the frame-fetch coalescing policy
-/// (`docs/live-studio-v1.md` in the firmware repository).
+/// Live-studio event decoding (`docs/live-studio-v1.md` in the firmware
+/// repository): status and preference pushes only; frames were removed.
 final class LiveSyncTests: XCTestCase {
     private func statusJSON() -> String {
         """
@@ -31,12 +31,12 @@ final class LiveSyncTests: XCTestCase {
         }
         XCTAssertEqual(status.deviceID, "5B09AF70")
         XCTAssertEqual(status.liveStudio?.mode, "push")
-        XCTAssertEqual(status.liveStudio?.frameStream, true)
+        XCTAssertEqual(status.liveStudio?.wsPort, 81, "Older readers' pack and frame keys are ignored")
     }
 
-    func testDecodeFramePrefsBye() {
-        XCTAssertEqual(LiveStudioEvent.decode(#"{"frame":{"seq":7,"bytes":53918}}"#),
-                       .frame(seq: 7, bytes: 53918))
+    func testDecodePrefsByeAndIgnoreFrames() {
+        XCTAssertNil(LiveStudioEvent.decode(#"{"frame":{"seq":7,"bytes":53918}}"#),
+                     "Frame announcements from older readers are not events any more")
         XCTAssertEqual(LiveStudioEvent.decode(#"{"prefs":{"changed":true}}"#), .prefsChanged)
         XCTAssertEqual(LiveStudioEvent.decode(#"{"bye":{}}"#), .bye)
     }
@@ -49,19 +49,6 @@ final class LiveSyncTests: XCTestCase {
         XCTAssertNil(LiveStudioEvent.decode(#"{"prefs":{"changed":false}}"#))
         // Multi-key objects are not part of the single-key envelope.
         XCTAssertNil(LiveStudioEvent.decode(#"{"hello":{"proto":"live-studio/1"},"bye":{}}"#))
-    }
-
-    func testFrameAnnouncementMatchesFirmwareUInt32AndClientSizeBounds() {
-        XCTAssertEqual(LiveStudioEvent.decode(#"{"frame":{"seq":0,"bytes":64}}"#),
-                       .frame(seq: 0, bytes: 64))
-        XCTAssertEqual(LiveStudioEvent.decode(#"{"frame":{"seq":4294967295,"bytes":131072}}"#),
-                       .frame(seq: Int(UInt32.max), bytes: 128 * 1024))
-        for seq in ["-1", "4294967296", String(Int.max), "true", "false", "1.5", "null", "\"7\""] {
-            XCTAssertNil(LiveStudioEvent.decode("{\"frame\":{\"seq\":\(seq),\"bytes\":53918}}"), seq)
-        }
-        for bytes in ["-1", "0", "63", "131073", "4294967295", "true", "64.5", "null", "\"64\""] {
-            XCTAssertNil(LiveStudioEvent.decode("{\"frame\":{\"seq\":7,\"bytes\":\(bytes)}}"), bytes)
-        }
     }
 
 }

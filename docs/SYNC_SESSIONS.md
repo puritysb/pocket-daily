@@ -17,6 +17,14 @@ whose target is status JSON. The separate File Transfer browser flow is
 unchanged. No network is changed merely by showing these choices, and no
 automatic fallback from shared Wi-Fi to direct connection is permitted.
 
+Once a reader has connected over Same Wi-Fi, the app reconnects on its own
+when that reader answers again at its last address with the same device ID
+(Sync → Same Wi-Fi open on the reader). Only that one address is asked; the
+app never scans, joins or changes a network for this. After End session it
+waits until the reader stops answering once. The setting "Reconnect on the
+same Wi-Fi" turns it off; legacy readers without a device ID are never
+reconnected automatically.
+
 The existing BLE control plane and iOS NEHotspotConfiguration/macOS CoreWLAN
 association are reused. BLE is released before the reader starts its private
 AP. No account, cloud service or router is required for that direct path.
@@ -34,11 +42,11 @@ those SD files. This avoids optional listener/client/frame traffic competing
 with content and firmware transfers. Explicit diagnostic endpoints are not
 removed. File Transfer keeps its browser-compatible behavior for recovery.
 
-Theme list/apply registration is also independent of screen streaming now.
-Previously private AP advertised `uiPacks:true` but omitted both endpoints;
-the new firmware registers them for all profiles. A source-boundary host test
-guards their unconditional registration, and Swift fixtures cover poll-only
-X3/X4 advertisements on both STA and AP. These do not replace HTTP hardware tests.
+UI packs, live frames and the saved screen preview were removed from the
+firmware on 2026-10-01 (PR #8–#10); the app no longer decodes their status
+fields or subscribes to frames. Swift fixtures still cover poll-only X3/X4
+advertisements on both STA and AP, including older readers that send the
+removed keys. These do not replace HTTP hardware tests.
 
 This is a bounded change to the existing server, not a new TCP/IP stack or
 proof that the prior intermittent TCP failures are fixed. HTTP and the port-82
