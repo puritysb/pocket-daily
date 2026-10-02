@@ -1644,6 +1644,12 @@ final class PocketModel: ObservableObject, DeviceSession {
     @Published private(set) var firmwareCheckError: String?
     private var didCheckFirmwareAtLaunch = false
     private var firmwareCheckTask: Task<FirmwareRelease, Error>?
+    private var firmwareCheckedAt: Date?
+    /// A reader that connects gets a current answer: a missing or failed check
+    /// is retried, and a successful one is refreshed once it is this old. The
+    /// floor keeps reconnects within GitHub's unauthenticated allowance.
+    static let firmwareCheckFreshness: TimeInterval = 10 * 60
+    static let firmwareCheckRetryFloor: TimeInterval = 60
 
     var firmwareAwaitingInstallation: String? {
         firmwareKey.flatMap { UserDefaults.standard.string(forKey: $0) }
@@ -1670,7 +1676,19 @@ final class PocketModel: ObservableObject, DeviceSession {
         await checkFirmwareRelease()
     }
 
-    func checkFirmwareRelease() async {
+    /// Metadata only, when a reader connects; `checkFirmwareAtLaunch` may have
+    /// run long before, offline, or before a release was published.
+    func refreshFirmwareReleaseForReader(at now: Date = Date()) async {
+        guard readerStatus != nil else { return }
+        let settled = latestFirmwareRelease != nil && firmwareCheckError == nil
+        if let last = firmwareCheckedAt,
+           now.timeIntervalSince(last) < (settled ? Self.firmwareCheckFreshness : Self.firmwareCheckRetryFloor) {
+            return
+        }
+        await checkFirmwareRelease(at: now, keepingKnownRelease: true)
+    }
+
+    func checkFirmwareRelease(at now: Date = Date(), keepingKnownRelease: Bool = false) async {
         guard !isDemoMode, !hasDirectSession, !isCheckingFirmware, readerUpdateState == .idle else { return }
         isCheckingFirmware = true
         firmwareCheckError = nil
@@ -1680,16 +1698,26 @@ final class PocketModel: ObservableObject, DeviceSession {
             return release
         }
         firmwareCheckTask = work
-        defer { isCheckingFirmware = false; firmwareCheckTask = nil }
+        defer { isCheckingFirmware = false; firmwareCheckTask = nil; firmwareCheckedAt = now }
         do {
             let release = try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
             try Task.checkCancellation()
             if work.isCancelled { throw CancellationError() }
             latestFirmwareRelease = release
         } catch {
-            firmwareCheckError = work.isCancelled || Task.isCancelled
-                ? "Update check cancelled. Try again when ready."
-                : "Couldn't check for updates. Try again with an internet connection."
+            let cancelled = work.isCancelled || Task.isCancelled
+            if !cancelled, let answer = error as? FirmwareReleaseError, answer != .unavailable {
+                // GitHub answered: say what it said instead of blaming the
+                // connection, and stop offering an earlier result.
+                latestFirmwareRelease = nil
+                firmwareCheckError = answer.errorDescription
+            } else if keepingKnownRelease, latestFirmwareRelease != nil {
+                // An unanswered refresh leaves the earlier result in place.
+            } else {
+                firmwareCheckError = cancelled
+                    ? "Update check cancelled. Try again when ready."
+                    : "Couldn't check for updates. Try again with an internet connection."
+            }
         }
     }
 

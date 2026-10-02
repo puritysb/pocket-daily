@@ -9,7 +9,11 @@ Implemented locally 2026-09-27; physical acceptance remains required.
   files, even if firmware was prepared in an earlier session. Articles publish
   under `/Articles`, learning packs under `/pocket-daily/learning`, other books
   in the SD root. No content operation flashes the reader.
-- **Firmware** checks GitHub metadata once per launch and shows the latest version
+- **Firmware** checks GitHub metadata once per launch and again when a reader
+  connects: a failed or missing check is retried (at most once a minute), a
+  successful one refreshed after ten minutes. A refresh that gets no answer
+  keeps the earlier result; "nothing published yet" is shown as such, not as a
+  connection problem. The card shows the latest version
   and publication date. Update is offered against the connected reader; its
   acknowledgement starts download and transfer. Cancel stops and cleans up.
   Local firmware import is not offered in store builds. Interrupted updates show Resume/Cancel,

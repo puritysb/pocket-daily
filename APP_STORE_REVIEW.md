@@ -69,8 +69,10 @@ account is required.
 ## Firmware safety boundary
 
 Firmware runs only on the external reader, never in the app. The Firmware card
-checks official GitHub release metadata once per launch outside demo mode and
-shows the publication date and availability against the connected reader.
+checks official GitHub release metadata outside demo mode, once per launch and
+again when a reader connects (rate-limited), and shows the publication date and
+availability against the connected reader. When nothing has been published it
+says so rather than reporting a connection problem.
 Local firmware file import is not offered. The user chooses Update and confirms
 the compatibility/recovery notice before download and local transfer begin.
 Cancel stops the operation and cleans tracked temporary files when the reader

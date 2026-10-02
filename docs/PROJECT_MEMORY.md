@@ -46,9 +46,19 @@ with a dated note below.
   app kept showing the reader as connected during flashing). The Firmware card
   keeps the sent version for the last reader until it reports back. This part
   is unit-tested only.
-- Known friction in the shared flow, not changed: the release check runs once
-  per launch; a missing release reads as "Couldn't check for updates"; Same
-  Wi-Fi has no `session/end`, so the reader needs Back before its prompt.
+- The release check also runs when a reader connects (retry floor 60 s,
+  refresh after 10 min; PRIVACY.md, the public privacy page and
+  APP_STORE_REVIEW.md say so). `FirmwareReleaseError.noRelease` covers historical
+  `v…` tags, retired betas, an empty list and a stable-channel 404, shown as
+  "No Pocket Daily firmware update has been published yet." Unit-tested only.
+- Open, needs the firmware session: on Same Wi-Fi the reader still needs Back
+  before its install prompt. `session/end` is registered only for the private
+  AP (`PocketEndpoints.cpp`, `POCKET_SYNC && apMode`). Proposal: after a verified
+  `/update.bin` commit, advertise a session end for STA too and let the app call
+  it, so the reader restarts into its prompt and one Confirm remains. No
+  flashing without Confirm; needs a status capability and a new firmware release.
+- Also open: Update reader is unavailable in a direct session because the
+  download needs internet; a pre-downloaded image would lift that.
 
 ## Firmware 0.x series and saved studio edits — 2026-10-03
 

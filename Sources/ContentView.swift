@@ -220,9 +220,11 @@ struct ContentView: View {
             exchangeReadingPositions()
             model.refreshReaderInventoryIfWanted()
         }
-        .onChange(of: model.readerStatus?.deviceID) { _, _ in
+        .onChange(of: model.readerStatus?.deviceID) { _, identity in
             exchangeReadingPositions()
             model.refreshReaderInventoryIfWanted()
+            // The launch check may be stale by the time a reader connects.
+            if identity != nil { Task { await model.refreshFirmwareReleaseForReader() } }
         }
         .task {
             model.refreshGlance()
@@ -1245,7 +1247,7 @@ struct FirmwareUpdateCard: View {
                         .font(.caption).foregroundStyle(.secondary)
                 } else if let error = model.firmwareCheckError {
                     Text(error).font(.caption).foregroundStyle(.secondary)
-                    Button("Try again") { Task { await model.checkFirmwareRelease() } }
+                    Button("Check again") { Task { await model.checkFirmwareRelease() } }
                         .disabled(model.hasDirectSession)
                 } else if model.firmwareUpdateAvailable {
                     Button("Update available", action: update)

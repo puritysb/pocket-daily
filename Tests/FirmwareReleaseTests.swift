@@ -95,6 +95,86 @@ final class FirmwareReleaseTests: XCTestCase {
         XCTAssertNil(model.firmwareCheckError)
     }
 
+    /// GitHub as it stood before the first 0.x release: reachable, but nothing
+    /// it lists is an update. That is not a connection problem.
+    func testHistoricalAndRetiredTagsMeanNoReleaseRatherThanAFailure() {
+        for tag in ["v1.6.6", "nightly"] {
+            XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(tag: tag))) {
+                XCTAssertEqual($0 as? FirmwareReleaseError, .noRelease, tag)
+            }
+        }
+        XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(tag: "pocket-v1.0.0-beta.1", prerelease: true),
+                                                              allowingPrerelease: true)) {
+            XCTAssertEqual($0 as? FirmwareReleaseError, .noRelease)
+        }
+        XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(list([
+            (tag: "v1.7.0-beta.4", prerelease: true, draft: false),
+            (tag: "pocket-v1.0.0-beta.1", prerelease: true, draft: false),
+            (tag: "v1.6.6", prerelease: false, draft: false),
+        ]))) { XCTAssertEqual($0 as? FirmwareReleaseError, .noRelease) }
+        XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(Data("[]".utf8))) {
+            XCTAssertEqual($0 as? FirmwareReleaseError, .noRelease)
+        }
+        // A product release that cannot be used is still reported as such.
+        XCTAssertThrowsError(try FirmwareReleaseSource.parseNewest(list([
+            (tag: "nightly", prerelease: true, draft: false),
+            (tag: "pocket-v0.2.0", prerelease: true, draft: false),
+        ]))) { XCTAssertEqual($0 as? FirmwareReleaseError, .malformed) }
+        XCTAssertEqual(FirmwareReleaseError.noRelease.errorDescription,
+                       "No Pocket Daily firmware update has been published yet.")
+    }
+
+    @MainActor func testNoPublishedReleaseIsNotReportedAsAConnectionProblem() async {
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), releaseSource: .init(
+            latest: { throw FirmwareReleaseError.noRelease }))
+        await model.checkFirmwareRelease()
+        XCTAssertEqual(model.firmwareCheckError, "No Pocket Daily firmware update has been published yet.")
+        XCTAssertNil(model.latestFirmwareRelease)
+    }
+
+    @MainActor func testConnectingAReaderRefreshesAFailedOrStaleCheck() async throws {
+        let calls = Counter()
+        let release = FirmwareRelease(version: "1.8.0", downloadURL: URL(string: "https://example.invalid")!, byteCount: 1)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), releaseSource: .init(latest: {
+            await calls.add("latest")
+            switch await calls.values.count {
+            case 2: return release
+            case 4: throw FirmwareReleaseError.noRelease
+            default: throw FirmwareReleaseError.unavailable
+            }
+        }))
+        let launch = Date(timeIntervalSince1970: 1_800_000_000)
+        await model.checkFirmwareRelease(at: launch)
+        XCTAssertNotNil(model.firmwareCheckError)
+        await model.refreshFirmwareReleaseForReader(at: launch + 300)
+        var count = await calls.values.count
+        XCTAssertEqual(count, 1, "Nothing to refresh without a reader")
+
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"1.7.0","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
+        await model.refreshFirmwareReleaseForReader(at: launch + 30)
+        count = await calls.values.count
+        XCTAssertEqual(count, 1, "A failed check is not repeated within the floor")
+        await model.refreshFirmwareReleaseForReader(at: launch + 61)
+        XCTAssertEqual(model.latestFirmwareRelease, release)
+        XCTAssertNil(model.firmwareCheckError)
+        XCTAssertTrue(model.firmwareUpdateAvailable)
+
+        await model.refreshFirmwareReleaseForReader(at: launch + 61 + 300)
+        count = await calls.values.count
+        XCTAssertEqual(count, 2, "A recent answer is still current")
+        await model.refreshFirmwareReleaseForReader(at: launch + 61 + 601)
+        count = await calls.values.count
+        XCTAssertEqual(count, 3)
+        XCTAssertEqual(model.latestFirmwareRelease, release, "An unanswered refresh keeps the earlier result")
+        XCTAssertNil(model.firmwareCheckError)
+
+        await model.refreshFirmwareReleaseForReader(at: launch + 61 + 601 + 601)
+        XCTAssertNil(model.latestFirmwareRelease, "GitHub's answer replaces the earlier result")
+        XCTAssertEqual(model.firmwareCheckError, FirmwareReleaseError.noRelease.errorDescription)
+        XCTAssertFalse(model.firmwareUpdateAvailable)
+    }
+
     func testRejectsUnsafeOrMalformedReleases() {
         XCTAssertThrowsError(try FirmwareReleaseSource.parse(document(url: "https://example.com/firmware.bin"))) {
             XCTAssertEqual($0 as? FirmwareReleaseError, .untrustedLocation)
