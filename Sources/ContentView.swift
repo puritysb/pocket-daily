@@ -43,6 +43,9 @@ struct ContentView: View {
         case wirelessUpload
         case sdSource
         case sdRoot
+#if DEBUG
+        case localFirmware
+#endif
     }
 
     /// Wide layouts use a sidebar; compact layouts use tabs.
@@ -67,6 +70,10 @@ struct ContentView: View {
     @State private var importAction: FileImportAction = .wirelessUpload
     @State private var sdSource: URL?
     @State private var confirmingFirmwareUpdate = false
+#if DEBUG
+    /// A checked local image waiting for its acknowledgement.
+    @State private var localFirmware: PocketModel.LocalFirmwareImage?
+#endif
     @State private var showingProjectInfo = false
     @State private var showingSettings = false
     /// The page the compact Reader tab returns to.
@@ -144,6 +151,10 @@ struct ContentView: View {
                         model.copyToSD(sdSource, root: url)
                         self.sdSource = nil
                     }
+#if DEBUG
+                case .localFirmware:
+                    inspectLocalFirmware(url)
+#endif
                 }
             }
         ))
@@ -187,6 +198,16 @@ struct ContentView: View {
         } message: {
             Text("Sends the official Pocket Daily update for a compatible X3/X4 reader. Factory firmware is not supported. Keep a recovery method available; custom firmware may affect device support. Installation starts only after you confirm on the reader.")
         }
+#if DEBUG
+        .alert("Send this firmware build?", isPresented: Binding(get: { localFirmware != nil },
+                                                                 set: { if !$0 { localFirmware = nil } }),
+               presenting: localFirmware) { image in
+            Button("Send") { startLocalFirmwareUpdate(image.file) }
+            Button("Cancel", role: .cancel) {}
+        } message: { image in
+            Text(image.confirmation(readerVersion: model.readerStatus?.version))
+        }
+#endif
         .sheet(isPresented: $showingProjectInfo) {
             ProjectInformationSheet()
         }
@@ -530,8 +551,17 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
                 if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
+#if DEBUG
+                FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
+                                   update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate,
+                                   sendLocalBuild: {
+                                       importAction = .localFirmware
+                                       importing = true
+                                   })
+#else
                 FirmwareUpdateCard(model: model, isUpdating: firmwareDownloadTask != nil,
                                    update: { confirmingFirmwareUpdate = true }, cancel: cancelFirmwareUpdate)
+#endif
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             VStack(alignment: .leading, spacing: 20) {
@@ -611,6 +641,20 @@ struct ContentView: View {
         }
     }
 
+#if DEBUG
+    private func inspectLocalFirmware(_ url: URL) {
+        Task { localFirmware = await model.inspectLocalFirmware(url) }
+    }
+
+    private func startLocalFirmwareUpdate(_ file: URL) {
+        guard firmwareDownloadTask == nil else { return }
+        firmwareDownloadTask = Task {
+            defer { firmwareDownloadTask = nil }
+            await model.updateFirmware(fromLocalImage: file)
+        }
+    }
+#endif
+
     private func cancelFirmwareUpdate() {
         if let firmwareDownloadTask { firmwareDownloadTask.cancel() }
         else if model.isTransferring, model.activeTransferKind == .firmware { model.stopAndRemoveTransfer() }
@@ -623,6 +667,13 @@ struct ContentView: View {
             return
         }
         if url.pathExtension.lowercased() == "bin" {
+#if DEBUG
+            // Development builds treat a chosen or dropped image as a local build.
+            if action == .wirelessUpload {
+                inspectLocalFirmware(url)
+                return
+            }
+#endif
             model.post("Use Firmware update to get the latest official release. Local firmware files are not supported.", tone: .pending)
             return
         }
@@ -642,6 +693,10 @@ struct ContentView: View {
             }
         case .sdRoot:
             break
+#if DEBUG
+        case .localFirmware:
+            break
+#endif
         }
     }
 }
@@ -1128,6 +1183,10 @@ struct FirmwareUpdateCard: View {
     let isUpdating: Bool
     let update: () -> Void
     let cancel: () -> Void
+#if DEBUG
+    /// Development builds only: choose a firmware image built on this machine.
+    var sendLocalBuild: (() -> Void)? = nil
+#endif
     @State private var confirmingLocalRemoval = false
 
     private var pending: Bool { model.preparedTransfers.contains { $0.kind == .firmware } }
@@ -1173,6 +1232,10 @@ struct FirmwareUpdateCard: View {
                 } else if let version = model.firmwareAwaitingInstallation {
                     Text("\(version) sent · confirm installation on the reader")
                         .font(.caption).foregroundStyle(.secondary)
+                } else if let version = model.firmwareLeftForInstallation {
+                    Text("\(version) sent · the reader is installing it or waiting for Install. Open Sync → Same Wi-Fi on it afterwards to confirm.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if model.isCheckingFirmware {
                     ProgressView("Checking for updates…").font(.caption)
                     Button("Cancel check") { model.cancelFirmwareCheck() }
@@ -1201,6 +1264,17 @@ struct FirmwareUpdateCard: View {
                             .disabled(model.hasDirectSession)
                     }
                 }
+#if DEBUG
+                if let sendLocalBuild, model.readerStatus != nil, !isUpdating, !sending, !pending {
+                    Divider()
+                    Button("Send a local build…", action: sendLocalBuild)
+                        .disabled(!model.canSendLocalFirmware)
+                        .accessibilityIdentifier("send-local-firmware")
+                    Text("Development builds only. Checks a firmware image from this device and sends it like an update; the reader still asks before installing.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+#endif
             }
         }
         .accessibilityIdentifier("firmware-update-card")

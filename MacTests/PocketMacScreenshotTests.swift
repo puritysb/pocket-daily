@@ -179,11 +179,21 @@ final class PocketMacScreenshotTests: XCTestCase {
         await model.checkFirmwareAtLaunch()
         XCTAssertTrue(model.firmwareUpdateAvailable)
         XCTAssertTrue(model.canUpdateReader)
-        let content = FirmwareUpdateCard(model: model, isUpdating: false, update: {}, cancel: {})
-            .padding(16).frame(width: 360, height: 230).background(PocketPalette.workspace)
+        try await renderCard(FirmwareUpdateCard(model: model, isUpdating: false, update: {}, cancel: {}),
+                             name: "firmware-update-available", height: 230)
+        // Development builds add the local-build action under the official one.
+        XCTAssertTrue(model.canSendLocalFirmware)
+        try await renderCard(FirmwareUpdateCard(model: model, isUpdating: false, update: {}, cancel: {},
+                                                sendLocalBuild: {}),
+                             name: "firmware-local-build", height: 330)
+    }
+
+    @MainActor
+    private func renderCard(_ card: some View, name: String, height: CGFloat) async throws {
+        let content = card.padding(16).frame(width: 360, height: height).background(PocketPalette.workspace)
             .preferredColorScheme(.light)
         let hosting = NSHostingView(rootView: content)
-        let frame = NSRect(x: 0, y: -20_000, width: 360, height: 230)
+        let frame = NSRect(x: 0, y: -20_000, width: 360, height: height)
         let window = NSWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = hosting
         window.setFrame(frame, display: true)
@@ -195,7 +205,7 @@ final class PocketMacScreenshotTests: XCTestCase {
         let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         let attachment = XCTAttachment(data: try opaquePNG(rep), uniformTypeIdentifier: "public.png")
-        attachment.name = "firmware-update-available"
+        attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
     }

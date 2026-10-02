@@ -5,15 +5,30 @@ import Foundation
 /// not end the session: allow five consecutive misses with a generous timeout.
 struct ConnectionHeartbeat {
     static let failureLimit = 5
+
+    /// How closely the session is watched. Once a firmware image was sent the
+    /// reader is expected to leave Sync to install it and turns its Wi-Fi off,
+    /// so its absence has to show within seconds rather than after the weak-link
+    /// allowance. A wrong guess heals itself: Same Wi-Fi reconnect picks the
+    /// reader up again while Sync is still open.
+    struct Pace: Equatable {
+        let interval: Duration
+        let timeout: TimeInterval
+        let failureLimit: Int
+
+        static let steady = Pace(interval: .seconds(15), timeout: 6, failureLimit: ConnectionHeartbeat.failureLimit)
+        static let awaitingInstallation = Pace(interval: .seconds(3), timeout: 3, failureLimit: 2)
+    }
+
     private(set) var consecutiveFailures = 0
 
     mutating func recordSuccess() {
         consecutiveFailures = 0
     }
 
-    mutating func recordFailure() -> Bool {
+    mutating func recordFailure(limit: Int = failureLimit) -> Bool {
         consecutiveFailures += 1
-        return consecutiveFailures >= Self.failureLimit
+        return consecutiveFailures >= limit
     }
 }
 
@@ -1311,7 +1326,10 @@ final class PocketModel: ObservableObject, DeviceSession {
         heartbeatTask = Task { @MainActor [weak self] in
             var heartbeat = ConnectionHeartbeat()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
+                // A sent image waits for its installation, which ends this session.
+                let staged = self?.hasDirectSession == false ? self?.firmwareAwaitingInstallation : nil
+                let pace: ConnectionHeartbeat.Pace = staged == nil ? .steady : .awaitingInstallation
+                try? await Task.sleep(for: pace.interval)
                 guard let self, !Task.isCancelled,
                       !self.isInBackground,
                       attempt == self.connectionAttempt,
@@ -1319,7 +1337,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 if self.isWorking { continue }
 
                 do {
-                    let status = try await self.client.status(host: host, port: port, timeout: 6)
+                    let status = try await self.client.status(host: host, port: port, timeout: pace.timeout)
                     guard !Task.isCancelled, attempt == self.connectionAttempt else { return }
                     heartbeat.recordSuccess()
                     if let id = self.readerStatus?.deviceID, status.deviceID != id {
@@ -1339,13 +1357,15 @@ final class PocketModel: ObservableObject, DeviceSession {
                     }
                 } catch {
                     guard !Task.isCancelled, attempt == self.connectionAttempt else { return }
-                    guard heartbeat.recordFailure() else { continue }
+                    guard heartbeat.recordFailure(limit: pace.failureLimit) else { continue }
                     self.readerStatus = nil
                     self.preferences = nil
                     self.preferencesDirty = false
                     self.stopLiveSync()
                     self.mirror.apply(.connection(.disconnected))
-                    if !self.hasDirectSession, UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true {
+                    if let staged {
+                        self.post(Self.installingFirmwareMessage(version: staged), tone: .onReader)
+                    } else if !self.hasDirectSession, UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true {
                         // Leaving Sync on the reader ends the session; it comes back on its own.
                         self.post("The reader left Sync. Pocket Daily reconnects when Sync → Same Wi-Fi is open on it again.", tone: .pending)
                     } else {
@@ -1629,6 +1649,14 @@ final class PocketModel: ObservableObject, DeviceSession {
         firmwareKey.flatMap { UserDefaults.standard.string(forKey: $0) }
     }
 
+    /// The same record once the reader has left to install it: shown for the
+    /// reader this device last connected to until that reader reports back.
+    var firmwareLeftForInstallation: String? {
+        guard readerStatus == nil, !isDemoMode,
+              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return nil }
+        return UserDefaults.standard.string(forKey: Self.stagedFirmwareVersionKey + "." + identity)
+    }
+
     var firmwareUpdateAvailable: Bool {
         guard let release = latestFirmwareRelease, let running = readerStatus?.version else { return false }
         return FirmwareReleaseSource.shouldOffer(release.version, to: running, channel: releaseSource.channel,
@@ -1725,8 +1753,14 @@ final class PocketModel: ObservableObject, DeviceSession {
             post("The reader connection changed. Choose Update again for the connected reader.", tone: .pending)
             return
         }
+        await prepareAndSendFirmware(download.file, attempt: attempt, readerID: readerID)
+    }
+
+    /// Copies and validates an acknowledged image, then sends it to the reader
+    /// the acknowledgement was given for. `file` itself is left in place.
+    private func prepareAndSendFirmware(_ file: URL, attempt: Int, readerID: String?) async {
         let previous = Set(preparedTransfers.map(\.id))
-        guard let preparation = upload(download.file) else { return }
+        guard let preparation = upload(file) else { return }
         await preparation.value
         guard preparedTransfers.contains(where: { !previous.contains($0.id) && $0.kind == .firmware }) else { return }
         if Task.isCancelled {
@@ -1747,6 +1781,63 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
         if Task.isCancelled { removePreparedFiles(kind: .firmware) }
     }
+
+#if DEBUG
+    /// A firmware image built on this machine that passed the image checks and
+    /// has not been sent. Development builds only; store builds install
+    /// official releases and nothing else.
+    struct LocalFirmwareImage: Equatable {
+        let file: URL
+        let version: String
+        let byteCount: Int
+
+        /// What the acknowledgement says before anything is sent.
+        func confirmation(readerVersion: String?) -> String {
+            let size = ByteCountFormatter.string(fromByteCount: Int64(byteCount), countStyle: .file)
+            var text = "\(file.lastPathComponent) reports \(version) (\(size)). This is a local build, not an official release; only the image checks have passed. Keep a recovery method available. Installation starts only after you confirm on the reader."
+            if let readerVersion, readerVersion.trimmingCharacters(in: .whitespacesAndNewlines) == version {
+                text += " The reader already reports this version, so it will not ask to install it after Sync closes. Use Settings → System → SD Card Firmware Update on the reader instead."
+            }
+            return text
+        }
+    }
+
+    /// A local image needs no download, so a direct session can send one too.
+    var canSendLocalFirmware: Bool {
+        canPrepareFiles && readerStatus != nil && readerUpdateState == .idle
+            && !preparedTransfers.contains { $0.kind == .firmware }
+    }
+
+    /// Runs the image checks on a file chosen on this device. Nothing is
+    /// prepared or sent; the caller asks for an acknowledgement first.
+    func inspectLocalFirmware(_ file: URL) async -> LocalFirmwareImage? {
+        guard readerStatus != nil else {
+            post("Connect a reader before sending a local firmware build.", tone: .pending)
+            return nil
+        }
+        guard canSendLocalFirmware else {
+            post("Finish or cancel the current reader work before sending a local firmware build.", tone: .pending)
+            return nil
+        }
+        do {
+            let metadata = try await Task.detached(priority: .userInitiated) {
+                try FirmwareImageValidator.validate(fileURL: file)
+            }.value
+            return LocalFirmwareImage(file: file, version: metadata.version ?? "unknown version",
+                                      byteCount: metadata.byteCount)
+        } catch {
+            post(error)
+            return nil
+        }
+    }
+
+    /// Sends an acknowledged local image over the same path as an official
+    /// update. The caller owns cancellation, as with `updateFirmware()`.
+    func updateFirmware(fromLocalImage file: URL) async {
+        guard canSendLocalFirmware else { return }
+        await prepareAndSendFirmware(file, attempt: connectionAttempt, readerID: readerStatus?.deviceID)
+    }
+#endif
 
     /// Retained for callers that already validated and acknowledged an image.
     func stageDownloadedFirmware(_ file: URL) {
@@ -2148,6 +2239,17 @@ final class PocketModel: ObservableObject, DeviceSession {
         1. Press Back on the reader to leave Sync.
         2. Choose Install and wait for the reader to restart.
         Then reconnect and the app confirms the new version. You can also install it later from Settings → System → SD Card Firmware Update.
+        """
+    }
+
+    /// The reader left Sync with an image waiting: it is off Wi-Fi while it
+    /// asks, installs and restarts, and it does not return to Sync by itself.
+    static func installingFirmwareMessage(version: String) -> String {
+        """
+        The reader left Sync to install \(version); it is off Wi-Fi until it restarts.
+        1. Choose Install on the reader if it is still asking.
+        2. After it restarts, open Pocket Daily → Sync → Same Wi-Fi again.
+        The app then confirms the version the reader runs.
         """
     }
 

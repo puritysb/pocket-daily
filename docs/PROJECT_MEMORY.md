@@ -26,6 +26,30 @@ with a dated note below.
   All 19 store captures regenerated (Mac refreshed after final inset change) and
   package validation passed. No firmware was installed; physical panel QA pending.
 
+## Installing unreleased firmware from the app — 2026-10-03
+
+- User decision: development builds (`#if DEBUG`) can send a local firmware
+  image; store builds keep official releases only (docs/TRANSFERS.md). Reason:
+  as of 2026-10-03 no release the app accepts exists (`/releases/latest` is
+  `v1.6.6`, `pocket-v1.0.0-beta.1` is retired), so Update reader offers nothing
+  until `pocket-v0.1.0` is tagged, and the tag waits for an X3 pass.
+- Use: signed Debug Mac build (see "Resume on another machine"), reader in Sync →
+  Same Wi-Fi, Reader → Connection → Firmware → Send a local build…, choose the
+  sibling `firmware/update.bin`, then Back and Confirm on the reader.
+- Hardware (user, 2026-10-03): the signed Debug Mac build sent the local
+  gh_release 0.1.0 image (built from `67828475`, SHA-256 `8fa5f4a9…`, not the
+  CI image) to X3 `5B09AF70` over Same Wi-Fi; the reader installed it after
+  its own Confirm and the app confirmed the version on reconnect.
+  `/api/status` afterwards: `0.1.0`, `firmwareLineage: 2`, no crash report.
+- While a sent image waits, the heartbeat polls every 3 s and two misses end
+  the session with "The reader left Sync to install …" (it was 15 s × 5, so the
+  app kept showing the reader as connected during flashing). The Firmware card
+  keeps the sent version for the last reader until it reports back. This part
+  is unit-tested only.
+- Known friction in the shared flow, not changed: the release check runs once
+  per launch; a missing release reads as "Couldn't check for updates"; Same
+  Wi-Fi has no `session/end`, so the reader needs Back before its prompt.
+
 ## Firmware 0.x series and saved studio edits — 2026-10-03
 
 - User decision: development firmware is `pocket-v0.1.0` (no suffix); every
