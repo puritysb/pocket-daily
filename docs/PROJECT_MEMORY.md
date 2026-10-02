@@ -33,8 +33,11 @@ with a dated note below.
   so the reader's own updater (`/releases/latest`) finds it; 1.0.0 is the first
   stable release. Before this, `/releases/latest` returned the historical
   `v1.6.6`, so the reader and the app's stable channel found nothing.
-- Firmware PR #19 (`chore/release-0.1.0`): embedded 0.1.0, `firmwareLineage: 2`.
-  Not tagged until the firmware session's user approves after a device pass.
+- Firmware PR #19 merged 2026-10-02 (`a96170e1`): embedded 0.1.0,
+  `firmwareLineage: 2`. As of 2026-10-03 no `pocket-v0.1.0` tag exists and
+  `/releases/latest` is still `v1.6.6`; the tag follows a short X3 pass of the
+  CI-built image (firmware session). The reader on lineage 1 must take 0.1.0 once
+  through the app; its own updater cannot see a lower number.
 - App: lineage-1 readers on `1.0.0-*` builds are offered 0.x once
   (`FirmwareGuidance.isBeforeVersionReset`); `pocket-v1.0.0-beta.*` is retired;
   below 1.0 shows "(beta)"; minimumRecommended 0.1.0.
@@ -64,8 +67,7 @@ with a dated note below.
 - Same Wi-Fi reconnect: `PocketModel.reconnectRememberedReader()` every 8 s from
   ContentView (skipped under XCTest), probe outside the reader lane, same
   device ID only, held after End session until the reader stops answering.
-  Setting key `Pocket.reconnectSameWiFi`. Phases 2–3 (library ↔ device content)
-  are not started.
+  Setting key `Pocket.reconnectSameWiFi`.
 - Phase 2 (app only) is implemented: `ReaderInventory`/`ReaderShelf`
   (`Sources/Library/ReaderShelf.swift`), "On reader" badges, "Only on your
   reader", direct "Send to reader" while connected. Phase 3 app side
