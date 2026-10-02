@@ -41,6 +41,9 @@ with a dated note below.
 - App: lineage-1 readers on `1.0.0-*` builds are offered 0.x once
   (`FirmwareGuidance.isBeforeVersionReset`); `pocket-v1.0.0-beta.*` is retired;
   below 1.0 shows "(beta)"; minimumRecommended 0.1.0.
+- User decision 2026-10-03: compatibility with older firmware (pre-0.x builds,
+  "Nearby Sync"/"Join a Network" names, removed status keys) need not be kept.
+  Legacy branches and "on older firmware" copy may be removed; not yet done.
 - Studio edits persist (`ProfileEditStore`) and merge per field
   (`ProfileMerge`); see docs/CONTENT_EDITOR.md.
 
