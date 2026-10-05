@@ -431,7 +431,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             status: readerStatus, isDemo: isDemoMode,
             isConnecting: readerStatus == nil && (isSearchingForReader || canCancelConnection),
             isDirect: hasDirectSession,
-            bluetoothPaired: ReaderBluetoothLink.shared.rememberedReader != nil)
+            bluetoothPaired: ReaderBluetoothLink.shared.rememberedReader != nil,
+            bluetoothSupported: ReaderBluetoothLink.shared.rememberedReader?.supportsReadingSync == true)
     }
 
     /// A reader connected before, over Wi-Fi or Bluetooth: worth showing its
@@ -1767,6 +1768,30 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
+    /// Prepare an official image while internet is available; direct Wi-Fi can send it later.
+    func prepareOfficialFirmware() async {
+        guard canPrepareFiles, !hasDirectSession, readerUpdateState == .idle,
+              !preparedTransfers.contains(where: { $0.kind == .firmware }) else { return }
+        readerUpdateState = .checking
+        defer { readerUpdateState = .idle }
+        do {
+            let release: FirmwareRelease
+            if let known = latestFirmwareRelease { release = known }
+            else { release = try await releaseSource.latest() }
+            latestFirmwareRelease = release
+            readerUpdateState = .downloading(release.version)
+            let file = try await releaseSource.download(release, Self.firmwareDownloads)
+            defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+            try Task.checkCancellation()
+            guard let preparation = upload(file) else { return }
+            await withTaskCancellationHandler { await preparation.value } onCancel: { preparation.cancel() }
+            try Task.checkCancellation()
+            if preparedTransfers.contains(where: { $0.kind == .firmware }) {
+                post("Update downloaded and prepared. Connect the reader using Same Wi-Fi or Direct connection, then choose Send update. Installation still requires confirmation on the reader.", tone: .pending)
+            }
+        } catch { post(error) }
+    }
+
     static var firmwareDownloads: URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("PocketFirmware", isDirectory: true)
     }
@@ -1940,9 +1965,6 @@ final class PocketModel: ObservableObject, DeviceSession {
                 }
                 while let index = preparedTransfers.firstIndex(where: { $0.kind == kind }) {
                     var item = preparedTransfers[index]
-                    guard item.publicationPending != true else {
-                        throw CrossPointClient.ClientError.publicationUnconfirmed
-                    }
                     try Task.checkCancellation()
                     if let bound = item.readerID, bound != status.deviceID {
                         throw CrossPointClient.ClientError.unexpectedMessage("This pending file belongs to another reader. Remove it and prepare it again to change readers.")
@@ -1976,6 +1998,8 @@ final class PocketModel: ObservableObject, DeviceSession {
                         expectedDeviceID: status.deviceID,
                         transferID: item.remoteStagingID ?? item.id,
                         transferControl: status.transferControl == 1,
+                        publicationReceipt: status.publicationReceipt == 1,
+                        recoverPublicationOnly: item.publicationPending == true,
                         transferKind: kind,
                         note: { [weak self] text in Task { @MainActor in
                             guard let self, self.ownsReaderWork(owner, attempt: attempt) else { return }
@@ -1998,14 +2022,17 @@ final class PocketModel: ObservableObject, DeviceSession {
                     mirror.apply(.transferProgress(1))
                     if isFirmware {
                         if let key, let version = item.firmwareVersion { UserDefaults.standard.set(version, forKey: key) }
-                        post(Self.stagedFirmwareMessage(version: item.firmwareVersion ?? "unknown version"), tone: .onReader)
+                        post(Self.stagedFirmwareMessage(version: item.firmwareVersion ?? "unknown version",
+                                                       endsSession: status.sessionEnd == true), tone: .onReader)
                     } else {
                         post("Content saved on the reader’s SD card: \(path). Open it from the reader’s library.", tone: .success)
                     }
                     try FileManager.default.removeItem(at: url.deletingLastPathComponent())
                     preparedTransfers.removeAll { $0.id == item.id }
                 }
-                if hasDirectSession { await finishConnection(preserveMessage: true) }
+                if hasDirectSession || (kind == .firmware && status.sessionEnd == true) {
+                    await finishConnection(preserveMessage: true)
+                }
             } catch {
                 guard attempt == connectionAttempt else { return }
                 if Task.isCancelled, preparedTransfers.contains(where: { $0.kind == kind }) { post("Transfer paused. The prepared copy is kept. Resume this category, or remove it to clean up the reader’s temporary file. If saving had already started, check the reader for the completed file.", tone: .pending) }
@@ -2227,13 +2254,14 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     private func finishConnection(preserveMessage: Bool) async {
+        autoReconnectHeld = true
         directConnectionRequested = false
         connectionAttempt += 1
         heartbeatTask?.cancel()
         discoveryIO.stop()
         let legacyDirectSession = nearbyLease != nil && readerStatus?.sessionEnd != true
         var readerEnded = true
-        if nearbyLease != nil, readerStatus?.sessionEnd == true {
+        if readerStatus?.sessionEnd == true {
             do { try await client.endDirectSession(host: activeHost, port: activeHTTPPort) }
             catch { readerEnded = false }
         }
@@ -2253,8 +2281,11 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     /// Sent is not installed: the reader installs only after its own confirmation.
-    static func stagedFirmwareMessage(version: String) -> String {
-        """
+    static func stagedFirmwareMessage(version: String, endsSession: Bool = false) -> String {
+        if endsSession {
+            return "Firmware \(version) is saved on the reader. Sync is closing; confirm installation on the reader, then reopen Sync to verify the installed version."
+        }
+        return """
         Firmware \(version) is on the reader, not installed yet.
         1. Press Back on the reader to leave Sync.
         2. Choose Install and wait for the reader to restart.

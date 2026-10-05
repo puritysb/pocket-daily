@@ -15,11 +15,12 @@ struct PositionRecord: Codable, Equatable, Sendable {
     var deviceID: String
     /// Unix seconds when known; readers without a trusted clock leave it nil.
     var timestamp: Int?
+    var readerSeq: UInt32? = nil
 
     enum CodingKeys: String, CodingKey {
         case document, progress, percentage, device
         case deviceID = "device_id"
-        case timestamp
+        case timestamp, readerSeq
     }
 }
 

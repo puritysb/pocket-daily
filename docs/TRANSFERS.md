@@ -15,8 +15,11 @@ Implemented locally 2026-09-27; physical acceptance remains required.
   keeps the earlier result; "nothing published yet" is shown as such, not as a
   connection problem. The card shows the latest version
   and publication date. Update is offered against the connected reader; its
-  acknowledgement starts download and transfer. Cancel stops and cleans up.
-  Local firmware import is not offered in store builds. Interrupted updates show Resume/Cancel,
+  acknowledgement starts download and transfer. **Download update for later**
+  downloads and validates an official image while internet is available, without
+  connecting or sending. The prepared image can later be sent explicitly over
+  Same Wi-Fi or Direct connection. Cancel stops and cleans up.
+  Local firmware import is not offered in store builds. Prepared/interrupted updates show Send update/Cancel,
   with a local-only recovery action only after cleanup fails. The image
   is validated before preparation. Transfer publishes `/update.bin` on SD; it
   does not install it. The reader still requires its own confirmation before
@@ -30,7 +33,9 @@ Implemented locally 2026-09-27; physical acceptance remains required.
   download, so it is not limited to Same Wi-Fi. The reader skips its prompt when
   the staged version equals the running one; the acknowledgement says so.
   Release builds compile none of this and still refuse a local `.bin`.
-- After an image is sent over Same Wi-Fi the reader is expected to leave Sync:
+- After an image is published the app calls `session/end` when advertised, on
+  both Same Wi-Fi and Direct connection. Older readers retain the explicit Back
+  instruction. The reader is expected to leave Sync:
   it restarts with Wi-Fi off to ask, install and restart again, and does not
   return to Sync by itself. While the sent version is recorded, the status poll
   runs every 3 s and two misses end the session with an on-reader notice instead
@@ -155,12 +160,45 @@ Each prepared item can now carry optional `publicationPending:true`. Old queues
 without the field remain readable. The app writes this marker atomically before
 sending commit, off the main thread. Successful verified publication removes the
 queue item. A lost/malformed reply, cancellation, app exit, or local cleanup failure
-can leave the marker. Resume refuses to upload that item again. Check the reader,
-then explicitly remove the prepared copy before preparing a replacement. Removing
-prepared copies still never removes a published target. This is intentionally
-conservative even when commit was rejected or cancellation preceded the request.
-It is not a receipt or proof that the reader published the file.
+can leave the marker. Explicit resume never uploads that item again. On readers
+advertising `publicationReceipt:1`, resume verifies the same device ID and queries
+`POST /api/pocket/v1/publication` with the original staging UUID, target, size and
+CRC. A matching verified receipt completes the local queue item. A lost commit
+response also gets one read-only lookup during the original send. No commit is
+reposted, and no payload is resent to resolve uncertainty.
 
-A future firmware receipt/idempotent-commit contract can resolve these records
-without manual inspection. Until that exists, the app must preserve uncertainty;
-it cannot promise that the previous target survived every client-side error.
+Only the latest publication is retained by the firmware on SD. Absent or damaged
+receipts, a changed device ID, unsupported firmware, and a crash between target
+publication and receipt persistence leave the result unknown. Check the reader,
+then explicitly remove the prepared copy before preparing a replacement. Local
+removal never removes a published target. A receipt proves the earlier publication,
+not the current contents of a target subsequently replaced by another operation,
+and never proves firmware installation. The firmware contract and persistence
+format are in sibling `docs/nearby-sync-v1.md`.
+
+## Reader work ownership — 2026-10-05
+
+`ReaderWorkLane` owns one token, kind and task for foreground connection, local
+preparation, transfers, cleanup and quiet HTTP exchange. Admission synchronously
+reserves ownership, cancels a preempted task, then drains it before replacement
+work starts. Only the current token can release the lane. Automatic BLE observes
+that ownership and stands down while HTTP/local work drains; the manual Nearby
+Sync controller keeps its existing radio handoff lifecycle. This consolidates
+app task ownership, not operating-system BLE or Wi-Fi scheduling guarantees.
+
+## Connectivity revision verification — 2026-10-05
+
+The final isolated iOS run passed 487/487 unit tests, including lost-publication
+recovery, identity/checksum rejection, LAN session end, offline official-image
+preparation, cancellation ownership, causal rereading and failed-offer retry.
+iOS/macOS builds, 430/430 Mac firmware XPointer checks and App Store package
+validation passed. The screenshot workflow regenerated 19 images in the ignored
+verification snapshot; Mac firmware-card rendering and iPhone/iPad connection
+screens were visually checked. Earlier runs encountered shared-simulator
+interference and one stale expectation from concurrent Studio work; the final
+unit run is clean. Snapshot logs: `.build/connectivity-verification/pocket-daily/.build/`.
+
+Sibling firmware: 865/865 host tests, strict CI cppcheck 2.11, default build with
+zero compiler warnings/errors. These are local software results. The X3/X4 steps
+in sibling `docs/release-checklist.md` remain pending, including actual radio
+handoff, power loss, heap and installation confirmation.

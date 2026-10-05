@@ -4,6 +4,40 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Companion connectivity revision — 2026-10-05 (local, not released)
+
+- ReaderWorkLane consolidates admission, cancellation draining and task ownership;
+  stale completions cannot release a replacement. Automatic BLE yields to this
+  lane; manual pairing retains its existing radio handoff controller.
+- Pairing, READ1 support and completed BLE exchange are separate. The app persists
+  support and last completion, shows waiting/errors and uses matching-reader HTTP
+  readSync diagnostics for firmware memory/battery/bond gates. No gate was lowered.
+- `publicationReceipt:1` resolves pending publication through same-reader identity
+  probe and receipt query, without sending bytes or commit again. Only the latest
+  firmware SD receipt is retained; missing/corrupt receipts remain unknown.
+- Official firmware can be downloaded/validated before Direct connection, then
+  explicitly sent after acknowledgement. Both capable LAN/AP sessions end after
+  firmware publication so the reader can ask for installation. No automatic flash.
+- `offerVersion:2` / readerSeq is shared across HTTP and BLE. Bounded persisted
+  observations permit causal rereading, retry failed unchanged proposals, reject
+  stale reader observations and suppress already delivered local positions.
+  Canceled/forgotten Bluetooth exchanges do not record completion.
+- Contract sources: `docs/TRANSFERS.md`, `docs/READING_PROGRESS.md`, and sibling
+  firmware nearby-sync/reading-progress documents. The firmware release checklist
+  has separate pending X3/X4 gates. Host/simulator builds are not hardware proof.
+- Final local verification: 487/487 iOS unit tests, iOS/macOS builds, 430/430
+  Mac firmware XPointer cross-checks and App Store source-package validation
+  pass. The screenshot script regenerated 19 iPhone/iPad/Mac images in an
+  isolated source snapshot; firmware-card and connection captures were inspected.
+  Logs/assets are under `.build/connectivity-verification/`; original-checkout
+  Mac card/XPointer logs are `.build/connectivity-*.log`. Shared-simulator
+  interference required isolated devices. A stale layout-test expectation in
+  the first snapshot was refreshed from the other session before the clean run.
+  That session subsequently changed ProfileStudioView; these checks establish
+  this connectivity revision, not acceptance of its later Studio changes.
+- Local work shares the checkout with another session's Settings/Studio changes;
+  those edits are preserved. No push, release or physical installation.
+
 ## Sleep WAKE control — 2026-09-30
 
 - Screens → Sleep stages `sleepWakeIndicator` with reading preferences. Offline

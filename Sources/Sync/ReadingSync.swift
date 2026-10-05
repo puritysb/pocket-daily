@@ -64,6 +64,29 @@ final class ReadingSync: ObservableObject {
     private var lastPushed: [String: String] = [:]
     private var pushTask: Task<Void, Never>?
     private var pendingReceived = 0
+    private struct ReaderObservation: Codable {
+        var seq: Int?
+        var progress: String?
+        var observedAt: Date
+        var offered: String?
+        var proposed: String?
+    }
+    private static let observationsKey = "sync.readerObservations.v2"
+    private var observations: [String: ReaderObservation] {
+        get {
+            guard let data = defaults.data(forKey: Self.observationsKey) else { return [:] }
+            return (try? JSONDecoder().decode([String: ReaderObservation].self, from: data)) ?? [:]
+        }
+        set {
+            let bounded = Dictionary(uniqueKeysWithValues: newValue.sorted { $0.value.observedAt > $1.value.observedAt }.prefix(400).map { ($0.key, $0.value) })
+            if let data = try? JSONEncoder().encode(bounded) { defaults.set(data, forKey: Self.observationsKey) }
+        }
+    }
+    private var pendingOffers: [(key: String, marker: String)] = []
+
+    private static func localMarker(_ position: ReadingPosition) -> String {
+        "\(position.updatedAt.timeIntervalSince1970)|\(position.xpointer ?? "")|\(position.fraction)"
+    }
 
     init(defaults: UserDefaults = .standard, deviceName: String? = nil, deviceID: String? = nil,
          iCloud: ICloudProgressStore? = nil, iCloudAvailable: (() -> Bool)? = nil,
@@ -184,7 +207,7 @@ final class ReadingSync: ObservableObject {
     // MARK: Reader exchange (reading-progress v1)
 
     /// Keeps the reader's positions for matching library books, and returns the
-    /// library positions that are further along, to be offered on the reader.
+    /// causally newer library positions (or legacy forward positions) to offer.
     /// A reader has no trusted clock, so a place gets the time it was first
     /// seen changed; an unchanged place keeps its earlier time.
     func exchange(with list: ReaderReadingList, readerName: String, library: [LibraryBook], now: Date = Date())
@@ -193,21 +216,42 @@ final class ReadingSync: ObservableObject {
         let byDigest = Dictionary(list.books.map { ($0.document, $0) }, uniquingKeysWith: { first, _ in first })
         var received: [PositionRecord] = []
         var outgoing: [PositionRecord] = []
+        var observed = observations
+        pendingOffers = []
         for book in library {
             guard let entry = byDigest[book.documentDigest] else { continue }
+            let key = "\(list.deviceID):\(book.documentDigest)"
+            let prior = observed[key]
+            let unchanged = prior != nil && prior?.seq == entry.seq && prior?.progress == entry.progress
+            let observation = (unchanged ? prior : nil) ?? ReaderObservation(seq: entry.seq, progress: entry.progress, observedAt: now)
+            observed[key] = observation
             if let progress = entry.progress {
                 let previous = readerPositions.record(for: book.documentDigest)
-                let seen = previous?.progress == progress ? previous?.timestamp : nil
+                let seen = previous?.deviceID == "reader:\(list.deviceID)" && previous?.progress == progress && unchanged ? previous?.timestamp : nil
                 received.append(PositionRecord(document: book.documentDigest, progress: progress, percentage: entry.percentage,
                                                device: readerName, deviceID: "reader:\(list.deviceID)",
                                                timestamp: entry.updated.flatMap { $0 > 0 ? $0 : nil }
                                                    ?? seen ?? Int(now.timeIntervalSince1970)))
             }
-            if let local = book.position, let xpointer = local.xpointer, local.fraction > entry.percentage + 0.004 {
-                outgoing.append(PositionRecord(document: book.documentDigest, progress: xpointer, percentage: local.fraction,
-                                               device: deviceName, deviceID: deviceID, timestamp: nil))
-            }
+            guard let local = book.position, let xpointer = local.xpointer,
+                  abs(local.fraction - entry.percentage) > 0.004 else { continue }
+            let marker = Self.localMarker(local)
+            guard observation.offered != marker else { continue }
+            let sequence = (list.offerVersion ?? 0) >= 2 ? entry.seq.flatMap(UInt32.init(exactly:)).flatMap { $0 > 0 ? $0 : nil } : nil
+            // Clock-free causal order: this app read after observing an unchanged reader.
+            let readAfterObservation = unchanged && local.updatedAt > observation.observedAt
+            let newerByClock = entry.updated.map { $0 > 0 && local.updatedAt.timeIntervalSince1970 > Double($0) } ?? false
+            let remoteClockKnown = (entry.updated ?? 0) > 0
+            let retryingUnchangedProposal = unchanged && observation.proposed == marker
+            let forwardFallback = local.fraction > entry.percentage + 0.004 && (!remoteClockKnown || newerByClock)
+                && (prior == nil || readAfterObservation || newerByClock || retryingUnchangedProposal)
+            guard forwardFallback || (sequence != nil && (readAfterObservation || newerByClock)) else { continue }
+            outgoing.append(PositionRecord(document: book.documentDigest, progress: xpointer, percentage: local.fraction,
+                                           device: deviceName, deviceID: deviceID, timestamp: nil, readerSeq: sequence))
+            pendingOffers.append((key, marker))
+            observed[key]?.proposed = marker
         }
+        observations = observed
         readerPositions.save(received)
         pendingReceived = received.count
         return outgoing
@@ -219,11 +263,17 @@ final class ReadingSync: ObservableObject {
             readerExchangeError = NearbySyncController.failureMessage(for: error)
         } else {
             readerExchangeError = nil
+            if sent == min(10, pendingOffers.count) {
+                var observed = observations
+                for offer in pendingOffers.prefix(sent) { observed[offer.key]?.offered = offer.marker }
+                observations = observed
+            }
             lastReaderExchange = ReaderExchange(device: readerName, date: now, received: pendingReceived, sent: sent)
             // An open book re-checks its suggestion against the reader's places.
             if pendingReceived > 0 { remoteRevision += 1 }
         }
         pendingReceived = 0
+        pendingOffers = []
     }
 
     /// Asks for a reader exchange at natural moments (app active, a book opened

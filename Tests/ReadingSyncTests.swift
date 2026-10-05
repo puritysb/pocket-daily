@@ -277,3 +277,63 @@ final class ReadingSyncTests: XCTestCase {
         XCTAssertThrowsError(try ReaderReadingList.decode(Data(repeating: 32, count: 9000), deviceID: "X3-1"))
     }
 }
+
+extension ReadingSyncTests {
+    func testRereadingRequiresAnUnchangedObservationAndAnAcknowledgedOfferIsNotRepeated() throws {
+        let t = 1_800_000_000
+        func list(_ seq: Int) -> ReaderReadingList {
+            ReaderReadingList(v: 1, deviceID: "ABCD1234", books: [
+                ReaderReadingEntry(document: digest, progress: "/body/DocFragment[4]/body/p[2]",
+                                   percentage: 0.8, updated: 0, seq: seq)
+            ], offerVersion: 2)
+        }
+        var reading = book
+        reading.position = local(0.2, at: t - 10)
+        XCTAssertTrue(sync.exchange(with: list(7), readerName: "X3", library: [reading],
+                                    now: Date(timeIntervalSince1970: Double(t))).isEmpty)
+        reading.position = local(0.25, at: t + 10)
+        let offers = sync.exchange(with: list(7), readerName: "X3", library: [reading],
+                                   now: Date(timeIntervalSince1970: Double(t + 20)))
+        XCTAssertEqual(offers.count, 1)
+        XCTAssertEqual(offers.first?.readerSeq, 7)
+        XCTAssertEqual(offers.first?.percentage, 0.25)
+        sync.exchangeFinished(readerName: "X3", sent: 0, error: URLError(.networkConnectionLost))
+        XCTAssertEqual(sync.exchange(with: list(7), readerName: "X3", library: [reading]).count, 1,
+                       "A failed offer remains retryable")
+        sync.exchangeFinished(readerName: "X3", sent: 1, error: nil)
+        XCTAssertTrue(sync.exchange(with: list(7), readerName: "X3", library: [reading]).isEmpty,
+                      "Stored offers must not repeatedly prompt after dismissal")
+        reading.position = local(0.3, at: t + 30)
+        XCTAssertTrue(sync.exchange(with: list(8), readerName: "X3", library: [reading]).isEmpty,
+                      "A changed reader cannot receive a backwards offer based on an old observation")
+    }
+
+    func testReaderDiagnosticsDistinguishMemoryBatteryAndDisabled() throws {
+        for (gate, text) in [("low-memory", "memory"), ("low-battery", "battery"), ("disabled", "switched off")] {
+            let data = Data("{\"lastGate\":\"\(gate)\"}".utf8)
+            let diagnostic = try JSONDecoder().decode(ReaderSyncDiagnostics.self, from: data)
+            XCTAssertTrue(diagnostic.explanation?.contains(text) == true)
+        }
+        XCTAssertNil(ReaderSyncDiagnostics(lastGate: "open", lastClose: "time-up").explanation)
+    }
+
+    func testFailedForwardOfferRetriesButChangedReaderInvalidatesTheProposal() {
+        let t = 1_800_000_000
+        func list(_ seq: Int) -> ReaderReadingList {
+            ReaderReadingList(v: 1, deviceID: "ABCD1234", books: [
+                ReaderReadingEntry(document: digest, progress: "/body/DocFragment[4]/body/p[\(seq)]",
+                                   percentage: 0.5, updated: 0, seq: seq)
+            ], offerVersion: 2)
+        }
+        var reading = book
+        reading.position = local(0.8, at: t - 10)
+        let now = Date(timeIntervalSince1970: Double(t))
+        XCTAssertEqual(sync.exchange(with: list(7), readerName: "X3", library: [reading], now: now).count, 1)
+        sync.exchangeFinished(readerName: "X3", sent: 0, error: URLError(.networkConnectionLost))
+        XCTAssertEqual(sync.exchange(with: list(7), readerName: "X3", library: [reading], now: now).count, 1)
+        sync.exchangeFinished(readerName: "X3", sent: 0, error: URLError(.networkConnectionLost))
+        XCTAssertTrue(sync.exchange(with: list(8), readerName: "X3", library: [reading], now: now).isEmpty)
+        XCTAssertTrue(sync.exchange(with: list(8), readerName: "X3", library: [reading], now: now).isEmpty,
+                      "An unchanged second observation must not revive the invalidated old proposal")
+    }
+}

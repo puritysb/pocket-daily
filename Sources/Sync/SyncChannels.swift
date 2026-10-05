@@ -106,6 +106,7 @@ struct ReaderReadingList: Decodable, Equatable, Sendable {
     var v: Int
     var deviceID: String
     var books: [ReaderReadingEntry]
+    var offerVersion: Int? = nil
 
     static let maximumBytes = 8 * 1024
 

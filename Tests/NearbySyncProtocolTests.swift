@@ -2212,3 +2212,80 @@ extension NearbySyncProtocolTests {
         XCTAssertEqual(RecoveryURLProtocol.requestCount, 1, "Commit must not be retried")
     }
 }
+
+extension NearbySyncProtocolTests {
+    func testLostCommitResponseRecoversOnlyFromAnExactSameReaderReceipt() async throws {
+        let fixture = try temporaryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let file = fixture.base.appendingPathComponent("book.epub")
+        let bytes = Data("nonuniform book contents 1937".utf8)
+        try bytes.write(to: file)
+        var crc = CRC32(); crc.update(bytes)
+        let receipt = Data("{\"size\":\(bytes.count),\"crc32\":\"\(String(format: "%08X", crc.finalized))\"}".utf8)
+        let status = Data(#"{"version":"test","device":"X3","deviceID":"ABCD1234","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"publicationReceipt":1}"#.utf8)
+        let reply = Data("OK \(bytes.count) \(String(format: "%08X", crc.finalized))\n".utf8)
+        let reader = try FakeUploadReader(expectedPayload: bytes.count, onHeader: { _ in nil }, onPayload: { _ in reply })
+        let port = try await reader.start()
+        defer { reader.stop() }
+        let client = recoveryClient([.failure(URLError(.networkConnectionLost)), .success(status), .success(receipt)])
+        let path = try await client.uploadAtomically(fileURL: file, host: "127.0.0.1", port: 80,
+            uploadStreamPort: Int(port), expectedDeviceID: "ABCD1234", publicationReceipt: true,
+            progress: { _, _ in })
+        XCTAssertEqual(path, "/book.epub")
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 3)
+    }
+
+    func testPublicationRecoveryAfterRestartDoesNotUploadAndRejectsOtherReaderOrChangedChecksum() async throws {
+        let fixture = try temporaryFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.base) }
+        let file = fixture.base.appendingPathComponent("book.epub")
+        let bytes = Data("book".utf8)
+        try bytes.write(to: file)
+        let transferID = UUID()
+        let status = Data(#"{"version":"test","device":"X3","deviceID":"ABCD1234","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"publicationReceipt":1}"#.utf8)
+        let wrong = recoveryClient([.success(status)])
+        do {
+            _ = try await wrong.uploadAtomically(fileURL: file, host: "reader.test", expectedDeviceID: "00000000",
+                transferID: transferID, transferControl: true, publicationReceipt: true, recoverPublicationOnly: true,
+                progress: { _, _ in XCTFail("Recovery must not upload") })
+            XCTFail("Wrong identity confirmed a publication")
+        } catch CrossPointClient.ClientError.publicationUnconfirmed { }
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 1)
+        let corrupt = recoveryClient([.success(status), .success(Data(#"{"size":4,"crc32":"00000000"}"#.utf8))])
+        do {
+            _ = try await corrupt.confirmPublication(fileURL: file, publishedFilename: "book.epub", destination: "/",
+                transferID: transferID, host: "reader.test", port: 80, expectedDeviceID: "ABCD1234")
+            XCTFail("Wrong checksum confirmed a publication")
+        } catch CrossPointClient.ClientError.publicationUnconfirmed { }
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 2)
+        let receipt = Data("{\"size\":4,\"crc32\":\"\(String(format: "%08X", CRC32.checksum(bytes)))\"}".utf8)
+        let correct = recoveryClient([.success(status), .success(receipt)])
+        let path = try await correct.confirmPublication(fileURL: file, publishedFilename: "book.epub", destination: "/",
+            transferID: transferID, host: "reader.test", port: 80, expectedDeviceID: "ABCD1234")
+        XCTAssertEqual(path, "/book.epub")
+        XCTAssertEqual(RecoveryURLProtocol.requestCount, 2)
+    }
+}
+
+extension NearbySyncProtocolTests {
+    @MainActor func testSameWiFiSessionEndsThroughAdvertisedEndpoint() async throws {
+        HeldReaderURLProtocol.reset()
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [HeldReaderURLProtocol.self]
+        let session = URLSession(configuration: config)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session))
+        defer { model.pauseForBackground(); session.invalidateAndCancel() }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"test","device":"X3","deviceID":"ABCD1234","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"sessionEnd":true}"#.utf8))
+        XCTAssertFalse(model.hasDirectSession)
+        model.endConnection()
+        let request = try await heldRequest(0)
+        XCTAssertEqual(request.request.url?.path, "/api/pocket/v1/session/end")
+        XCTAssertEqual(request.request.httpMethod, "POST")
+        request.succeed(Data(#"{"ended":true}"#.utf8))
+        for _ in 0..<100 where model.isWorking { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNil(model.readerStatus)
+        XCTAssertFalse(model.isWorking)
+        XCTAssertEqual(HeldReaderURLProtocol.requests.count, 1)
+    }
+}

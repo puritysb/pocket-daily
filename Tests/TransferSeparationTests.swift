@@ -241,6 +241,34 @@ final class TransferSeparationTests: XCTestCase {
         XCTAssertTrue(TransferControlProtocol.controls.isEmpty)
     }
 
+    func testOfficialImageCanBePreparedOfflineFromReaderWithoutStartingTransfer() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        folders.append(folder)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let downloaded = folder.appendingPathComponent("official.bin")
+        try Data("test image".utf8).write(to: downloaded)
+        let item = PreparedTransfer(id: UUID(), filename: "official.bin", firmwareVersion: "0.2.0", readerID: nil)
+        let release = FirmwareRelease(version: "0.2.0", downloadURL: URL(string: "https://example.invalid/update.bin")!, byteCount: 10)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(),
+            localFiles: .init(prepare: { _ in item }),
+            releaseSource: .init(latest: { release }, download: { _, _ in downloaded }))
+        XCTAssertNil(model.readerStatus)
+        await model.prepareOfficialFirmware()
+        XCTAssertTrue(model.preparedTransfers.contains { $0.id == item.id })
+        XCTAssertNil(model.preparedTransfers.first { $0.id == item.id }?.readerID)
+        XCTAssertFalse(model.isTransferring)
+        XCTAssertTrue(model.message.contains("Direct connection"))
+        XCTAssertEqual(model.readerUpdateState, .idle)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: downloaded.path))
+    }
+
+    func testAutomaticSessionEndInstructionsStillRequireReaderConfirmation() {
+        let message = PocketModel.stagedFirmwareMessage(version: "0.2.0", endsSession: true)
+        XCTAssertTrue(message.contains("confirm installation on the reader"))
+        XCTAssertFalse(message.contains("Press Back"))
+        XCTAssertTrue(PocketModel.stagedFirmwareMessage(version: "0.2.0").contains("Press Back"))
+    }
+
     func testOlderQueueStillKnowsItMayHaveStagingAndClassificationDoesNotDependOnVersion() throws {
         let id = UUID()
         let json = Data("{\"id\":\"\(id)\",\"filename\":\"update.BIN\",\"readerID\":\"1234ABCD\"}".utf8)

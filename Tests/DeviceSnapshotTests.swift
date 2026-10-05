@@ -22,11 +22,17 @@ final class DeviceSnapshotTests: XCTestCase {
     func testConnectedReaderMapsStatusFieldsToCapabilities() throws {
         let reader = try status(#","pocketProfile":1,"readerFiles":1,"readingProgress":1,"transferControl":1"#)
         let device = DeviceSnapshot.crossPoint(status: reader, isDemo: false,
-                                               isConnecting: false, isDirect: false, bluetoothPaired: true)
+                                               isConnecting: false, isDirect: false, bluetoothPaired: true, bluetoothSupported: true)
         XCTAssertEqual(device.model, "X4", "The connected reader names itself")
         XCTAssertEqual(device.link, .sameWiFi)
         XCTAssertEqual(device.statusText, "X4 · Same Wi-Fi")
         XCTAssertEqual(device.capabilities, [.screens, .files, .readingPositions, .firmwareUpdate, .bluetoothSync])
+    }
+
+    func testPairingAloneDoesNotClaimReadingSyncSupport() {
+        let device = DeviceSnapshot.crossPoint(status: nil, isDemo: false, isConnecting: false,
+                                               isDirect: false, bluetoothPaired: true)
+        XCTAssertFalse(device.capabilities.contains(.bluetoothSync))
     }
 
     func testDirectSessionAndConnectingStates() throws {
@@ -51,7 +57,7 @@ final class DeviceSnapshotTests: XCTestCase {
     func testDemoReaderIsShownButOffersNothing() throws {
         let reader = try status(#","pocketProfile":1,"readerFiles":1,"readingProgress":1"#)
         let device = DeviceSnapshot.crossPoint(status: reader, isDemo: true,
-                                               isConnecting: false, isDirect: false, bluetoothPaired: true)
+                                               isConnecting: false, isDirect: false, bluetoothPaired: true, bluetoothSupported: true)
         XCTAssertEqual(device.link, .demo)
         XCTAssertEqual(device.statusText, "Demo")
         XCTAssertFalse(device.isConnected)

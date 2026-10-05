@@ -257,7 +257,8 @@ struct ContentView: View {
             // Authenticated pairing: remember this reader for reading sync over Bluetooth.
             nearby.onAuthenticated = { peripheral, status in
                 guard !model.isDemoMode else { return }
-                readerLink.remember(peripheral: peripheral, readerID: status.deviceID, model: status.model)
+                readerLink.remember(peripheral: peripheral, readerID: status.deviceID, model: status.model,
+                                    supportsReadingSync: status.capabilities.contains(ReadingSyncBLE.capability))
             }
             readerLink.requestSetupConnection = { nearby.scan() }
             readerLink.endSetupConnection = { nearby.disconnect() }
@@ -1190,6 +1191,8 @@ struct FirmwareUpdateCard: View {
     var sendLocalBuild: (() -> Void)? = nil
 #endif
     @State private var confirmingLocalRemoval = false
+    @State private var confirmingPreparedUpdate = false
+    @State private var preparationTask: Task<Void, Never>?
 
     private var pending: Bool { model.preparedTransfers.contains { $0.kind == .firmware } }
     private var sending: Bool { model.isTransferring && model.activeTransferKind == .firmware }
@@ -1208,7 +1211,7 @@ struct FirmwareUpdateCard: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                if isUpdating || sending {
+                if isUpdating || sending || preparationTask != nil {
                     if sending {
                         ProgressView(value: model.uploadProgress).progressViewStyle(.pocketBar)
                         Text(model.uploadProgress >= 1 ? "Saving on reader…" : "Sending · \(Int(model.uploadProgress * 100))%")
@@ -1217,11 +1220,11 @@ struct FirmwareUpdateCard: View {
                         ProgressView(model.readerUpdateState == .idle ? "Preparing update…" : "Downloading update…")
                             .font(.caption)
                     }
-                    Button("Cancel", action: cancel).accessibilityIdentifier("cancel-firmware-update")
+                    Button("Cancel") { preparationTask?.cancel(); cancel() }.accessibilityIdentifier("cancel-firmware-update")
                 } else if pending {
-                    Text("Update interrupted").font(.callout)
+                    Text("Update ready to send or resume").font(.callout)
                     HStack {
-                        Button("Resume update") { model.sendPreparedFiles(kind: .firmware) }
+                        Button("Send update") { confirmingPreparedUpdate = true }
                             .disabled(model.readerStatus == nil || model.isWorking)
                         Button("Cancel", action: cancel).disabled(model.isWorking)
                     }
@@ -1266,6 +1269,19 @@ struct FirmwareUpdateCard: View {
                             .disabled(model.hasDirectSession)
                     }
                 }
+                if !pending, !isUpdating, !sending, preparationTask == nil, !model.hasDirectSession {
+                    Button("Download update for later") {
+                        preparationTask = Task { @MainActor in
+                            await model.prepareOfficialFirmware()
+                            preparationTask = nil
+                        }
+                    }
+                    .disabled(!model.canPrepareFiles)
+                    .accessibilityIdentifier("prepare-official-firmware")
+                    Text("Download online. Send over either connection.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 #if DEBUG
                 if let sendLocalBuild, model.readerStatus != nil, !isUpdating, !sending, !pending {
                     Divider()
@@ -1280,6 +1296,12 @@ struct FirmwareUpdateCard: View {
             }
         }
         .accessibilityIdentifier("firmware-update-card")
+        .alert("Send prepared firmware?", isPresented: $confirmingPreparedUpdate) {
+            Button("Send update") { model.sendPreparedFiles(kind: .firmware) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Sends the prepared Pocket Daily firmware for a compatible X3/X4 reader. Factory firmware is not supported. Keep a recovery method available; custom firmware may affect device support. Installation starts only after you confirm on the reader.")
+        }
         .alert("Forget this update?", isPresented: $confirmingLocalRemoval) {
             Button("Forget update", role: .destructive) { model.removePreparedFiles(kind: .firmware, localOnly: true) }
             Button("Keep update", role: .cancel) {}

@@ -9,6 +9,8 @@ struct RememberedBluetoothReader: Codable, Equatable {
     var peripheralID: UUID
     var readerID: String
     var model: String
+    var supportsReadingSync: Bool? = nil
+    var lastExchangeAt: Date? = nil
 }
 
 /// Keeps the remembered reader in `UserDefaults`.
@@ -129,6 +131,23 @@ final class ReaderBluetoothLink: ObservableObject {
         didSet { if oldValue != phase { ReadingSyncTrace.note("phase \(oldValue) -> \(phase)") } }
     }
     @Published private(set) var rememberedReader: RememberedBluetoothReader?
+    @Published private(set) var lastCompletedAt: Date?
+    @Published private(set) var lastFailure: String?
+
+    var statusText: String {
+        if isDemoMode { return "Demo mode" }
+        guard rememberedReader != nil else { return "Not paired" }
+        if !exchangeEnabled { return "Reading sync is off" }
+        if nearbySessionActive || readerWorkActive { return "Waiting for the current reader task" }
+        if let lastFailure { return lastFailure }
+        switch phase {
+        case .off: return "Waiting for Bluetooth"
+        case .waiting: return "Waiting for the reader’s next sync window"
+        case .preparing: return "Connecting to the paired reader…"
+        case .listing, .merging, .offering: return "Exchanging reading places…"
+        case .coolingDown: return lastCompletedAt == nil ? "Waiting to reconnect" : "Reading places exchanged"
+        }
+    }
 
     /// Pairing for reading sync from Settings: the reader's Sync screen is open and
     /// the app connects once (Nearby Sync, authenticated) only to remember it.
@@ -159,11 +178,13 @@ final class ReaderBluetoothLink: ObservableObject {
     /// Stops reading sync with the remembered reader (a new pairing replaces it).
     func forget() {
         ReadingSyncTrace.note("forget")
-        if session != nil { endSession(error: nil, report: false, rearm: false) }
+        if session != nil { endSession(error: ReadingSyncBLEError.interrupted, report: false, rearm: false) }
         cooldownTimer?.cancel()
         cooldownTimer = nil
         if phase != .off { transport.cancelConnection() }
         phase = .off
+        lastCompletedAt = nil
+        lastFailure = nil
         store.reader = nil
         rememberedReader = nil
         setup = .idle
@@ -228,6 +249,7 @@ final class ReaderBluetoothLink: ObservableObject {
         self.timing = timing
         exchangeEnabled = sync.readerExchangeEnabled
         rememberedReader = store.reader
+        lastCompletedAt = store.reader?.lastExchangeAt
         transport.onEvent = { [weak self] event in self?.handle(event) }
         enabledObserver = sync.$readerExchangeEnabled.dropFirst().removeDuplicates().sink { [weak self] enabled in
             guard let self else { return }
@@ -256,8 +278,12 @@ final class ReaderBluetoothLink: ObservableObject {
     }
 
     /// Remembers a reader after an authenticated Nearby Sync connection.
-    func remember(peripheral: UUID, readerID: String, model: String) {
-        let reader = RememberedBluetoothReader(peripheralID: peripheral, readerID: readerID, model: model)
+    func remember(peripheral: UUID, readerID: String, model: String, supportsReadingSync: Bool? = nil) {
+        let prior = rememberedReader
+        let sameReader = prior?.peripheralID == peripheral && prior?.readerID == readerID
+        let reader = RememberedBluetoothReader(peripheralID: peripheral, readerID: readerID, model: model,
+                                               supportsReadingSync: supportsReadingSync,
+                                               lastExchangeAt: sameReader ? prior?.lastExchangeAt : nil)
         if setup == .searching {
             setup = .paired(model)
             // Called from the controller's authentication callback: end the connection
@@ -266,7 +292,9 @@ final class ReaderBluetoothLink: ObservableObject {
         }
         ReadingSyncTrace.note("remember paired reader")
         guard reader != rememberedReader else { return }
-        if session != nil { endSession(error: nil, report: false, rearm: false) }
+        if session != nil { endSession(error: ReadingSyncBLEError.interrupted, report: false, rearm: false) }
+        lastCompletedAt = reader.lastExchangeAt
+        lastFailure = nil
         store.reader = reader
         rememberedReader = reader
         cooldownTimer?.cancel()
@@ -299,8 +327,16 @@ final class ReaderBluetoothLink: ObservableObject {
         phase = .waiting
         if !transport.connect(to: reader.peripheralID) {
             phase = .off
+            lastFailure = "Pair this reader again in Reader → Connection."
             note("Paired reader is unknown to Bluetooth; waiting for a new pairing")
         }
+    }
+
+    private func updateSupport(_ supported: Bool) {
+        guard var reader = rememberedReader, reader.supportsReadingSync != supported else { return }
+        reader.supportsReadingSync = supported
+        store.reader = reader
+        rememberedReader = reader
     }
 
     private func rearmLater() {
@@ -332,6 +368,7 @@ final class ReaderBluetoothLink: ObservableObject {
                 if session == nil { transport.cancelConnection() }
                 return
             }
+            lastFailure = nil
             generation += 1
             session = Session(reader: reader, generation: generation, readerName: reader.model)
             phase = .preparing
@@ -373,14 +410,18 @@ final class ReaderBluetoothLink: ObservableObject {
         }
         guard status.deviceID == session.reader.readerID else {
             note("Paired peripheral reported another reader identity; disconnecting")
+            lastFailure = "The Bluetooth connection belongs to a different reader. Pair again."
             endSession(error: nil, report: false)
             return
         }
         guard status.capabilities.contains(ReadingSyncBLE.capability) else {
+            lastFailure = "This firmware does not support Bluetooth reading sync."
+            updateSupport(false)
             note("Reader firmware does not offer reading sync over Bluetooth")
             endSession(error: nil, report: false)
             return
         }
+        updateSupport(true)
         let requestID = NearbySyncProtocol.requestID()
         guard let command = ReadingSyncBLE.readList(requestID: requestID) else {
             endSession(error: NearbySyncError.malformedRecord, report: false)
@@ -545,6 +586,16 @@ final class ReaderBluetoothLink: ObservableObject {
         stepTimer = nil
         mergeTask?.cancel()
         mergeTask = nil
+        if let error, rearm { lastFailure = error.localizedDescription }
+        if session.exchanged, error == nil {
+            lastCompletedAt = Date()
+            if var reader = rememberedReader {
+                reader.lastExchangeAt = lastCompletedAt
+                rememberedReader = reader
+                store.reader = reader
+            }
+            lastFailure = nil
+        }
         if session.exchanged {
             sync.exchangeFinished(readerName: session.readerName, sent: session.sent, error: error)
         } else if report, let error {

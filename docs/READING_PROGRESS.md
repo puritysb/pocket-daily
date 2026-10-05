@@ -10,7 +10,8 @@ percentage, device, device_id, timestamp)를 쓴다.
 | 리더 직접 교환 | 앱 ↔ X3/X4 | 기존 Sync 연결(LAN/직접 연결) | 펌웨어 `readingProgress: 1` |
 | 리더 Bluetooth 교환 | 앱 ↔ 페어링한 X3/X4 | 본딩된 Nearby Sync BLE(백그라운드 가능) | 상태 `CAP`에 `READ1` |
 
-공통 규칙: 다른 기기의 더 앞선 위치만 제안하고 페이지를 자동으로 옮기지 않는다.
+공통 규칙: 더 최근에 읽었다는 근거가 있으면 다시 읽는 앞부분도 제안한다.
+근거가 없는 구형 리더는 더 앞선 진행도만 제안하며, 페이지는 자동으로 옮기지 않는다.
 문서 식별은 partial MD5(리더도 같은 값), 위치는 XPointer + 페이지 시작 기준 진행률.
 
 ## iCloud 키-값 레코드
@@ -40,12 +41,12 @@ percentage, device, device_id, timestamp)를 쓴다.
 - `/api/status`에 `readingProgress: 1`을 광고한다. 없으면 앱은 이 경로를 쓰지 않는다.
 - `GET /api/pocket/v1/reading?deviceID=<id>` →
   ```json
-  {"v":1,"deviceID":"<id>","books":[{"path":"/Books/a.epub","document":"<32 hex>",
+  {"v":1,"offerVersion":2,"deviceID":"<id>","books":[{"path":"/Books/a.epub","document":"<32 hex>",
    "filenameDocument":"<32 hex>","progress":"/body/DocFragment[3]/body/p[12]/text().0",
    "percentage":0.43,"updated":1790000000,"seq":17}]}
   ```
   최근 읽은 EPUB 최대 10권. `progress`는 책을 닫을 때 리더가 계산해 둔 XPointer(없으면 null),
-  `percentage`는 0~1 페이지 시작 기준, `updated`는 신뢰할 시계가 없으면 0, `seq`는 기기 단조 증가값.
+  `percentage`는 0~1 페이지 시작 기준, `updated`는 신뢰할 시계가 없으면 0, `seq`는 리더 내 기록 번호(현재 기록이 아니면 0)다. 손상 시 초기화될 수 있어 시간 순서로 정렬하지 않는다.
   응답 8 KiB 이하.
 - `POST /api/pocket/v1/reading`
   `{"deviceID":"<id>","document":"<32 hex>","progress":"<xpointer>","percentage":0.5,"device":"Pocket Daily iPhone"}`
@@ -53,7 +54,7 @@ percentage, device, device_id, timestamp)를 쓴다.
   "Pocket Daily iPhone: 50% · 이동?"을 묻는다. 모르는 문서는 404, 형식 오류는 400.
   현재 진행도를 즉시 바꾸지 않는다.
 - 앱: 연결 후 목록을 받아 서재와 문서 식별값으로 맞추고, 리더의 위치를 기기별 후보로 저장한다
-  (책을 열 때 제안). 앱이 더 앞선 책은 대기 위치로 보낸다. 설정 "연결 시 리더와 위치 교환"(기본 켬).
+  (책을 열 때 제안). 아래 관찰 순서 규칙에 따라 대기 위치를 보낸다. 설정 "연결 시 리더와 위치 교환"(기본 켬).
   교환은 수신·송신이 모두 끝난 뒤에만 "마지막 교환"으로 기록하고, 실패는 이유를 보여 준다.
   같은 연결에서 실패하면 10·20초 뒤 최대 3회 재시도하며, "Exchange positions now"로 즉시 다시 할 수 있다.
 - 자동 교환(2026-09-29): 연결하지 않아도, 전에 연결한 리더(같은 deviceID)가 마지막 주소에서
@@ -135,3 +136,21 @@ Nearby Sync 서비스로 나른다. 하드웨어 검증 전이다.
   사례는 동기화되지 않을 수 있다. 실기에서 창 열림과 실제 lists/offers 완료를 각각 확인해야 한다.
 - iOS 백그라운드 정책 근거: [Apple Core Bluetooth](https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html).
   실기 체크리스트와 전체 판정은 펌웨어 `docs/ble-sync-review-2026-09-30.md`에 모았다.
+
+## 관찰 순서와 Bluetooth 상태 — 2026-10-05
+
+- 리더 목록의 `offerVersion:2`가 있을 때 앱은 제안에 `readerSeq`를 넣는다.
+  펌웨어는 저장 시점과 책을 다시 여는 시점에 그 번호가 일치하는지 확인한다.
+  바뀌었으면 HTTP 409 / BLE `STALE_POSITION`으로 거절하거나 대기 제안을 버린다.
+- 앱은 리더·책별 번호, XPointer, 최초 관찰 시각과 마지막 전달 표식을 최대 400개 보관한다.
+  리더 위치가 그대로이고 그 관찰 이후 앱에서 읽었거나, 신뢰할 리더 시계보다 앱 기록이
+  최신이면 앞부분 다시 읽기도 제안한다. 처음 보는 시계 없는 리더에는 기존의 더 멀리 읽기
+  규칙만 적용한다. 새 리더 위치를 봤는데 앱의 과거 위치가 더 멀다는 이유만으로 보내지 않는다.
+- 모든 선택된 제안의 전달이 확인되면 표식을 저장한다. 동일 제안은 다음 교환이나 앱 재시작
+  후에도 반복하지 않으며, 실패한 교환은 재시도한다. 리더에서 제안을 거절해도 같은 제안이
+  바로 되살아나지 않는다. 번호 초기화는 전역적으로 유일한 세대나 시계 보장이 아니다.
+- Bluetooth 페어링 사실과 `READ1` 지원을 구분한다. Settings에는 대기/교환/오류 상태와
+  마지막 완료 시각을 표시한다. HTTP 상태가 페어링한 리더와 일치할 때만 `readSync`의
+  메모리·배터리·본딩 제한 이유를 보여 준다. 연결됨을 실제 교환 완료로 표시하지 않는다.
+- BLE 메모리 기준과 창 길이는 변경하지 않았다. X3/X4의 백그라운드 동기화, 재연결,
+  절전·Wi-Fi 전환 및 버튼 확인은 실제 기기에서 따로 검증해야 한다.

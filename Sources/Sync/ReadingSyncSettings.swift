@@ -26,6 +26,11 @@ struct ReadingSyncSettingsSection: View {
                     if let reader = link.rememberedReader {
                         LabeledContent("Bluetooth", value: "\(reader.model) paired")
                             .accessibilityIdentifier("sync-bluetooth-paired")
+                        Text(link.statusText).font(.caption).foregroundStyle(.secondary)
+                        if model.readerStatus?.deviceID == reader.readerID,
+                           let diagnostic = model.readerStatus?.readSync?.explanation {
+                            Text(diagnostic).font(.caption).foregroundStyle(.secondary)
+                        }
                     } else {
                         Text("To also exchange places over Bluetooth, pair the reader once in Reader → Connection.")
                             .font(.caption).foregroundStyle(.secondary)
@@ -102,6 +107,14 @@ struct ReaderBluetoothPairingCard: View {
                     Text("Once: on the reader, open Pocket Daily → Sync → Direct connection (Nearby Sync on older firmware), then choose Pair reader. Enter the code the reader shows if asked. Connecting directly pairs it too.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if link.rememberedReader != nil {
+                Text(link.statusText).font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("sync-bluetooth-status")
+                if let date = link.lastCompletedAt {
+                    LabeledContent("Last Bluetooth exchange", value: date.formatted(.relative(presentation: .named)))
+                        .font(.caption)
                 }
             }
             if !sync.readerExchangeEnabled {

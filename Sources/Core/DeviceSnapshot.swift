@@ -78,7 +78,7 @@ struct DeviceSnapshot: Equatable {
     /// The CrossPoint adapter: `/api/status` fields and the Bluetooth pairing
     /// become capabilities. A demo reader is shown, but offers nothing.
     static func crossPoint(status: CrossPointStatus?, isDemo: Bool,
-                           isConnecting: Bool, isDirect: Bool, bluetoothPaired: Bool = false) -> DeviceSnapshot {
+                           isConnecting: Bool, isDirect: Bool, bluetoothPaired: Bool = false, bluetoothSupported: Bool = false) -> DeviceSnapshot {
         let link: Link
         if isDemo { link = .demo }
         else if status != nil { link = isDirect ? .direct : .sameWiFi }
@@ -94,7 +94,7 @@ struct DeviceSnapshot: Equatable {
             if status.readingProgress == 1 && identified { capabilities.insert(.readingPositions) }
             if status.supportsAtomicUpload { capabilities.insert(.firmwareUpdate) }
         }
-        if !isDemo && bluetoothPaired { capabilities.insert(.bluetoothSync) }
+        if !isDemo && bluetoothPaired && bluetoothSupported { capabilities.insert(.bluetoothSync) }
 
         let model = status.flatMap { PocketHardware(deviceName: $0.device)?.rawValue }
         return DeviceSnapshot(family: .crossPoint, model: model, link: link, capabilities: capabilities)

@@ -35,6 +35,7 @@ struct CrossPointStatus: Codable, Equatable {
     /// Draws the saved Home or Daily Brief inside Sync
     /// (sibling docs/pocket-screen-present-v1.md).
     var screenPresentation: Int? = nil
+    var publicationReceipt: Int? = nil
     var transferControl: Int?
     var articleLibrary: Int? = nil
     var totalHeap: Int? = nil
@@ -42,11 +43,33 @@ struct CrossPointStatus: Codable, Equatable {
     /// Reading positions exchanged without a server (docs/READING_PROGRESS.md,
     /// sibling docs/reading-progress-v1.md).
     var readingProgress: Int? = nil
+    var readSync: ReaderSyncDiagnostics? = nil
     /// These existing Pocket advertisements imply verified commit support.
     /// A generic CrossPoint status or browser /upload alone is insufficient.
     var supportsAtomicUpload: Bool {
         transferControl == 1 || uploadStreamPort.map { (1...65535).contains($0) } == true
             || uploadChunkBytes.map { $0 > 0 } == true
+    }
+}
+
+/// Retained reader statistics, sampled over Wi-Fi; never a claim about a live BLE connection.
+struct ReaderSyncDiagnostics: Codable, Equatable {
+    var opened: Int?
+    var skipped: Int?
+    var lists: Int?
+    var offers: Int?
+    var lastGate: String?
+    var lastClose: String?
+
+    var explanation: String? {
+        switch lastGate {
+        case "low-memory": return "The reader last skipped Bluetooth sync to preserve memory. Same Wi-Fi can exchange your place."
+        case "low-battery": return "The reader last skipped Bluetooth sync because its battery was low."
+        case "no-bond": return "The reader has no saved Bluetooth pairing. Pair it again to enable automatic exchange."
+        case "disabled": return "Automatic reading sync is switched off on the reader."
+        default:
+            return lastClose == "low-memory" ? "The reader ended its last Bluetooth window to preserve memory." : nil
+        }
     }
 }
 
@@ -1034,10 +1057,12 @@ actor CrossPointClient {
 
     /// The body of a reading-progress offer, the same over HTTP and Bluetooth.
     static func readingOfferBody(_ record: PositionRecord, identity: String) throws -> Data {
-        try JSONSerialization.data(withJSONObject: [
+        var body: [String: Any] = [
             "deviceID": identity, "document": record.document, "progress": record.progress,
             "percentage": record.percentage, "device": record.device,
-        ], options: [.sortedKeys, .withoutEscapingSlashes])
+        ]
+        if let sequence = record.readerSeq { body["readerSeq"] = sequence }
+        return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys, .withoutEscapingSlashes])
     }
 
     /// Offers a position to the reader; it asks before moving when the book opens.
@@ -1135,6 +1160,8 @@ actor CrossPointClient {
         expectedDeviceID: String? = nil,
         transferID: UUID = UUID(),
         transferControl: Bool = false,
+        publicationReceipt: Bool = false,
+        recoverPublicationOnly: Bool = false,
         transferKind: TransferKind = .content,
         note: (@Sendable (String) -> Void)? = nil,
         reconnect: (@Sendable () async -> Bool)? = nil,
@@ -1158,6 +1185,12 @@ actor CrossPointClient {
 
         let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
         let total = Int64(values.fileSize ?? 0)
+        if recoverPublicationOnly {
+            guard publicationReceipt, let expectedDeviceID else { throw ClientError.publicationUnconfirmed }
+            return try await confirmPublication(fileURL: fileURL, publishedFilename: filename,
+                destination: normalizedDestination, transferID: transferID, host: host, port: port,
+                expectedDeviceID: expectedDeviceID)
+        }
         if transferControl {
             try await controlTransfer(action: "prepare", transferID: transferID,
                 destination: normalizedDestination, kind: transferKind, host: host, port: port)
@@ -1275,19 +1308,71 @@ actor CrossPointClient {
         ])
         try await beforeCommit?()
         try Task.checkCancellation()
-        let commitData: Data
-        let commitResponse: URLResponse
-        do { (commitData, commitResponse) = try await http.data(for: commitRequest, session: session) }
-        catch { throw ClientError.publicationUnconfirmed }
-        try Self.requireSuccess(commitResponse, body: commitData)
-        guard let committed = try? JSONDecoder().decode(PocketCommitResponse.self, from: commitData) else {
-            throw ClientError.publicationUnconfirmed
-        }
-        guard committed.size == total,
-              committed.crc32.caseInsensitiveCompare(String(format: "%08X", crc32)) == .orderedSame else {
-            throw ClientError.publicationUnconfirmed
+        do {
+            let (data, response) = try await http.data(for: commitRequest, session: session)
+            try Self.requireSuccess(response, body: data)
+            try Self.verifyPublication(data, size: total, crc32: crc32)
+        } catch {
+            try Task.checkCancellation()
+            guard publicationReceipt, let expectedDeviceID else { throw ClientError.publicationUnconfirmed }
+            // Query the receipt, never repeat a possibly successful mutation.
+            try await confirmPublication(request: commitRequest, expectedDeviceID: expectedDeviceID,
+                                         host: host, port: port, size: total, crc32: crc32)
         }
         return targetPath
+    }
+
+    private static func verifyPublication(_ data: Data, size: Int64, crc32: UInt32) throws {
+        guard let result = try? JSONDecoder().decode(PocketCommitResponse.self, from: data),
+              result.size == size, result.crc32.caseInsensitiveCompare(String(format: "%08X", crc32)) == .orderedSame else {
+            throw ClientError.publicationUnconfirmed
+        }
+    }
+
+    private func confirmPublication(request: URLRequest, expectedDeviceID: String,
+                                    host: String, port: Int, size: Int64, crc32: UInt32) async throws {
+        do {
+            let reader = try await status(host: host, port: port)
+            guard reader.deviceID == expectedDeviceID, reader.publicationReceipt == 1 else {
+                throw ClientError.publicationUnconfirmed
+            }
+            var query = request
+            query.url = Self.url(host: host, port: port, path: "/api/pocket/v1/publication")
+            query.cachePolicy = .reloadIgnoringLocalCacheData
+            let (data, response) = try await http.data(for: query, session: session)
+            try Self.requireSuccess(response, body: data)
+            try Self.verifyPublication(data, size: size, crc32: crc32)
+        } catch {
+            try Task.checkCancellation()
+            throw ClientError.publicationUnconfirmed
+        }
+    }
+
+    /// Restores the write-ahead transfer after an app restart without sending its bytes again.
+    func confirmPublication(fileURL: URL, publishedFilename: String, destination: String,
+                            transferID: UUID, host: String, port: Int, expectedDeviceID: String) async throws -> String {
+        let input = try FileHandle(forReadingFrom: fileURL)
+        defer { try? input.close() }
+        var crc = CRC32()
+        var size: Int64 = 0
+        while let bytes = try input.read(upToCount: 64 * 1024), !bytes.isEmpty {
+            try Task.checkCancellation()
+            crc.update(bytes)
+            size += Int64(bytes.count)
+        }
+        let target = Self.join(destination, publishedFilename)
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/publication") else { throw ClientError.invalidAddress }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "staging": Self.join(destination, ".pocket-\(transferID.uuidString.lowercased()).part"),
+            "target": target, "size": size, "crc32": String(format: "%08X", crc.finalized),
+        ])
+        try await confirmPublication(request: request, expectedDeviceID: expectedDeviceID,
+                                     host: host, port: port, size: size, crc32: crc.finalized)
+        return target
     }
 
     /// Recovery is bounded and probe-gated on LAN as well as a private AP.

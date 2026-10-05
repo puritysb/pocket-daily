@@ -377,7 +377,8 @@ final class ReaderBluetoothLinkTests: XCTestCase {
         link.forget()
         XCTAssertEqual(link.phase, .off)
         XCTAssertTrue(scheduler.pending.isEmpty)
-        XCTAssertEqual(sync.lastReaderExchange?.sent, 0)
+        XCTAssertNil(sync.lastReaderExchange, "Forgetting during an offer is not a completed exchange")
+        XCTAssertNil(link.lastCompletedAt)
         transport.send(.wrote(nil))
         XCTAssertEqual(link.phase, .off)
     }
@@ -409,6 +410,9 @@ final class ReaderBluetoothLinkTests: XCTestCase {
         XCTAssertEqual(sync.lastReaderExchange?.received, 2)
         XCTAssertEqual(sync.lastReaderExchange?.sent, 1)
         XCTAssertEqual(sync.lastReaderExchange?.device, "X3")
+        XCTAssertNotNil(link.lastCompletedAt)
+        XCTAssertEqual(link.rememberedReader?.lastExchangeAt, link.lastCompletedAt)
+        XCTAssertEqual(RememberedBluetoothReaderStore(defaults: defaults).reader?.lastExchangeAt, link.lastCompletedAt)
         XCTAssertEqual(link.phase, .coolingDown)
         XCTAssertEqual(transport.cancels, 1, "The app disconnects after the exchange")
 
@@ -495,6 +499,7 @@ final class ReaderBluetoothLinkTests: XCTestCase {
         scheduler.fire(timing.prepare)
         XCTAssertEqual(link.phase, .coolingDown)
         XCTAssertEqual(transport.cancels, 1)
+        XCTAssertNotNil(link.lastFailure, "Connection diagnostics must explain a timeout even before merge")
         XCTAssertNil(sync.readerExchangeError, "A reader that stops answering before the list is not an error")
 
         scheduler.fire(timing.cooldown)
