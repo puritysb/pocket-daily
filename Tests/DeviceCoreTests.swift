@@ -251,3 +251,22 @@ final class DeviceCoreTests: XCTestCase {
         XCTAssertEqual(SyncModePolicy.syncMode(status: decoded), .push(wsPort: 81))
     }
 }
+
+extension DeviceCoreTests {
+    @MainActor func testWorkLaneKeepsReplacementOwnedUntilItsTaskFinishes() throws {
+        var lane = ReaderWorkLane()
+        let quiet = try XCTUnwrap(lane.reserve(.quietReading))
+        let task = Task<Void, Never> { }
+        lane.attach(task, owner: quiet.owner)
+        let transfer = try XCTUnwrap(lane.reserve(.transfer))
+        XCTAssertTrue(task.isCancelled)
+        XCTAssertNotNil(transfer.predecessor)
+        XCTAssertNil(lane.reserve(.settings))
+        lane.finish(quiet.owner)
+        XCTAssertEqual(lane.owner, transfer.owner)
+        XCTAssertTrue(lane.isActive)
+        lane.finish(transfer.owner)
+        XCTAssertFalse(lane.isActive)
+        XCTAssertNotNil(lane.reserve(.settings))
+    }
+}

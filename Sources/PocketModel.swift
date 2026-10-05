@@ -781,14 +781,15 @@ final class PocketModel: ObservableObject, DeviceSession {
     private var heartbeatTask: Task<Void, Never>?
     private var connectionAttempt = 0
     private var nearbyLease: HotspotLease?
-    private var readerWorkTask: Task<Void, Never>?
-    @Published private var readerWorkOwner: UUID?
-    /// Includes quiet HTTP exchanges and cancellation draining. BLE yields to this lane.
+    @Published private var readerWork = ReaderWorkLane()
+    private var readerWorkTask: Task<Void, Never>? { readerWork.task }
+    private var readerWorkOwner: UUID? { readerWork.owner }
+    private var readerWorkKind: ReaderWorkLane.Kind? { readerWork.kind }
+    /// Includes predecessor drain and cancellation cleanup, so BLE cannot overlap HTTP.
     var readerWorkActive: AnyPublisher<Bool, Never> {
-        $readerWorkOwner.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
+        $readerWork.map(\.isActive).removeDuplicates().eraseToAnyPublisher()
     }
-    private enum ReaderWorkKind { case transfer, settings, preview, local, session, discovery, connection, storage, inventory, download, quietReading }
-    private var readerWorkKind: ReaderWorkKind?
+    private typealias ReaderWorkKind = ReaderWorkLane.Kind
     private var isInBackground = false
     private var expectedDeviceID: String?
     @Published private(set) var directConnectionRequested = false
@@ -2117,19 +2118,17 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// reconnecting or admitting new work during cleanup.
     func cancelConnectionAttempt() {
         guard canCancelConnection else { return }
-        let previous = readerWorkTask
-        previous?.cancel()
+        guard let reservation = readerWork.reserve(.session, cancelling: true) else { return }
+        let previous = reservation.predecessor
+        let owner = reservation.owner
         connectionAttempt += 1
         heartbeatTask?.cancel()
         discoveryIO.stop()
         directConnectionRequested = false
-        let owner = UUID()
-        readerWorkOwner = owner
-        readerWorkKind = .session
         isCancellingConnection = true
         isWorking = true
         post("Stopping connection…", tone: .pending)
-        readerWorkTask = Task {
+        let task = Task {
             defer {
                 isCancellingConnection = false
                 finishReaderWork(owner: owner, attempt: connectionAttempt)
@@ -2138,6 +2137,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             await finishConnection(preserveMessage: true)
             post("Connection cancelled. You can try again when ready.", tone: .pending)
         }
+        readerWork.attach(task, owner: owner)
     }
 
     func endConnection() {
@@ -2157,18 +2157,11 @@ final class PocketModel: ObservableObject, DeviceSession {
     @discardableResult
     private func startReaderWork(attempt: Int, kind: ReaderWorkKind = .transfer,
                                  operation: @escaping @MainActor (UUID) async -> Void) -> Task<Void, Never>? {
-        let previous = readerWorkTask
-        if previous != nil {
-            // User work preempts quiet exchange; otherwise only a new connection
-            // can replace a connection. Always drain predecessor I/O below.
-            guard readerWorkKind == .quietReading || (kind == .connection && readerWorkKind == .connection) else { return nil }
-            previous?.cancel()
-        }
-        let owner = UUID()
-        readerWorkOwner = owner
-        readerWorkKind = kind
+        guard let reservation = readerWork.reserve(kind) else { return nil }
+        let previous = reservation.predecessor
+        let owner = reservation.owner
         isWorking = kind != .quietReading
-        readerWorkTask = Task {
+        let task = Task {
             defer { finishReaderWork(owner: owner, attempt: attempt) }
             // Replacement reserves the lane immediately, but must drain every
             // predecessor (including non-cancellable OS association/cleanup).
@@ -2178,7 +2171,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             guard ownsReaderWork(owner, attempt: attempt) else { return }
             await operation(owner)
         }
-        return readerWorkTask
+        readerWork.attach(task, owner: owner)
+        return task
     }
 
     private func ownsReaderWork(_ owner: UUID, attempt: Int) -> Bool {
@@ -2191,9 +2185,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         // A finished transfer changes what the reader holds.
         if readerWorkKind == .transfer { readerInventoryWanted = true }
         let resumeTraffic = readerWorkKind != .local && readerWorkKind != .quietReading
-        readerWorkOwner = nil
-        readerWorkKind = nil
-        readerWorkTask = nil
+        readerWork.finish(owner)
         isWorking = false
         activeTransferKind = nil
         if resumeTraffic { resumeReaderTraffic(attempt: attempt) }

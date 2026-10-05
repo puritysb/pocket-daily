@@ -110,3 +110,43 @@ protocol DeviceSession: AnyObject {
     var mirror: DeviceMirror { get }
     var syncMode: DeviceSyncMode { get }
 }
+
+/// The single ownership record for device work. A replacement reserves the lane
+/// before its predecessor drains; an old completion cannot release a new owner.
+@MainActor
+struct ReaderWorkLane {
+    enum Kind { case transfer, settings, preview, local, session, discovery, connection, storage, inventory, download, quietReading }
+    struct Reservation {
+        let owner: UUID
+        let predecessor: Task<Void, Never>?
+    }
+    private(set) var owner: UUID?
+    private(set) var kind: Kind?
+    private(set) var task: Task<Void, Never>?
+    var isActive: Bool { owner != nil }
+
+    mutating func reserve(_ next: Kind, cancelling: Bool = false) -> Reservation? {
+        if isActive && !cancelling && kind != .quietReading && !(next == .connection && kind == .connection) {
+            return nil
+        }
+        let previous = task
+        previous?.cancel()
+        let token = UUID()
+        owner = token
+        kind = next
+        task = nil
+        return Reservation(owner: token, predecessor: previous)
+    }
+
+    mutating func attach(_ task: Task<Void, Never>, owner token: UUID) {
+        guard owner == token else { task.cancel(); return }
+        self.task = task
+    }
+
+    mutating func finish(_ token: UUID) {
+        guard owner == token else { return }
+        owner = nil
+        kind = nil
+        task = nil
+    }
+}
