@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Where your place in a book is kept in step, without a Pocket Daily
 /// account or any server to set up. A section of Settings; pairing the reader
-/// over Bluetooth lives with the other reader connections in Reader → Connection.
+/// over Bluetooth lives with the other reader connections in My Reader → Device.
 struct ReadingSyncSettingsSection: View {
     @ObservedObject var sync: ReadingSync
     @ObservedObject var model: PocketModel
@@ -11,31 +11,31 @@ struct ReadingSyncSettingsSection: View {
 
     var body: some View {
         Section {
-            Toggle("Your Apple devices (iCloud)", isOn: $sync.iCloudEnabled)
+            Toggle(isOn: $sync.iCloudEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Apple devices")
+                    Text("Share your place with iCloud").font(.caption).foregroundStyle(.secondary)
+                }
+            }
                 .accessibilityIdentifier("sync-icloud")
             if sync.iCloudEnabled && !sync.isICloudActive {
                 Text("Sign in to iCloud in Settings to continue between your iPhone, iPad and Mac.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Toggle("Your X3/X4 reader", isOn: $sync.readerExchangeEnabled)
+            Toggle(isOn: $sync.readerExchangeEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("X3 / X4 reader")
+                    Text("Share your place when connected").font(.caption).foregroundStyle(.secondary)
+                }
+            }
                 .accessibilityIdentifier("sync-reader-exchange")
-            if sync.readerExchangeEnabled {
-                Text("Places are exchanged when you connect, and automatically whenever a reader you connected before is in Same Wi-Fi mode while Pocket Daily is open: as you open or close a book, or return to the app.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if !model.isDemoMode {
-                    if let reader = link.rememberedReader {
-                        LabeledContent("Bluetooth", value: "\(reader.model) paired")
-                            .accessibilityIdentifier("sync-bluetooth-paired")
-                        Text(link.statusText).font(.caption).foregroundStyle(.secondary)
-                        if model.readerStatus?.deviceID == reader.readerID,
-                           let diagnostic = model.readerStatus?.readSync?.explanation {
-                            Text(diagnostic).font(.caption).foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Text("To also exchange places over Bluetooth, pair the reader once in Reader → Connection.")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .accessibilityIdentifier("sync-bluetooth-hint")
-                    }
+            if sync.readerExchangeEnabled, !model.isDemoMode, let reader = link.rememberedReader {
+                LabeledContent("Bluetooth", value: "\(reader.model) paired")
+                    .accessibilityIdentifier("sync-bluetooth-paired")
+                Text(link.statusText).font(.caption).foregroundStyle(.secondary)
+                if model.readerStatus?.deviceID == reader.readerID,
+                   let diagnostic = model.readerStatus?.readSync?.explanation {
+                    Text(diagnostic).font(.caption).foregroundStyle(.secondary)
                 }
             }
             if let last = sync.lastReaderExchange {
@@ -56,21 +56,21 @@ struct ReadingSyncSettingsSection: View {
         } header: {
             Text("Continue Reading")
         } footer: {
-            Text("When another device read more recently, or got further, Pocket Daily offers to jump there; it never moves your page by itself. No Pocket Daily account or server setup is needed. Only a fingerprint of the book and your place in it are shared, in your own iCloud or over the local Wi-Fi or Bluetooth connection to your reader. Each device needs the same book file: share it from the Library.")
+            Text("You choose before moving to another device’s place.")
         }
     }
 }
 
 /// Pairs the reader once so it can exchange reading places over Bluetooth
-/// when it closes a book, wakes or goes to sleep. It sits in Reader → Connection with the
+/// when it closes a book, wakes or goes to sleep. It sits in My Reader → Device with the
 /// other ways of reaching the reader.
 struct ReaderBluetoothPairingCard: View {
     @ObservedObject var sync: ReadingSync
     @ObservedObject private var link = ReaderBluetoothLink.shared
 
     var body: some View {
-        InspectorCard(title: "Reading sync over Bluetooth", symbol: "arrow.triangle.2.circlepath") {
-            Text("A paired reader exchanges places over Bluetooth when it closes a book, wakes or goes to sleep. Background delivery depends on the system and may wait until the next connection. Nothing moves your page until you choose.")
+        InspectorCard(title: "Continue reading across devices", symbol: "arrow.triangle.2.circlepath") {
+            Text("Bluetooth shares your reading position. Books and other files transfer over Wi-Fi. You choose when to jump to a shared position.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("sync-reader-bluetooth")
@@ -104,7 +104,7 @@ struct ReaderBluetoothPairingCard: View {
                     Button("Pair reader") { link.beginSetup() }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("sync-bluetooth-setup")
-                    Text("Once: on the reader, open Pocket Daily → Sync → Direct connection (Nearby Sync on older firmware), then choose Pair reader. Enter the code the reader shows if asked. Connecting directly pairs it too.")
+                    Text("On the reader: Pocket Daily → Sync → Direct connection. Then choose Pair reader and confirm its code. A direct Wi-Fi connection pairs it too.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

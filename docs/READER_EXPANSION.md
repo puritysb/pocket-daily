@@ -82,18 +82,23 @@ reading-progress v1로 구현했다([READING_PROGRESS.md](READING_PROGRESS.md), 
 - `Sources/Library/`: 서재 레코드, 가져오기(파일·Articles·직접 작성), 문서 식별, 서재 화면.
 - `Sources/Reading/`: 렌더러 브리지(WKWebView), 읽기 화면, 모양 설정, 위치 저장.
 - `Sources/Sync/`: 위치 레코드, iCloud·리더 교환, 이어 읽기 제안.
-- 최상위 화면: Library(첫 화면) · Reader. Reader 아래에 Connection(연결·펌웨어·Bluetooth) · Screens · Files가
-  온다(아래 "기기 중심 구조" 참고). 넓은 화면은 사이드바의 Library 아래 Books·Articles, Reader 아래 세 항목으로
-  이동한다. iPhone은 Library·Reader 두 탭이고, Reader 탭 위쪽에서 페이지를 고른다.
-  서재 제목 메뉴에서 Books·Articles를 전환한다.
+- 최상위 화면: Library(첫 화면) · My Reader. My Reader 개요 아래에 On Reader(기기 보관함) ·
+  Screens(Home/Sleep) · Reading(기기 독서 설정) · Device(연결·펌웨어·Bluetooth)가 온다.
+  넓은 화면은 사이드바, iPhone은 두 탭과 하위 화면의 뒤로 가기를 사용한다.
+  서재 제목 메뉴에서 Books·Articles를 전환하고 로컬 검색으로 찾는다.
 - 책은 모든 플랫폼에서 같은 앱 창의 읽기 화면으로 열린다. Library로 돌아오면 기존 분류와 스크롤 위치가 유지된다.
   Appearance·Continue Reading은 Settings 한 곳에 있다: 사이드바 아래 Settings, iPhone은 서재 머리의
-  톱니, macOS는 Settings 창(⌘,). 리더의 Bluetooth 페어링은 Reader → Connection에 있다.
-- 서재의 책은 "리더로 보내기"로 기존 전송 대기열을 사용한다.
+  톱니, macOS는 현재 창에 붙은 Settings 시트(⌘,). 리더의 Bluetooth 페어링은 My Reader → Device에 있다.
+- 서재의 책은 Send to Reader…로 현재 창의 작업 시트를 연다. 선택한 책의 준비 파일 ID만 전송하며,
+  연결·명시적 보내기·결과 확인을 같은 작업에서 이어 간다. 기존 준비 파일과 펌웨어는 함께 보내지 않는다.
 - 데모 모드는 기기 기능에만 적용된다. 서재·읽기는 실제 기능이며 기기를 바꾸지 않는다.
   처음 실행하면 원본 안내 책 한 권을 서재에 만든다.
 
-## 기기 중심 구조 — 2026-10-01 결정
+2026-10-05 IA 전환의 상세 설계와 검증 기준은 [IA_FINAL_DESIGN.md](IA_FINAL_DESIGN.md),
+[PRODUCT_UX_SPEC.md](PRODUCT_UX_SPEC.md), [IA_MIGRATION_PLAN.md](IA_MIGRATION_PLAN.md)를 따른다.
+아래 2026-10-01 구조와 단계는 당시 결정의 이력이며, 현재 화면 이름과 이동 경로는 위 앱 구조를 따른다.
+
+## 기기 중심 구조 — 2026-10-01 결정 이력
 
 기기는 화면 두 개(Screens, Device)로 나뉜 기능 묶음이 아니라 하나의 대상이다. 앱은 기기 없이 완결되고,
 기기가 있으면 그 기기 아래에서 설정·파일·위치를 다룬다.

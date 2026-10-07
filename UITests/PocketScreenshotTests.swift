@@ -38,13 +38,14 @@ final class PocketScreenshotTests: XCTestCase {
         try save(name: "03-home-x3")
 
         app.openCards()
-        XCTAssertTrue(app.waitForLayoutPreview(caption: "Card page"), "The card page never rendered")
+        XCTAssertTrue(app.waitForCardPreview(), "The card page never rendered")
         // Wide layouts show the canvas beside the card editor; compact ones scroll back to it.
-        if app.isCompact { app.revealCanvas() }
+        app.revealCanvas()
         try save(name: "04-cards")
+        app.buttons["content-editor-close"].tap()
 
         if app.isCompact {
-            app.open("Reader")
+            app.open("Device")
             XCTAssertTrue(app.buttons["Exit demo"].waitForExistence(timeout: 5))
             try save(name: "05-device")
         } else {
@@ -53,7 +54,7 @@ final class PocketScreenshotTests: XCTestCase {
             x4.open("Screens")
             XCTAssertTrue(x4.waitForLayoutPreview(), "The X4 Home preview never rendered")
             try save(name: "05-home-x4")
-            x4.open("Reader")
+            x4.open("Device")
             try save(name: "07-device")
         }
     }

@@ -9,6 +9,8 @@ struct ArticleShelf: View {
     @ObservedObject var inbox: ArticleInboxModel
     @Binding var adding: Bool
     @Binding var managingFeeds: Bool
+    var sendToReader: ((LibraryBook) -> Void)? = nil
+    var search: String = ""
     @State private var editing: ArticleRecord?
     @State private var deleting: ArticleSummary?
     @State private var error: String?
@@ -52,14 +54,14 @@ struct ArticleShelf: View {
             List {
                 if busy { ProgressView("Preparing article…") }
                 if let notice { Text(notice).font(.callout).foregroundStyle(.secondary) }
-                if let error = error ?? inbox.error { Text(error).font(.callout).foregroundStyle(.red) }
+                if let error = error ?? inbox.error ?? library.error { Text(error).font(.callout).foregroundStyle(.red) }
                 if inbox.failedFeeds > 0 {
                     Button { managingFeeds = true } label: {
                         Label("Some subscriptions could not refresh. Tap to review and retry.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                             .font(.callout)
                     }.buttonStyle(.plain)
                 }
-                ForEach(inbox.visibleArticles) { article in
+                ForEach(inbox.visibleArticles.filter { search.isEmpty || $0.title.localizedStandardContains(search) || $0.preview.localizedStandardContains(search) }) { article in
                     HStack(alignment: .top, spacing: 12) {
                         Button { article.hasText ? open(article) : review(article.id) } label: {
                             VStack(alignment: .leading, spacing: 8) {
@@ -164,8 +166,8 @@ struct ArticleShelf: View {
             Task { await inbox.setRead(article, !article.isRead) }
         }
         Button(article.hasText ? "Edit article" : "Get full text", systemImage: "pencil") { review(article.id) }
-        Button("Prepare for reader", systemImage: "arrow.up.doc") { prepare(article) }
-            .disabled(!model.canPrepareFiles || !article.hasText)
+        Button("Send to Reader…", systemImage: "arrow.up.doc") { prepare(article) }
+            .disabled(!article.hasText || sendToReader == nil)
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { deleting = article }
     }
@@ -197,10 +199,6 @@ struct ArticleShelf: View {
 
     /// Sends the same EPUB the Library reads, so both devices see one book.
     private func prepare(_ article: ArticleSummary) {
-        guard !model.preparedTransfers.contains(where: { $0.filename == "pd-article-\(article.id.uuidString.lowercased()).epub" }) else {
-            notice = "This article is already ready in Reader → Files. Choose Send after connecting."
-            return
-        }
         busy = true; error = nil; notice = nil
         Task { @MainActor in
             defer { busy = false }
@@ -208,16 +206,7 @@ struct ArticleShelf: View {
                 error = library.error
                 return
             }
-            do {
-                let url = try await library.fileURL(for: book)
-                guard let work = model.upload(url) else {
-                    throw PocketModel.ReadingPreparationFailure.unavailable
-                }
-                await work.value
-                notice = "Ready in Reader → Files. Connect the reader, then choose Send. Sending again replaces the same article; deleted reader copies are never sent automatically."
-            } catch {
-                self.error = error.localizedDescription
-            }
+            sendToReader?(book)
         }
     }
 }

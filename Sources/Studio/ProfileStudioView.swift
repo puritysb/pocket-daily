@@ -13,13 +13,57 @@ final class ProfileEditorState: ObservableObject {
     /// What the last merge with the reader's settings did, until dismissed.
     @Published private(set) var mergeReport: ProfileMerge.Report?
 
+    @Published var localSaveError: String?
+    @Published private(set) var targetDeviceID: String?
+    @Published private(set) var connectedDeviceID: String?
+    private var reviewDeviceID: String?
+    @Published private(set) var targetMismatch = false
+
     var isDirty: Bool { draft != base }
+
+    /// Reader identity is checked before either baseline can change. Generic
+    /// offline edits may merge for review, but are bound only by explicit Apply.
+    func observeTarget(_ deviceID: String?) {
+        guard let deviceID else { connectedDeviceID = nil; return }
+        let previous = targetDeviceID ?? reviewDeviceID
+        if let previous, previous != deviceID, isDirty || readingDirty {
+            targetMismatch = true
+            connectedDeviceID = deviceID
+            return
+        }
+        if previous != deviceID { baseGeneration = nil; mergeReport = nil }
+        connectedDeviceID = deviceID
+        reviewDeviceID = deviceID
+        targetMismatch = false
+        if !isDirty && !readingDirty { targetDeviceID = deviceID }
+    }
+
+    func bindForApply(to deviceID: String) -> Bool {
+        guard !targetMismatch, connectedDeviceID == deviceID else { return false }
+        targetDeviceID = deviceID
+        return true
+    }
+
+    /// Explicitly copy edits to a different reader, retaining the original
+    /// snapshot for recovery before changing identity.
+    func useDraft(with deviceID: String, store: ProfileEditStore = .live) async throws {
+        if let snapshot { try await Task.detached { try store.archive(snapshot) }.value }
+        guard connectedDeviceID == deviceID else { return }
+        targetDeviceID = deviceID
+        connectedDeviceID = deviceID
+        reviewDeviceID = deviceID
+        targetMismatch = false
+        baseGeneration = nil
+        mergeReport = nil
+    }
 
     /// Adopt a newly loaded or saved reader profile. Unsent edits are merged
     /// field by field (`ProfileMerge`) instead of either side winning wholesale.
     func sync(with reader: ReaderProfileState?) {
         // Daemon-fed items are dropped on load, so they never count as edits.
         guard let reader else { return }
+        observeTarget(reader.deviceID)
+        guard !targetMismatch else { return }
         let incoming = reader.profile.withoutRetiredItems
         guard reader.generation != baseGeneration || incoming != base else { return }
         if isDirty && draft != incoming {
@@ -60,12 +104,17 @@ final class ProfileEditorState: ObservableObject {
     var snapshot: ProfileEditSnapshot? {
         guard isDirty || readingDirty else { return nil }
         return ProfileEditSnapshot(draft: draft, base: base, baseGeneration: baseGeneration,
-                                   reading: reading, readingBase: readingBase, savedAt: Date())
+                                   reading: reading, readingBase: readingBase, savedAt: Date(), targetDeviceID: targetDeviceID, reviewDeviceID: reviewDeviceID)
     }
 
     /// Restores saved edits; the next reader load merges them with what the reader holds.
     func restore(_ snapshot: ProfileEditSnapshot?) {
         guard let snapshot else { return }
+        mergeReport = nil
+        connectedDeviceID = nil
+        targetMismatch = false
+        targetDeviceID = snapshot.targetDeviceID
+        reviewDeviceID = snapshot.reviewDeviceID
         draft = snapshot.draft
         base = snapshot.base
         baseGeneration = snapshot.baseGeneration
@@ -75,6 +124,10 @@ final class ProfileEditorState: ObservableObject {
 
     /// Demo starts from a clean editor; its edits are never saved.
     func reset() {
+        targetDeviceID = nil
+        connectedDeviceID = nil
+        reviewDeviceID = nil
+        targetMismatch = false
         draft = .defaults
         base = .defaults
         baseGeneration = nil
@@ -83,17 +136,17 @@ final class ProfileEditorState: ObservableObject {
         mergeReport = nil
     }
 
-    private static let defaultReading = ReaderPreferences(sideButtons: .previousNext,
+    private static let defaultReading = ReaderPreferences(orientation: .portrait, lineSpacing: .normal, screenMargin: 5, sideButtons: .previousNext,
                                                           frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
 
-    @Published var reading = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
-    @Published private(set) var readingBase = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
+    @Published var reading = ReaderPreferences(orientation: .portrait, lineSpacing: .normal, screenMargin: 5, sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
+    @Published private(set) var readingBase = ReaderPreferences(orientation: .portrait, lineSpacing: .normal, screenMargin: 5, sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
     var readingDirty: Bool { reading != readingBase }
 
     /// Adopt untouched fields, retaining edits made before connecting
     /// (`ProfileMerge`); fields both sides changed are reported.
     func syncReading(_ loaded: ReaderPreferences?) {
-        guard let loaded, loaded != readingBase else { return }
+        guard !targetMismatch, let loaded, loaded != readingBase else { return }
         let merged = ProfileMerge.merge(base: readingBase, mine: reading, reader: loaded)
         if readingDirty { note(merged.report) }
         readingBase = loaded
@@ -106,54 +159,140 @@ final class ProfileEditorState: ObservableObject {
         reading = saved
     }
 
+    enum Scope: String, CaseIterable {
+        case home = "Home", sleep = "Sleep", reading = "Reading"
+        var fields: [ProfileMerge.Field] {
+            switch self {
+            case .home: [.homeItems, .dailyWord, .weather, .nextEvent, .startup]
+            case .sleep: [.sleepMode, .sleepSections, .sleepCover, .sleepTimeout, .wakeCue]
+            case .reading: [.textSize, .orientation, .lineSpacing, .screenMargin, .sideButtons, .frontButtons]
+            }
+        }
+    }
+
+    func report(in scope: Scope) -> ProfileMerge.Report? {
+        guard var report = mergeReport else { return nil }
+        report.fromReader = report.fromReader.filter { scope.fields.contains($0) }
+        report.bothChanged = report.bothChanged.filter { scope.fields.contains($0) }
+        return report.isEmpty ? nil : report
+    }
+
+    func dismissReport(in scope: Scope) {
+        mergeReport?.fromReader.removeAll { scope.fields.contains($0) }
+        mergeReport?.bothChanged.removeAll { scope.fields.contains($0) }
+    }
+
+    func useReader(in scope: Scope) {
+        let fields = report(in: scope)?.bothChanged ?? []
+        ProfileMerge.take(fields, from: base, into: &draft)
+        ProfileMerge.take(fields, from: readingBase, into: &reading)
+        dismissReport(in: scope)
+    }
+
+    func pending(in scope: Scope) -> [ProfileMerge.Field] {
+        pendingFields.filter { scope.fields.contains($0) }
+    }
+
+    func profile(in scope: Scope) -> PocketProfile {
+        var result = base
+        ProfileMerge.take(scope.fields, from: draft, into: &result)
+        return result
+    }
+
+    func preferences(in scope: Scope) -> ReaderPreferences {
+        var result = readingBase
+        ProfileMerge.take(scope.fields, from: reading, into: &result)
+        return result
+    }
+
+    func revert(_ scope: Scope) {
+        ProfileMerge.take(scope.fields, from: base, into: &draft)
+        ProfileMerge.take(scope.fields, from: readingBase, into: &reading)
+        mergeReport?.bothChanged.removeAll { scope.fields.contains($0) }
+    }
+
     func revert() { draft = base; reading = readingBase }
 }
 
-/// Home & Sleep editor, organized around the reader's two Pocket Daily screens.
-/// Pick one and the canvas shows it drawn by the firmware painter with the
-/// user's own cards and sample content (an outline when that renderer is
-/// unavailable); independently scrolling controls beside or below it edit that
-/// screen. Its pages or sections are modules switched on and dragged into
-/// order, and My cards live inside Home. Reading size follows screen settings,
-/// and one Apply sends everything that changed.
+/// Reader customization separates screen design from reading preferences.
+/// Home, Sleep and Reading each apply or discard only their own settings.
+/// Card content autosaves locally and has an explicit, separate Apply cards action.
 struct ProfileStudioView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var editor: ProfileEditorState
+    @ObservedObject private var glanceSettings: GlanceSettings
     var contentPadding: CGFloat = 0
+    let onConnect: () -> Void
+    let connectionContent: (() -> AnyView)?
+    let cancelConnection: () -> Void
+    let sourceTaskRequest: SourceTaskRequest?
+    let onSourceTaskOpened: () -> Void
+    let screenTaskRequest: ScreenTaskRequest?
+    let onScreenTaskOpened: () -> Void
+    @State private var activeContentEditor: StudioContentTask?
     @State private var preview: PreviewSurface = .home
     @State private var schematic: CGImage?
     @StateObject private var layout = LayoutPreviewModel()
-    @StateObject private var cardPreview = ContentPreviewModel()
     @State private var cards: ContentEditorModel?
     @State private var observedCards = ContentDraft()
     @State private var cardsError: String?
-    @State private var selectedCardID: String?
-    @State private var editingCards: Bool
     @State private var confirmingDiscard = false
-    @State private var showsReadingSample = false
+    @State private var confirmingTarget = false
+    @State private var recoveringDraft = false
+    @State private var targetError: String?
+    @State private var recoveredDrafts: [ProfileEditSnapshot] = []
+    private var showsReadingSample: Bool { preview == .reading }
     @State private var drag: ReorderDrag?
     /// Where Weather returns when switched back on.
     @State private var weatherWhenOn: PocketProfile.WeatherPanel = .bottom
 
     /// What the canvas draws. A card page belongs to Home: the selected card
     /// as the reader shows it when opened.
-    enum PreviewSurface: String, CaseIterable { case home = "Home", card = "Card", sleep = "Sleep" }
+    enum PreviewSurface: String, CaseIterable { case home = "Home", reading = "Reading", card = "Card", sleep = "Sleep" }
     /// The screens the editor is organized around.
-    enum Screen: String, CaseIterable { case home = "Home", sleep = "Sleep" }
+    typealias Screen = ProfileEditorState.Scope
+    enum Destination: String, Hashable { case screens, reading }
+    enum SourceEditor: Equatable, Sendable { case cards, weatherCalendar }
+    struct ScreenTaskRequest: Equatable, Sendable {
+        let id: UUID
+        let screen: ReaderScreen
+    }
+    struct SourceTaskRequest: Equatable, Sendable {
+        let id: UUID
+        let destination: SourceEditor
+    }
+    @State private var appliedScope: Screen?
 
     init(model: PocketModel, editor: ProfileEditorState, contentPadding: CGFloat = 0,
-         initialPreview: PreviewSurface = .home) {
+         initialPreview: PreviewSurface = .home, destination: Destination? = nil,
+         sourceTaskRequest: SourceTaskRequest? = nil, onSourceTaskOpened: @escaping () -> Void = {},
+         screenTaskRequest: ScreenTaskRequest? = nil, onScreenTaskOpened: @escaping () -> Void = {},
+         connectionContent: (() -> AnyView)? = nil, cancelConnection: @escaping () -> Void = {},
+         onConnect: @escaping () -> Void = {}) {
         self.model = model
         self.editor = editor
+        self.glanceSettings = model.glanceSettings
         self.contentPadding = contentPadding
-        _preview = State(initialValue: initialPreview)
-        _editingCards = State(initialValue: initialPreview == .card)
+        self.onConnect = onConnect
+        self.connectionContent = connectionContent
+        self.cancelConnection = cancelConnection
+        self.sourceTaskRequest = sourceTaskRequest
+        self.onSourceTaskOpened = onSourceTaskOpened
+        self.screenTaskRequest = screenTaskRequest
+        self.onScreenTaskOpened = onScreenTaskOpened
+        let surface = destination == .reading ? PreviewSurface.reading : initialPreview == .card || (destination == .screens && initialPreview == .reading) ? .home : initialPreview
+        _preview = State(initialValue: surface)
+        _activeContentEditor = State(initialValue: sourceTaskRequest.map {
+            $0.destination == .cards ? .cards : .glance
+        } ?? (initialPreview == .card ? .cards : nil))
     }
 
     var body: some View {
         GeometryReader { geometry in
             let sideBySide = geometry.size.width >= 680
+            let condensed = !sideBySide && geometry.size.height < 430
             VStack(spacing: 12) {
+
                 if sideBySide { applyBar }
                 if sideBySide {
                     HStack(alignment: .top, spacing: 28) {
@@ -162,15 +301,41 @@ struct ProfileStudioView: View {
                         editorScroll
                     }
                 } else {
-                    canvas(height: min(240, max(90, geometry.size.height * 0.31)))
+                    canvas(height: condensed ? 60 : min(180, max(90, geometry.size.height * 0.24)), condensed: condensed)
                     Divider()
                     editorScroll
-                    applyBar
+                    if condensed { HStack { Spacer(); applyControls } } else { applyBar }
                 }
             }
             .padding(contentPadding)
         }
+        .sheet(item: $activeContentEditor) { task in
+            StudioContentSheet(model: model, task: task, cards: cards, loadError: cardsError,
+                               reloadCards: { await openCards() }, connectionContent: connectionContent,
+                               cancelConnection: cancelConnection)
+        }
+        .onChange(of: screenTaskRequest?.id) { _, _ in
+            if let screenTaskRequest {
+                preview = screenTaskRequest.screen == .home ? .home : .sleep
+                onScreenTaskOpened()
+            }
+        }
+        .onChange(of: sourceTaskRequest?.id) { _, _ in
+            if let sourceTaskRequest {
+                openSource(sourceTaskRequest.destination)
+                onSourceTaskOpened()
+            }
+        }
         .onAppear {
+            if let screenTaskRequest {
+                preview = screenTaskRequest.screen == .home ? .home : .sleep
+                onScreenTaskOpened()
+            }
+            if let sourceTaskRequest {
+                openSource(sourceTaskRequest.destination)
+                onSourceTaskOpened()
+            }
+            editor.observeTarget(model.readerStatus?.deviceID)
             editor.sync(with: model.readerProfile)
             if !model.preferencesDirty { editor.syncReading(model.preferences) }
             if editor.draft.home.weather != .off { weatherWhenOn = editor.draft.home.weather }
@@ -178,33 +343,51 @@ struct ProfileStudioView: View {
         .onReceive(cards?.$draft.eraseToAnyPublisher() ?? Just(ContentDraft()).eraseToAnyPublisher()) {
             if observedCards != $0 { observedCards = $0 }
         }
+        .onChange(of: model.readerStatus?.deviceID) { _, identity in editor.observeTarget(identity) }
         .onChange(of: model.preferences) { _, preferences in
             if !model.preferencesDirty { editor.syncReading(preferences) }
         }
         .onChange(of: model.preferencesDirty) { wasDirty, dirty in
-            if wasDirty && !dirty { editor.acceptReading(model.preferences) }
+            if wasDirty && !dirty { editor.syncReading(model.preferences) }
         }
-        .alert("Discard layout and reading-setting edits?", isPresented: $confirmingDiscard) {
+        .onChange(of: model.preferencesBaseline) { _, saved in editor.syncReading(saved) }
+        .alert("Discard \(screen.rawValue) edits?", isPresented: $confirmingDiscard) {
             Button("Discard edits", role: .destructive) {
-                editor.revert()
-                model.revertPreferences()
+                editor.revert(screen)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Restores the last loaded layout and reading settings, or their starting defaults before connecting. Card edits stay. Nothing is sent to the reader.")
+            Text("Restores \(screen.rawValue) to its last loaded settings. Edits in other sections stay.")
+        }
+        .alert("Use this draft with the connected reader?", isPresented: $confirmingTarget) {
+            Button("Use a copy") {
+                guard let identity = model.readerStatus?.deviceID else { return }
+                recoveringDraft = true
+                Task {
+                    defer { recoveringDraft = false }
+                    do {
+                    try await editor.useDraft(with: identity)
+                    recoveredDrafts = await Task.detached { ProfileEditStore.live.recoveredDrafts() }.value
+                    editor.sync(with: model.readerProfile)
+                    editor.syncReading(model.preferences)
+                    targetError = nil
+                } catch { targetError = "Could not preserve the original draft. Try again. " + error.localizedDescription } }
+            }
+            Button("Keep original", role: .cancel) {}
+        } message: {
+            Text("The original stays in local draft recovery. Review the merged changes before Apply to Reader.")
         }
         .onChange(of: model.readerProfile) { _, reader in editor.sync(with: reader) }
-        .onChange(of: editor.draft) { _, _ in showsReadingSample = false }
         .onChange(of: editor.draft.home.weather) { _, weather in if weather != .off { weatherWhenOn = weather } }
-        .task(id: model.isDemoMode) { await openCards() }
+        .task(id: model.isDemoMode) {
+            recoveredDrafts = model.isDemoMode ? [] : await Task.detached { ProfileEditStore.live.recoveredDrafts() }.value
+            await openCards()
+        }
         .task(id: previewKey) {
             renderSchematic()
             if let request = layoutRequest { await layout.update(request) }
         }
-        .task(id: cardRequest) {
-            if let cardRequest { await cardPreview.update(cardRequest) } else { cardPreview.cancel() }
-        }
-        .onDisappear { cardPreview.cancel() }
+
     }
 
     /// Editing never scrolls the preview or Apply out of sight.
@@ -223,12 +406,8 @@ struct ProfileStudioView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var screen: Screen { preview == .sleep ? .sleep : .home }
+    private var screen: Screen { preview == .reading ? .reading : preview == .sleep ? .sleep : .home }
     private var draftCards: ContentDraft { observedCards }
-    private var selectedCard: ContentCard? {
-        draftCards.cards.first { $0.id == selectedCardID } ?? draftCards.cards.first
-    }
-
     // MARK: Canvas
 
     private struct PreviewKey: Equatable {
@@ -247,7 +426,7 @@ struct ProfileStudioView: View {
 
     /// The reader's own sleep screen and a card page are not layouts.
     private var layoutRequest: LayoutPreviewRequest? {
-        if preview == .card || (preview == .sleep && editor.draft.sleep.mode == .reader) { return nil }
+        if preview == .reading || preview == .card || (preview == .sleep && editor.draft.sleep.mode == .reader) { return nil }
         guard editor.draft.validationError == nil else { return nil }
         return LayoutPreviewRequest(profile: editor.draft, surface: preview == .home ? .home : .brief,
                                     hardware: model.hardware, cards: draftCards,
@@ -255,57 +434,55 @@ struct ProfileStudioView: View {
                                     sleepCover: editor.reading.pocketDailySleepCover)
     }
 
-    private var cardRequest: ContentPreviewRequest? {
-        guard preview == .card, let card = selectedCard else { return nil }
-        return .init(card: card, image: draftCards.images[card.imagePath], hardware: model.hardware,
-                     orientation: .portrait, style: model.readerDisplay.map(PreviewStyle.init(reader:)) ?? .reference)
-    }
-
-    private var showsRender: Bool {
-        preview == .card ? cardPreview.image != nil : layoutRequest != nil && layout.image != nil
-    }
+    private var showsRender: Bool { layoutRequest != nil && layout.image != nil }
     private var canvasImage: CGImage? {
         if showsReadingSample { return ImageRenderer(content: readingSample).cgImage }
-        if preview == .card { return cardPreview.image }
         return showsRender ? layout.image : schematic
     }
 
-    private func canvas(height: CGFloat) -> some View {
+    private func canvas(height: CGFloat, condensed: Bool = false) -> some View {
         VStack(spacing: 10) {
-            Picker("Screen", selection: Binding(get: { screen }, set: { showsReadingSample = false; preview = $0 == .home ? .home : .sleep })) {
-                ForEach(Screen.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            if !showsReadingSample && !condensed {
+                Picker("Screen", selection: Binding(get: { screen }, set: { preview = $0 == .home ? .home : .sleep })) {
+                    Text("Home").tag(Screen.home)
+                    Text("Sleep").tag(Screen.sleep)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityIdentifier("profile-screen")
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 220)
-            .accessibilityIdentifier("profile-screen")
-            PocketDevicePreview(hardware: model.hardware, status: model.readerStatus, renderedScreen: canvasImage)
+            Group {
+                if showsReadingSample, let image = canvasImage {
+                    Image(decorative: image, scale: 1)
+                        .resizable().scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .padding(8)
+                        .background(PocketPalette.deviceTop, in: RoundedRectangle(cornerRadius: 12))
+                } else {
+                    PocketDevicePreview(hardware: model.hardware, status: model.readerStatus, renderedScreen: canvasImage)
+                }
+            }
                 .frame(maxWidth: 340)
                 .frame(height: height)
-                .overlay { canvasOverlay }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(canvasLabel)
                 .accessibilityValue(canvasIsCurrent ? "Current" : "Updating")
                 .accessibilityIdentifier("profile-canvas")
-            Text(showsReadingSample ? "Text size example · approximate appearance" : "Layout preview · not a live reader screen")
-                .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            HStack(spacing: 10) {
-                Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .help(preview == .card ? "The card as the reader draws it when opened." :
-                          showsRender ? "Preview uses your card drafts plus an example book, weather and schedule. It is not a live image of your reader." : "")
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(canvasCaption)
-                    .accessibilityIdentifier("profile-canvas-caption")
-                if showsReadingSample {
-                    Button("Back to layout") { showsReadingSample = false }
-                        .font(.caption2).accessibilityIdentifier("profile-back-to-layout")
-                } else if preview == .card {
-                    Button("Show Home") { preview = .home }
-                        .buttonStyle(.borderless)
+            if !condensed {
+                Text(showsReadingSample ? "Reading preview · approximate appearance" : "Layout preview · not a live reader screen")
+                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            }
+            if !showsReadingSample {
+                HStack(spacing: 10) {
+                    Label(canvasCaption, systemImage: showsRender ? "text.below.photo" : "square.dashed")
                         .font(.caption2)
-                        .accessibilityIdentifier("profile-show-home")
+                        .foregroundStyle(.secondary)
+                        .help(preview == .card ? "The card as the reader draws it when opened." :
+                              showsRender ? "Preview uses your card drafts plus an example book, weather and schedule. It is not a live image of your reader." : "")
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(canvasCaption)
+                        .accessibilityIdentifier("profile-canvas-caption")
+
                 }
             }
         }
@@ -313,29 +490,16 @@ struct ProfileStudioView: View {
         .multilineTextAlignment(.center)
     }
 
-    @ViewBuilder private var canvasOverlay: some View {
-        if showsReadingSample {
-            EmptyView()
-        } else if preview == .card, selectedCard == nil {
-            Text("Add a card to see it here").font(.caption)
-                .padding(10).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-        } else if preview == .card, cardPreview.image == nil, let error = cardPreview.error {
-            Text(error).font(.caption).multilineTextAlignment(.center)
-                .padding(10).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                .padding(40)
-        }
-    }
-
     private var canvasIsCurrent: Bool {
         if showsReadingSample { return true }
-        if preview == .card { return cardRequest == nil || cardPreview.renderedRequest == cardRequest }
         return layoutRequest == nil || layout.renderedRequest == layoutRequest
     }
 
     private var canvasLabel: String {
-        if showsReadingSample { return "Reading example, text size \(editor.reading.fontSize + 1) of 4" }
+        if showsReadingSample { return "Reading example, \(editor.reading.orientation?.title ?? "Portrait"), text size \(editor.reading.fontSize + 1) of 4" }
         return switch preview {
-        case .card: selectedCard.map { "Card \($0.title)" } ?? "No card"
+        case .reading: "Reading preview"
+        case .card: "Home preview"
         case .home, .sleep:
             showsRender ? "Pocket Daily \(preview.rawValue.lowercased()) with sample content"
                         : "Outline of the Pocket Daily \(preview.rawValue.lowercased()) layout"
@@ -344,7 +508,6 @@ struct ProfileStudioView: View {
 
     private var canvasCaption: String {
         if showsReadingSample { return "Example article · actual font and pages depend on the book" }
-        if preview == .card { return "Card page" }
         if showsRender {
             if model.isDemoMode { return "Demo cards · example book, weather & schedule" }
             return draftCards.cards.isEmpty ? "Example book, weather & schedule" : "Your cards · example book, weather & schedule"
@@ -355,64 +518,45 @@ struct ProfileStudioView: View {
 
     // MARK: Apply
 
-    private var cardsRevision: ContentRevision? {
-        guard let cards, !cards.draft.cards.isEmpty else { return nil }
-        return try? cards.deploymentSnapshot()
+    private var scopedProfile: PocketProfile { editor.profile(in: screen) }
+    private var defaultProfile: PocketProfile {
+        var result = editor.base
+        ProfileMerge.take(screen.fields, from: PocketProfile.defaults, into: &result)
+        return result
     }
-
-    private var cardsValidation: String? {
-        guard let cards, !cards.draft.cards.isEmpty else { return nil }
-        do { _ = try cards.deploymentSnapshot(); return nil } catch { return MyCardsEditor.describe(error) }
-    }
-
-    /// My cards differ from what the reader has (or the reader's set is unknown).
-    private var cardsDirty: Bool {
-        guard model.contentEditingSession != nil, let revision = cardsRevision else { return false }
-        return revision.revision != model.readerContentRevision
-    }
-
-    private var cardStatus: ContentSendStatus {
-        ContentSendStatus.evaluate(.init(
-            isDemo: model.isDemoMode, connected: model.readerStatus != nil,
-            canPresent: model.contentEditingSession != nil, validation: cardsValidation,
-            cardCount: draftCards.cards.count, draftRevision: cardsRevision?.revision,
-            phase: model.contentDeployment?.phase, redrawConfirmed: model.contentRedrawReceipt,
-            busy: model.isWorking))
-    }
-
-    private var profileDirty: Bool { model.canEditReaderProfile && editor.isDirty }
-    private var anythingDirty: Bool { profileDirty || editor.readingDirty || model.preferencesDirty || cardsDirty }
+    private var scopedPreferences: ReaderPreferences { editor.preferences(in: screen) }
+    private var profileDirty: Bool { model.canEditReaderProfile && scopedProfile != editor.base }
+    private var preferencesDirty: Bool { scopedPreferences != editor.readingBase }
+    private var anythingDirty: Bool { !editor.pending(in: screen).isEmpty }
 
     private var status: (text: String, symbol: String, color: Color) {
+        if let error = editor.localSaveError { return ("Draft not saved · " + error, "exclamationmark.triangle", .red) }
+        if editor.targetMismatch { return ("Draft belongs to another reader", "exclamationmark.triangle", .orange) }
         if model.isDemoMode { return ("Demo · nothing is sent", "info.circle", .secondary) }
         if model.readerStatus == nil {
-            return (editor.isDirty || editor.readingDirty
-                        ? "Edits saved in the app · connect to reader Sync to apply"
-                        : "Editing in the app · connect to reader Sync to apply", "info.circle", .secondary)
+            return (anythingDirty
+                        ? "Local draft · not applied"
+                        : "Preview without a reader", "info.circle", .secondary)
         }
-        if editor.readingDirty && model.preferences == nil {
+        if preferencesDirty && model.preferences == nil {
             return ("Reconnect to reader Sync to load settings before applying", "info.circle", .orange)
         }
-        if let error = editor.draft.validationError ?? cardsValidation { return (error, "exclamationmark.triangle", .red) }
-        if case let .sending(step) = cardStatus { return ("\(step)…", "arrow.triangle.2.circlepath", .secondary) }
+        if let error = scopedProfile.validationError { return (error, "exclamationmark.triangle", .red) }
         if model.profileSend == .sending { return ("Applying on the reader…", "arrow.triangle.2.circlepath", .secondary) }
         if case .showing = model.screenShow { return ("Showing it on the reader…", "arrow.triangle.2.circlepath", .secondary) }
         switch model.profileSend {
         case .conflict: return ("Changed on the reader · its version was loaded", "exclamationmark.triangle", .orange)
-        case let .failed(message) where anythingDirty: return ("Not applied · \(message)", "xmark.octagon", .red)
+        case let .failed(message) where anythingDirty && appliedScope == screen: return ("Not applied · \(message)", "xmark.octagon", .red)
         default: break
         }
-        switch cardStatus {
-        case .needsCheck: return (cardStatus.label, cardStatus.symbol, .orange)
-        case .failed where cardsDirty: return ("Cards not applied · \(model.message)", "xmark.octagon", .red)
-        default: break
+        if !model.canEditReaderProfile && scopedProfile != editor.base {
+            return ("Home & Sleep changes need compatible firmware. Open My Reader → Device.", "exclamationmark.triangle", .orange)
         }
-        if anythingDirty { return ("Edits in the app · not yet applied to reader", "circle.dashed", .orange) }
-        if case .storedNotShown = cardStatus { return (cardStatus.label, cardStatus.symbol, .orange) }
-        if !model.canEditReaderProfile && editor.isDirty {
-            return ("This reader's firmware can't store Home & Sleep yet", "exclamationmark.triangle", .orange)
+        if anythingDirty { return ("\(screen.rawValue) · unapplied changes", "circle.dashed", .orange) }
+        if appliedScope == screen, preview == .reading, case .saved = model.profileSend {
+            return ("Saved on reader · open a book to see changes", "checkmark.circle.fill", .green)
         }
-        switch model.screenShow {
+        switch appliedScope == screen ? model.screenShow : .idle {
         case let .shown(screen, _):
             return ("Applied · \(screen == .home ? "Home" : "sleep screen") shown on the reader",
                     "checkmark.circle.fill", .green)
@@ -422,12 +566,10 @@ struct ProfileStudioView: View {
         }
         // Without screen presentation the reader redraws Home and Sleep from a
         // saved profile only when it next paints Pocket Daily (when Sync ends).
-        if case .saved = model.profileSend {
-            return (cardStatus == .shown ? "Applied · card on screen now, Home and Sleep when you leave Sync"
-                                         : "Applied · Home and Sleep show when you leave Sync",
+        if appliedScope == screen, case .saved = model.profileSend {
+            return ("Saved · shows when you leave Sync",
                     "checkmark.circle.fill", .green)
         }
-        if cardStatus == .shown { return ("Applied · card shown on the reader", "checkmark.circle.fill", .green) }
         return ("Up to date with the reader", "checkmark.circle.fill", .green)
     }
 
@@ -438,14 +580,14 @@ struct ProfileStudioView: View {
         switch preview {
         case .home: .home
         case .sleep: editor.draft.sleep.mode == .brief ? .brief : nil
-        case .card: nil
+        case .card, .reading: nil
         }
     }
 
     private var canApply: Bool {
-        model.readerStatus != nil && !model.isDemoMode && !model.isWorking && anythingDirty &&
-            (!editor.readingDirty || model.preferences != nil) &&
-            editor.draft.validationError == nil && (cardsValidation == nil || !cardsDirty)
+        model.readerStatus?.deviceID != nil && !editor.targetMismatch && !model.isDemoMode && !model.isWorking && !recoveringDraft && anythingDirty &&
+            (!preferencesDirty || model.preferences != nil) &&
+            (scopedProfile == editor.base || model.canEditReaderProfile) && scopedProfile.validationError == nil
     }
 
     /// One line when it fits; otherwise the status above the buttons.
@@ -465,19 +607,21 @@ struct ProfileStudioView: View {
                     }
                 }
             }
-            if let report = editor.mergeReport, !model.isDemoMode {
+            Text(screen == .reading ? "Reading settings" : screen.rawValue + " layout").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            if editor.targetMismatch, !model.isDemoMode {
+                Button("Use a copy with this reader…") { confirmingTarget = true }
+                    .accessibilityIdentifier("profile-use-current-reader")
+            }
+            if let targetError { Text(targetError).font(.caption).foregroundStyle(.red) }
+            if let report = editor.report(in: screen), !model.isDemoMode {
                 MergeNotice(report: report, pending: pendingNames, describe: describe,
-                            useReader: editor.useReaderForBothChanged, dismiss: editor.dismissMergeReport)
+                            useReader: { editor.useReader(in: screen) }, dismiss: { editor.dismissReport(in: screen) })
             } else if model.readerStatus != nil, !model.isDemoMode, let pendingNames {
                 Text("Apply changes on the reader: " + pendingNames)
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("profile-pending")
             }
-            if case .needsCheck = cardStatus, let deployment = model.contentDeployment {
-                ContentDeploymentStatus(deployment: deployment, model: model)
-            }
-            ContentJournalRecovery(model: model)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -488,7 +632,7 @@ struct ProfileStudioView: View {
     /// What Apply would change, named as on screen; a setting hidden by another
     /// says why it is not visible. Nil when nothing would change.
     private var pendingNames: String? {
-        let fields = editor.pendingFields
+        let fields = editor.pending(in: screen)
         guard !fields.isEmpty else { return nil }
         return fields.map(describe).joined(separator: ", ")
     }
@@ -507,20 +651,31 @@ struct ProfileStudioView: View {
 
     @ViewBuilder private var applyControls: some View {
         Button("Discard edits…") { confirmingDiscard = true }
-        .disabled(!(editor.isDirty || editor.readingDirty || model.preferencesDirty) || model.isWorking)
-        .help("Discard layout and reading-setting edits. Card edits stay; nothing is sent to the reader.")
+        .disabled(!anythingDirty || model.isWorking)
+        .help("Discard only \(screen.rawValue) edits.")
         .accessibilityIdentifier("profile-revert")
-        Button("Apply to reader") {
-            if editor.readingDirty { model.stageReadingPreferences(editor.reading) }
-            model.sendReaderLayout(profile: profileDirty ? editor.draft : nil,
-                                   cards: cardsDirty ? cardsRevision : nil, show: screenToShow)
+        if model.readerStatus == nil && !model.isDemoMode {
+            Button("Connect reader…", systemImage: "antenna.radiowaves.left.and.right", action: onConnect)
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("profile-connect")
+        } else {
+            Button("Apply to Reader") {
+                guard let identity = model.readerStatus?.deviceID, editor.bindForApply(to: identity) else { return }
+                appliedScope = screen
+                model.sendReaderLayout(profile: profileDirty ? scopedProfile : nil,
+                                       cards: nil, show: screenToShow, drawCards: false,
+                                       settingsOverride: preferencesDirty ? scopedPreferences : nil,
+                                       includePendingPreferences: false,
+                                       taskDestination: screen == .reading ? .reading : .screens,
+                                       taskScreen: screen == .reading ? nil : screen == .sleep ? .brief : .home)
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.return, modifiers: .command)
+            .disabled(!canApply)
+            .help(preview != .reading && model.canShowScreens ? "Apply to the reader (⌘↩). It shows the screen you are editing and stays in Sync."
+                                       : "Apply to the reader (⌘↩). The reader stays in Sync.")
+            .accessibilityIdentifier("profile-apply")
         }
-        .buttonStyle(.borderedProminent)
-        .keyboardShortcut(.return, modifiers: .command)
-        .disabled(!canApply)
-        .help(model.canShowScreens ? "Apply to the reader (⌘↩). It shows the screen you are editing and stays in Sync."
-                                   : "Apply to the reader (⌘↩). The reader stays in Sync.")
-        .accessibilityIdentifier("profile-apply")
     }
 
     // MARK: Controls
@@ -537,7 +692,7 @@ struct ProfileStudioView: View {
                                 on surface: PreviewSurface? = nil) -> Binding<Value>? {
         Binding(get: { get(editor.reading) }, set: { value in
             set(&editor.reading, value)
-            if let surface { showsReadingSample = false; preview = surface }
+            if let surface { preview = surface }
         })
     }
 
@@ -554,21 +709,27 @@ struct ProfileStudioView: View {
             switch screen {
             case .home:
                 homeControls
-                readerSettings
                 if let startup = setting({ $0.startupApp == 1 }, { $0.startupApp = $1 ? 1 : 0 }, on: .home) {
                     Toggle("Open Pocket Daily at startup", isOn: startup)
                         .accessibilityIdentifier("profile-startup")
                 }
+            case .reading: readerSettings
             case .sleep: sleepControls
             }
-            Button("Reset to default layout") { editor.draft = .defaults }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .disabled(editor.draft == .defaults)
-                .accessibilityIdentifier("profile-reset")
+            if screen != .reading {
+                sharedContentControls
+                recoveredDraftControls
+                Button("Reset \(screen.rawValue) layout") {
+                        ProfileMerge.take(screen.fields, from: PocketProfile.defaults, into: &editor.draft)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .disabled(scopedProfile == defaultProfile)
+                    .accessibilityIdentifier("profile-reset")
+            }
         }
         .font(.callout)
-        .disabled(model.isWorking)
+        .disabled(model.isWorking || recoveringDraft)
     }
 
     /// Pages and the shared daily panel follow their order on the reader.
@@ -624,29 +785,10 @@ struct ProfileStudioView: View {
                 }
             }
             if weatherOn {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Weather", systemImage: "cloud.sun").font(.subheadline.weight(.semibold))
-                        WeatherControls(settings: model.glanceSettings, model: model)
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("screen-weather-settings")
-                    Divider()
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Calendar", systemImage: "calendar").font(.subheadline.weight(.semibold))
-                        Toggle("Show next event", isOn: edit(\.home.nextEvent, on: .home))
-                            .accessibilityIdentifier("profile-next-event")
-                        if editor.draft.home.nextEvent {
-                            CalendarControls(settings: model.glanceSettings, model: model)
-                        }
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("screen-calendar-settings")
-                    GlanceDeliveryStatus(settings: model.glanceSettings, model: model)
-                }
-                .padding(.horizontal, 14)
-                .padding(.leading, 20)
-                .padding(.bottom, 16)
+                Toggle("Show next event", isOn: edit(\.home.nextEvent, on: .home))
+                    .font(.caption)
+                    .padding(.horizontal, 30).padding(.bottom, 12)
+                    .accessibilityIdentifier("profile-next-event")
             }
         }
     }
@@ -658,9 +800,9 @@ struct ProfileStudioView: View {
             ModuleList(selection: edit(\.home.items, on: .home), available: homeItems,
                        limit: PocketProfile.maxHomeItems, framed: false, identifier: "profile-home", drag: $drag,
                        title: { $0.title }, detail: { $0.detail }) { item in
-                if item == .study { cardsDisclosure }
+                EmptyView()
             } expansion: { item in
-                if item == .study, editingCards { cardsEditor }
+                EmptyView()
             }
             .padding(.leading, 20)
             if editor.draft.home.items.contains(.study), !editor.draft.home.items.contains(.word) {
@@ -717,41 +859,66 @@ struct ProfileStudioView: View {
         placeWeather(next)
     }
 
-    /// Opens My cards under their Home page, with the canvas on the selected card.
-    private var cardsDisclosure: some View {
-        Button {
-            withAnimation(.snappy(duration: 0.2)) { editingCards.toggle() }
-            preview = editingCards && selectedCard != nil ? .card : .home
-        } label: {
-            HStack(spacing: 4) {
-                if !draftCards.cards.isEmpty { Text("\(draftCards.cards.count)").monospacedDigit() }
-                Image(systemName: "chevron.right").rotationEffect(.degrees(editingCards ? 90 : 0))
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.vertical, 2)
-            .padding(.horizontal, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(editingCards ? "Hide My cards" : "Edit My cards")
-        .accessibilityIdentifier("profile-edit-cards")
+    private func openSource(_ source: SourceEditor) {
+        activeContentEditor = source == .cards ? .cards : .glance
     }
 
-    @ViewBuilder private var cardsEditor: some View {
-        Group {
-            if let cards {
-                MyCardsEditor(editor: cards, model: model, selectedID: $selectedCardID, drag: $drag) { preview = .card }
-            } else if let cardsError {
-                Text(cardsError).font(.caption).foregroundStyle(.red)
-                Button("Retry loading cards") { Task { await openCards() } }
-            } else {
-                ProgressView().controlSize(.small)
+    private var sharedContentControls: some View {
+        ControlGroup(title: "Content") {
+            sourceRow("My cards", value: "\(draftCards.cards.count) \(draftCards.cards.count == 1 ? "card" : "cards")", identifier: "profile-edit-cards") {
+                openSource(.cards)
+            }
+            sourceRow("Weather & calendar", value: glanceSummary, identifier: "screen-glance-settings") {
+                openSource(.weatherCalendar)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 2)
-        .padding(.bottom, 12)
+    }
+
+    private var glanceSummary: String {
+        if model.isDemoMode { return "Seoul · example events" }
+        let city = glanceSettings.place?.name ?? "No weather city"
+        let events = glanceSettings.includeEvents ? "Calendar on" : "Calendar off"
+        return city + " · " + events
+    }
+
+    private func sourceRow(_ title: String, value: String, identifier: String,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).fontWeight(.medium)
+                    Text(value).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 6).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    @ViewBuilder private var recoveredDraftControls: some View {
+        let recovered = recoveredDrafts
+        if !recovered.isEmpty, !model.isDemoMode {
+            Menu("Recovered drafts") {
+                ForEach(Array(recovered.enumerated()), id: \.offset) { _, snapshot in
+                    Button((snapshot.targetDeviceID ?? "Offline draft") + " · " + snapshot.savedAt.formatted(date: .abbreviated, time: .shortened)) {
+                        recoveringDraft = true
+                        Task {
+                            defer { recoveringDraft = false }
+                            do {
+                            if let current = editor.snapshot { try await Task.detached { try ProfileEditStore.live.archive(current) }.value }
+                            editor.restore(snapshot)
+                            editor.observeTarget(model.readerStatus?.deviceID)
+                            editor.sync(with: model.readerProfile)
+                            editor.syncReading(model.preferences)
+                        } catch { targetError = error.localizedDescription } }
+                    }
+                }
+            }
+            .font(.caption)
+        }
     }
 
     @ViewBuilder private var sleepControls: some View {
@@ -771,26 +938,13 @@ struct ProfileStudioView: View {
                            title: { $0.title }, detail: { $0.detail }) { section in
                     if section == .card {
                         Button("Edit") {
-                            preview = .card
-                            editingCards = true
+                            openSource(.cards)
                         }
                         .buttonStyle(.borderless)
                         .font(.caption)
                         .accessibilityIdentifier("profile-sleep-edit-cards")
                     }
                 } expansion: { section in
-                    if editor.draft.sleep.sections.contains(section) {
-                        Group {
-                            if section == .weather {
-                                WeatherControls(settings: model.glanceSettings, model: model)
-                            } else if section == .today {
-                                CalendarControls(settings: model.glanceSettings, model: model)
-                            }
-                        }
-                        .padding(.leading, 30)
-                        .padding(.trailing, 14)
-                        .padding(.bottom, section == .weather || section == .today ? 14 : 0)
-                    }
                     if section == .reading, editor.draft.sleep.sections.contains(.reading),
                        let cover = setting({ $0.pocketDailySleepCover }, { $0.pocketDailySleepCover = $1 }, on: .sleep) {
                         Toggle("Book cover", isOn: cover)
@@ -803,10 +957,6 @@ struct ProfileStudioView: View {
                 }
             }
         }
-        if editor.draft.sleep.mode == .brief,
-           editor.draft.sleep.sections.contains(.weather) || editor.draft.sleep.sections.contains(.today) {
-            GlanceDeliveryStatus(settings: model.glanceSettings, model: model)
-        }
         ControlGroup(title: "Wake indicator", note: nil) {
             if editor.reading.sleepWakeIndicator != nil,
                let wake = setting({ $0.sleepWakeIndicator ?? true }, { $0.sleepWakeIndicator = $1 }, on: .sleep) {
@@ -816,8 +966,7 @@ struct ProfileStudioView: View {
                      ? "Marks the power button on the top edge of X3."
                      : "Marks the power button on the upper-right edge of X4.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Applies to Daily Brief, book covers and the reader’s sleep screen. Press the physical power button to wake.")
-                    .font(.caption).foregroundStyle(.secondary)
+
             } else {
                 Text("This reader’s firmware does not offer a WAKE indicator setting. Update to firmware that supports it to change the display.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -833,24 +982,104 @@ struct ProfileStudioView: View {
     }
 
     private var readerSettings: some View {
-        ControlGroup(title: "Reading", note: "Books & saved articles") {
-            Picker("Text size", selection: Binding(get: { editor.reading.fontSize }, set: { editor.reading.fontSize = $0; showsReadingSample = true })) {
-                Text("Small").tag(0)
-                Text("Medium").tag(1)
-                Text("Large").tag(2)
-                Text("Extra large").tag(3)
+        VStack(alignment: .leading, spacing: 20) {
+            ControlGroup(title: "Text size") {
+                Picker("Text size", selection: $editor.reading.fontSize) {
+                    Text("Small").tag(0)
+                    Text("Medium").tag(1)
+                    Text("Large").tag(2)
+                    Text("Extra large").tag(3)
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityIdentifier("profile-text-size")
             }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("profile-text-size")
-            HStack {
-                Text("Changes book text, not Home or Sleep.")
+            if editor.reading.orientation != nil {
+                ControlGroup(title: "Orientation") {
+                    Picker("Orientation", selection: Binding(
+                        get: { readingLandscape }, set: { landscape in
+                            editor.reading.orientation = landscape
+                                ? (readingReversed ? .landscapeReversed : .landscape)
+                                : (readingReversed ? .inverted : .portrait)
+                        })) {
+                        Label("Portrait", systemImage: "rectangle.portrait").tag(false)
+                        Label("Landscape", systemImage: "rectangle").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accessibilityIdentifier("profile-orientation")
+                    Toggle("Flip 180°", isOn: Binding(
+                        get: { readingReversed }, set: { reversed in
+                            editor.reading.orientation = readingLandscape
+                                ? (reversed ? .landscapeReversed : .landscape)
+                                : (reversed ? .inverted : .portrait)
+                        }))
+                    .font(.caption)
+                }
+            }
+            if editor.reading.lineSpacing != nil {
+                ControlGroup(title: "Line spacing") {
+                    Picker("Line spacing", selection: Binding(get: { editor.reading.lineSpacing ?? .normal },
+                                                              set: { editor.reading.lineSpacing = $0 })) {
+                        ForEach(ReaderPreferences.LineSpacing.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                    .accessibilityIdentifier("profile-line-spacing")
+                }
+            }
+            if editor.reading.screenMargin != nil {
+                ControlGroup(title: "Margins") {
+                    Text("\(editor.reading.screenMargin ?? 5) px").font(.caption).foregroundStyle(.secondary)
+                    Slider(value: Binding(
+                        get: { Double(editor.reading.screenMargin ?? 5) },
+                        set: { editor.reading.screenMargin = Int($0) }), in: 5...40, step: 5) {
+                            Text("Margins")
+                        } minimumValueLabel: { Text("Narrow").font(.caption) }
+                          maximumValueLabel: { Text("Wide").font(.caption) }
+                        .labelsHidden()
+                        .frame(maxWidth: 360)
+                        .accessibilityIdentifier("profile-margin")
+                }
+            }
+            if editor.reading.sideButtons != nil || editor.reading.frontButtonsFollowOrientation != nil {
+                ControlGroup(title: "Page buttons") {
+                    if editor.reading.sideButtons != nil {
+                        Picker("Page buttons", selection: Binding(get: { editor.reading.sideButtons ?? .previousNext },
+                                                                 set: { editor.reading.sideButtons = $0 })) {
+                            Text("Previous / Next").tag(ReaderPreferences.SideButtons.previousNext)
+                            Text("Next / Previous").tag(ReaderPreferences.SideButtons.nextPrevious)
+                            Text("Off").tag(ReaderPreferences.SideButtons.off)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .accessibilityIdentifier("profile-page-buttons")
+                        ReaderButtonDiagram(hardware: model.hardware, preferences: editor.reading)
+                    }
+                    if editor.reading.frontButtonsFollowOrientation != nil {
+                        Toggle("Follow screen rotation", isOn: Binding(
+                            get: { editor.reading.frontButtonsFollowOrientation ?? false },
+                            set: { editor.reading.frontButtonsFollowOrientation = $0 }))
+                            .accessibilityIdentifier("profile-rotate-buttons")
+                    }
+                    DisclosureGroup("About button settings") {
+                        Text("Rotation reverses page and navigation keys on inverted and counter-clockwise pages. Front key remapping stays on the reader.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if model.readerStatus != nil && editor.reading.orientation == nil {
+                Text("More reading options require newer reader firmware.")
                     .font(.caption).foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Button("Preview") { showsReadingSample = true }
-                    .font(.caption).accessibilityIdentifier("profile-preview-reading")
             }
         }
     }
+
+    private var readingReversed: Bool { editor.reading.orientation == .inverted || editor.reading.orientation == .landscapeReversed }
+
+    private var readingLandscape: Bool { editor.reading.orientation?.isLandscape ?? false }
 
     /// An illustrative size comparison, never presented as the EPUB renderer.
     private var readingSample: some View {
@@ -860,14 +1089,15 @@ struct ProfileStudioView: View {
             Text("A little time to read").font(.system(size: 30, weight: .bold, design: .serif))
             Text("Save an article when it catches your eye. Read it later on your reader, away from the busy screen.\n\nA few quiet minutes are enough to enjoy a good story. Choose a text size that feels comfortable, then keep reading at your own pace.\n\nYour saved articles will be waiting whenever you return.")
                 .font(.system(size: CGFloat(22 + editor.reading.fontSize * 5), design: .serif))
-                .lineSpacing(7)
+                .lineSpacing(CGFloat((editor.reading.lineSpacing?.rawValue ?? 1) * 5))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .clipped()
             Divider().overlay(.black)
-            Text("TEXT SIZE EXAMPLE").font(.system(size: 14))
+            Text("READING EXAMPLE").font(.system(size: 14))
         }
-        .padding(30)
-        .frame(width: 480, height: 800)
+        .padding(CGFloat(editor.reading.screenMargin ?? 5) + 12)
+        .frame(width: CGFloat(readingLandscape ? model.hardware.screenHeight : model.hardware.screenWidth),
+               height: CGFloat(readingLandscape ? model.hardware.screenWidth : model.hardware.screenHeight))
         .foregroundStyle(.black)
         .background(.white)
         .environment(\.colorScheme, .light)
@@ -906,6 +1136,7 @@ struct ProfileStudioView: View {
     }()
 
     private func renderSchematic() {
+        guard preview != .reading else { return }
         let size = CGSize(width: model.hardware.screenWidth, height: model.hardware.screenHeight)
         let renderer = ImageRenderer(content: PocketLayoutSchematic(profile: editor.draft,
                                                                    surface: preview == .home ? .home : .sleep)

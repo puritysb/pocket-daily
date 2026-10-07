@@ -18,6 +18,35 @@ final class ReaderLayoutSendTests: XCTestCase {
         XCTAssertFalse(model.isWorking)
     }
 
+    func testExplicitReadingSaveNeverSendsPendingLayoutOrOtherPreferences() async throws {
+        LayoutSendURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LayoutSendURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let model = try connectedModel(session: session)
+        defer { model.pauseForBackground() }
+        // Establish the authoritative baseline, then leave an unrelated setting staged.
+        model.setFontSize(1)
+        model.sendReaderLayout(profile: nil, cards: nil)
+        try await waitIdle(model)
+        model.setSleepTimeout(20)
+        LayoutSendURLProtocol.reset()
+        var reading = ReaderPreferences()
+        reading.fontSize = 3
+        model.sendReaderLayout(profile: nil, cards: nil, settingsOverride: reading,
+                               includePendingPreferences: false)
+        try await waitIdle(model)
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/status", "/api/pocket/v1/preferences"])
+        XCTAssertEqual(model.preferencesBaseline?.fontSize, 3)
+        XCTAssertEqual(model.preferencesBaseline?.sleepTimeoutMinutes, 10)
+        XCTAssertEqual(model.preferences?.sleepTimeoutMinutes, 20)
+        XCTAssertTrue(model.preferencesDirty)
+        LayoutSendURLProtocol.reset()
+        model.sendReaderLayout(profile: nil, cards: nil, includePendingPreferences: false)
+        XCTAssertTrue(LayoutSendURLProtocol.requests.isEmpty)
+    }
+
     func testSendSavesTheProfileThenTheSettingsAndOnlyWhatChanged() async throws {
         LayoutSendURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -46,6 +75,8 @@ final class ReaderLayoutSendTests: XCTestCase {
         model.sendReaderLayout(profile: nil, cards: nil)
         try await waitIdle(model)
         XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/status", "/api/pocket/v1/preferences"])
+
+        XCTAssertEqual(model.profileSend, .saved(model.readerProfile?.generation ?? 0))
 
         // Nothing changed: nothing is sent.
         LayoutSendURLProtocol.reset()
@@ -90,7 +121,7 @@ final class ReaderLayoutSendTests: XCTestCase {
         XCTAssertFalse(model.isWorking, "Nothing configured, nothing sent")
         settings.setPlace(.init(name: "Seoul", latitude: 37.57, longitude: 126.98))
         await settings.refreshWeatherIfNeeded()
-        model.pushGlance()
+        model.pushGlance(applyDraft: true)
         try await waitIdle(model)
         XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/glance"])
         XCTAssertNotNil(model.glanceSentAt)
@@ -104,6 +135,51 @@ final class ReaderLayoutSendTests: XCTestCase {
         model.sendReaderLayout(profile: nil, cards: nil)
         try await waitIdle(model)
         XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/status", "/api/pocket/v1/preferences", "/api/pocket/v1/glance"])
+    }
+
+
+    func testSourceDraftStaysLocalUntilExplicitEmptyApplyAndLaterEditsStayPending() async throws {
+        LayoutSendURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [LayoutSendURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel(); LayoutSendURLProtocol.releaseGlance() }
+        let suite = "layout-glance-apply-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = GlanceSettings(defaults: defaults)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session), glanceSettings: settings)
+        defer { model.pauseForBackground() }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"t","device":"X3","deviceID":"5B09AF70","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"pocketGlance":1}"#.utf8))
+        settings.setPlace(.init(name: "Draft city", latitude: 1, longitude: 1))
+        XCTAssertTrue(settings.isConfigured)
+        model.pushGlance()
+        try await waitIdle(model)
+        XCTAssertTrue(LayoutSendURLProtocol.requests.isEmpty, "Configured source edits must not auto-send")
+        settings.setPlace(nil)
+        settings.setSelectedCalendarIDs([])
+        XCTAssertFalse(settings.isConfigured)
+        XCTAssertTrue(settings.hasUnappliedSourceChanges)
+        model.pushGlance()
+        try await waitIdle(model)
+        XCTAssertTrue(LayoutSendURLProtocol.requests.isEmpty, "Automatic sends cannot apply source drafts")
+        LayoutSendURLProtocol.holdNextGlance()
+        model.pushGlance(applyDraft: true)
+        for _ in 0..<300 where !LayoutSendURLProtocol.hasPendingGlance { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertTrue(LayoutSendURLProtocol.hasPendingGlance)
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/pocket/v1/glance"])
+        let sent = try XCTUnwrap(LayoutSendURLProtocol.lastBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: sent) as? [String: Any])
+        XCTAssertTrue(json["weather"] is NSNull)
+        XCTAssertEqual((json["events"] as? [[String: Any]])?.count, 0, "Explicit Apply sends an empty document to clear prior reader content")
+        settings.setSelectedCalendarIDs(["unavailable-calendar"])
+        LayoutSendURLProtocol.releaseGlance()
+        try await waitIdle(model)
+        XCTAssertTrue(settings.hasUnappliedSourceChanges, "Completion must not clear source edits made during the request")
+        model.pushGlance(applyDraft: true)
+        try await waitIdle(model)
+        XCTAssertFalse(settings.hasUnappliedSourceChanges)
     }
 
     /// A reader that draws screens inside Sync shows the edited Home after the
@@ -130,12 +206,13 @@ final class ReaderLayoutSendTests: XCTestCase {
         XCTAssertEqual(model.screenShow, .shown(.home, generation: 1))
         XCTAssertEqual(model.messageTone, .success)
 
-        // Settings alone do not redraw a screen.
+        // A screen-specific setting save also redraws the explicitly requested screen.
         LayoutSendURLProtocol.reset()
         model.setFontSize(2)
         model.sendReaderLayout(profile: nil, cards: nil, show: .home)
         try await waitIdle(model)
-        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path), ["/api/status", "/api/pocket/v1/preferences"])
+        XCTAssertEqual(LayoutSendURLProtocol.requests.map(\.path),
+                       ["/api/status", "/api/pocket/v1/preferences", "/api/pocket/v1/screen/present"])
     }
 
     /// Readers without the capability are never asked to draw a screen.
@@ -169,7 +246,19 @@ private final class LayoutSendURLProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) private static var body: Data?
     static var requests: [(method: String, path: String)] { lock.withLock { recorded } }
     static var lastBody: Data? { lock.withLock { body } }
-    static func reset() { lock.withLock { recorded = []; body = nil } }
+    nonisolated(unsafe) private static var holdGlance = false
+    nonisolated(unsafe) private static var pendingGlance: (@Sendable () -> Void)?
+    static func reset() { lock.withLock { recorded = []; body = nil; holdGlance = false; pendingGlance = nil } }
+    static var hasPendingGlance: Bool { lock.withLock { pendingGlance != nil } }
+    static func holdNextGlance() { lock.withLock { holdGlance = true } }
+    static func releaseGlance() {
+        let complete = lock.withLock { () -> (@Sendable () -> Void)? in
+            holdGlance = false
+            defer { pendingGlance = nil }
+            return pendingGlance
+        }
+        complete?()
+    }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -207,9 +296,18 @@ private final class LayoutSendURLProtocol: URLProtocol, @unchecked Sendable {
             }
         }
         guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else { return }
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: body)
-        client?.urlProtocolDidFinishLoading(self)
+        let replyData = body
+        let complete: @Sendable () -> Void = { [self] in
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: replyData)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        let held = Self.lock.withLock {
+            guard url.path == "/api/pocket/v1/glance", Self.holdGlance else { return false }
+            Self.pendingGlance = complete
+            return true
+        }
+        if !held { complete() }
     }
     override func stopLoading() {}
 }

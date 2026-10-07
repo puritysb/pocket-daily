@@ -22,7 +22,7 @@ Localized customer copy is under `metadata/en-US` and `metadata/ko-KR`; both
 describe the same shipped interface. Screenshots under `screenshots/en-US` are
 generated from the built-in local demo by `scripts/capture_screenshots.sh`
 (see `screenshots/README.md`), flattened to opaque PNG files at Apple's accepted
-dimensions: four for iPhone and three each for iPad and Mac. The same set may be
+dimensions: six for iPhone, seven for iPad and six for Mac. The same set may be
 uploaded to both storefront localizations.
 
 ## Locally verified release evidence
@@ -96,11 +96,22 @@ Subscriptions and page requests go directly to publishers without browser cookie
 credentials, scripts, images or an extraction service. Demo mode does not fetch feeds.
 
 Tap an offline article to read in the app; its menu offers Save for later, read/unread,
-Edit article, Prepare for reader and Delete. Reading and saving are independent.
+Edit article, Send to Reader… and Delete. Reading and saving are independent.
 Unsubscribing retains collected articles; refresh does not restore deleted feed articles.
 Content, subscriptions and these flags stay on this device. Reader preparation and
 sending remain explicit and use the existing EPUB format. The iOS/iPadOS Share →
 Pocket Daily extension and + → Add article remain available for manual captures.
+
+Library and My Reader are the two main destinations. My Reader contains On
+Reader, Screens, Reading and Device. Sending selected content uses a task sheet
+in the current window; its connection, send and result steps preserve the
+selection. On Mac, SD card is a destination in that same task; only the output
+folder is selected, and SD-copy results stay separate from wireless results.
+It does not send unrelated prepared books or firmware. Screens opens shared
+card and weather/calendar source editors separately from Home/Sleep layout,
+with one Apply action per active editor. Settings also
+opens in the current window. Local checks of this IA revision are recorded in
+[the implementation report](../docs/IA_IMPLEMENTATION_REPORT.md); prior signed exports are not evidence for the new UI.
 
 The app and extension require the App Group `group.bound.serendipity.pocket.daily`.
 The extension bundle ID is `bound.serendipity.pocket.daily.share`. Registering

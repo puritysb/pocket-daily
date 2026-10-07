@@ -19,9 +19,9 @@ final class PocketMacScreenshotTests: XCTestCase {
     func testRendersStoreScreenshots() async throws {
         try await render(name: "01-library", hardware: .x3, section: .library)
         try await render(name: "02-home-x3", hardware: .x3)
-        try await render(name: "03-card-x3", hardware: .x3, preview: .card)
+        try await render(name: "03-card-x3", hardware: .x3, preview: .card, captureSheet: true)
         try await render(name: "04-sleep-x4", hardware: .x4, preview: .sleep)
-        try await render(name: "06-device", hardware: .x3, section: .reader)
+        try await render(name: "06-device", hardware: .x3, section: .device)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("article-preview-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let inbox = ArticleFeedPreview.inbox(root: root)
@@ -76,7 +76,7 @@ final class PocketMacScreenshotTests: XCTestCase {
     func testRendersDarkAppearance() async throws {
         try await render(name: "dark-library", hardware: .x3, section: .library, dark: true)
         try await render(name: "dark-home-x3", hardware: .x3, dark: true)
-        try await render(name: "dark-device", hardware: .x3, section: .reader, dark: true)
+        try await render(name: "dark-device", hardware: .x3, section: .device, dark: true)
     }
 
     /// QA captures of the states a first-time user meets outside demo mode and
@@ -85,10 +85,12 @@ final class PocketMacScreenshotTests: XCTestCase {
     @MainActor
     func testRendersUserFlowStates() async throws {
         let model = PocketModel()
-        try await renderView(ContentView(initialSection: .reader).environmentObject(model),
+        try await renderView(ContentView(initialSection: .device).environmentObject(model),
                              name: "qa-device-no-reader", size: Self.pointSize)
-        try await renderView(ContentView(initialSection: .reader).environmentObject(model),
+        try await renderView(ContentView(initialSection: .device).environmentObject(model),
                              name: "qa-device-no-reader-dark", size: Self.pointSize, dark: true)
+        try await renderView(ContentView(initialSection: .reader).environmentObject(model),
+                             name: "qa-reader-overview", size: Self.pointSize)
         try await renderView(ContentView(initialSection: .files).environmentObject(model),
                              name: "qa-files-no-reader", size: Self.pointSize)
         // Saved offline edits meeting a reader that changed in the meantime.
@@ -103,6 +105,15 @@ final class PocketMacScreenshotTests: XCTestCase {
         editor.sync(with: ReaderProfileState(deviceID: "1234ABCD", generation: 2, profile: onReader, maxHomeItems: 4))
         try await renderView(ProfileStudioView(model: model, editor: editor),
                              name: "qa-merge-notice", size: Self.pointSize)
+
+        let readingEditor = ProfileEditorState()
+        try await renderView(ProfileStudioView(model: model, editor: readingEditor, initialPreview: .reading),
+                             name: "qa-reading-portrait", size: Self.pointSize)
+        readingEditor.reading.orientation = .landscape
+        readingEditor.reading.lineSpacing = .wide
+        readingEditor.reading.screenMargin = 30
+        try await renderView(ProfileStudioView(model: model, editor: readingEditor, initialPreview: .reading),
+                             name: "qa-reading-landscape", size: Self.pointSize)
 
         await LibraryModel.shared.load()
         let book = try XCTUnwrap(LibraryModel.shared.books.first { $0.origin == .welcome })
@@ -120,10 +131,8 @@ final class PocketMacScreenshotTests: XCTestCase {
         demo.enterDemoMode()
         try await renderView(ReaderAppearancePanel(store: ReaderAppearanceStore.shared),
                              name: "qa-reader-appearance", size: NSSize(width: 420, height: 520))
-        try await renderView(AppSettingsWindow().environmentObject(demo),
-                             name: "qa-settings-window", size: NSSize(width: 520, height: 480))
-        try await renderView(AppSettingsSheet(model: demo),
-                             name: "qa-settings", size: NSSize(width: 520, height: 720))
+        try await renderView(AppSettingsSheet(model: demo, appearance: .constant(.system)),
+                             name: "qa-settings", size: NSSize(width: 520, height: 620))
         try await renderView(ReaderBluetoothPairingCard(sync: .shared).padding(20),
                              name: "qa-bluetooth-pairing", size: NSSize(width: 360, height: 300))
         try await renderView(ArticleCaptureView(initialURL: "", completed: {}),
@@ -135,6 +144,70 @@ final class PocketMacScreenshotTests: XCTestCase {
         try await renderView(ArticleSubscriptionsView(inbox: inbox, isDemo: true),
                              name: "qa-subscriptions", size: NSSize(width: 520, height: 520))
         try await renderView(ProjectInformationSheet(), name: "qa-about", size: NSSize(width: 560, height: 700))
+    }
+
+    /// Extra IA QA captures stay in test attachments; the store manifest is unchanged.
+    @MainActor
+    func testRendersReaderTasksAndButtonMappings() async throws {
+        let model = PocketModel()
+        model.enterDemoMode()
+        try await renderView(ContentView(initialSection: .reader).environmentObject(model),
+                             name: "qa-my-reader-overview", size: Self.pointSize)
+        for hardware in PocketHardware.allCases {
+            model.preferredHardware = hardware
+            let editor = ProfileEditorState()
+            try await renderView(ProfileStudioView(model: model, editor: editor, destination: .reading),
+                                 name: "qa-buttons-\(hardware.rawValue)-portrait", size: Self.pointSize)
+            try await renderView(ReaderButtonDiagram(hardware: hardware, preferences: editor.reading).padding(24),
+                                 name: "qa-reading-button-diagram-\(hardware.rawValue)-portrait", size: NSSize(width: 420, height: 420))
+            editor.reading.orientation = .landscape
+            try await renderView(ReaderButtonDiagram(hardware: hardware, preferences: editor.reading).padding(24),
+                                 name: "qa-reading-button-diagram-\(hardware.rawValue)-landscape", size: NSSize(width: 420, height: 420))
+            try await renderView(ProfileStudioView(model: model, editor: editor, destination: .reading),
+                                 name: "qa-buttons-\(hardware.rawValue)-landscape", size: Self.pointSize)
+        }
+        let returnEditor = ProfileEditorState()
+        var targetConsumed = false
+        try await renderView(ProfileStudioView(model: model, editor: returnEditor, destination: .screens,
+                                                screenTaskRequest: .init(id: UUID(), screen: .brief),
+                                                onScreenTaskOpened: { targetConsumed = true }),
+                             name: "qa-owner-sleep-return", size: Self.pointSize)
+        XCTAssertTrue(targetConsumed, "The owning screen request must be consumed after opening Sleep")
+        let fixtureRoot = FileManager.default.temporaryDirectory.appendingPathComponent("inventory-qa-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: fixtureRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fixtureRoot) }
+        let connected = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(),
+                                    bookTransferStore: BookTransferJobStore(file: fixtureRoot.appendingPathComponent("jobs.json")))
+        defer { connected.pauseForBackground() }
+        connected.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"0.1.0","device":"X3","deviceID":"QA-INVENTORY","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"readerFiles":2,"readingProgress":1}"#.utf8))
+        try await renderView(ReaderInventoryView(model: connected, library: .shared, open: { _ in }, connect: {}, manage: {}).padding(24),
+                             name: "qa-reader-connected-inventory-not-checked", size: NSSize(width: 620, height: 620))
+        connected.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"0.1.0","device":"X3","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1}"#.utf8))
+        try await renderView(ReaderInventoryView(model: connected, library: .shared, open: { _ in }, connect: {}, manage: {}).padding(24),
+                             name: "qa-reader-connected-inventory-unsupported", size: NSSize(width: 620, height: 440))
+        await LibraryModel.shared.load()
+        let book = try XCTUnwrap(LibraryModel.shared.books.first { $0.origin == .welcome })
+        let created = await model.createBookTransferJob(books: [book], library: .shared)
+        let id = try XCTUnwrap(created)
+        try await renderView(BookTransferSheet(model: model, jobID: id, library: .shared,
+                                               connection: { EmptyView() }, cancelConnection: {},
+                                               onInventory: {}, onDevice: {}, onCurrentTask: {}),
+                             name: "qa-selected-book-task-demo", size: NSSize(width: 560, height: 620))
+        _ = await model.selectBookTransferDestination(id, destination: .sdCard)
+        try await renderView(BookTransferSheet(model: model, jobID: id, library: .shared,
+                                               connection: { EmptyView() }, cancelConnection: {},
+                                               onInventory: {}, onDevice: {}, onCurrentTask: {}),
+                             name: "qa-selected-book-sd-demo", size: NSSize(width: 560, height: 620))
+        XCTAssertNil(model.bookTransferJob(id)?.latestSDCopy, "Demo destination selection must not start a directory operation")
+        let content = try model.contentEditorModel()
+        content.edit(ProfileStudioView.demoCards)
+        try await renderView(StudioContentSheet(model: model, task: .cards, cards: content),
+                             name: "qa-dedicated-cards", size: NSSize(width: 800, height: 680))
+        try await renderView(StudioContentSheet(model: model, task: .glance),
+                             name: "qa-dedicated-weather-calendar", size: NSSize(width: 540, height: 500))
+
     }
 
     /// Hosts any view in a key off-screen window and attaches its drawing.
@@ -213,7 +286,7 @@ final class PocketMacScreenshotTests: XCTestCase {
     @MainActor
     private func render(name: String, hardware: PocketHardware, section: StudioSection = .layout,
                         preview: ProfileStudioView.PreviewSurface = .home, shelf: LibraryView.Shelf = .books,
-                        inbox: ArticleInboxModel? = nil, dark: Bool = false) async throws {
+                        inbox: ArticleInboxModel? = nil, dark: Bool = false, captureSheet: Bool = false) async throws {
         let savedAppearance = UserDefaults.standard.object(forKey: "appAppearance")
         UserDefaults.standard.set(dark ? "dark" : "light", forKey: "appAppearance")
         defer {
@@ -257,12 +330,23 @@ final class PocketMacScreenshotTests: XCTestCase {
         try await Task.sleep(for: .seconds(4))
         window.displayIfNeeded()
 
-        guard let view = window.contentView,
-              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
-            XCTFail("Could not create a bitmap for \(name)")
-            return
+        let rep: NSBitmapImageRep
+        if captureSheet {
+            let deadline = Date().addingTimeInterval(10)
+            while window.attachedSheet == nil, Date() < deadline { try await Task.sleep(for: .milliseconds(100)) }
+            let sheet = try XCTUnwrap(window.attachedSheet, "The shipping My cards sheet was not presented")
+            sheet.layoutIfNeeded()
+            sheet.displayIfNeeded()
+            // Native SwiftUI sheets own their title and toolbar in a separate
+            // window. Capturing only the parent NSHostingView omits both.
+            // Off-screen SwiftUI AX omits the navigation chrome. The real
+            // title and Close are verified visually in the exported capture;
+            // automated checks cover the attached sheet and native bitmap size.
+            rep = try compositeWindowAndSheet(window, sheet: sheet, size: Self.pointSize)
+            window.endSheet(sheet)
+        } else {
+            rep = try bitmap(of: window.contentView)
         }
-        view.cacheDisplay(in: view.bounds, to: rep)
         window.orderOut(nil)
 
         XCTAssertEqual(rep.pixelsWide, Int(Self.pointSize.width * 2), "unexpected backing scale for \(name)")
@@ -272,6 +356,51 @@ final class PocketMacScreenshotTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// In-process native view drawing needs neither screen recording nor UI
+    /// automation. The real sheet chrome is included at its native size over
+    /// the real source screen; no screenshot-only controls are authored.
+    @MainActor
+    private func compositeWindowAndSheet(_ window: NSWindow, sheet: NSWindow, size: NSSize) throws -> NSBitmapImageRep {
+        let parent = try bitmap(of: window.contentView?.superview ?? window.contentView)
+        let sheetView = try XCTUnwrap(sheet.contentView?.superview, "The native sheet frame view is unavailable")
+        let child = try bitmap(of: sheetView)
+        XCTAssertGreaterThan(child.pixelsWide, 0)
+        XCTAssertGreaterThan(child.pixelsHigh, 0)
+        XCTAssertEqual(CGFloat(child.pixelsWide), sheetView.bounds.width * sheet.backingScaleFactor, accuracy: 1)
+        XCTAssertEqual(CGFloat(child.pixelsHigh), sheetView.bounds.height * sheet.backingScaleFactor, accuracy: 1)
+        let scale = window.backingScaleFactor
+        let result = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: result))
+        var origin = NSPoint(x: sheet.frame.minX - window.frame.minX, y: sheet.frame.minY - window.frame.minY)
+        // AppKit can constrain the off-screen child to a physical display.
+        // Restore only its normal attached position in the exported parent,
+        // retaining the exact native frame/toolbar and content dimensions.
+        if origin.x < 0 || origin.y < 0 || origin.x + sheetView.bounds.width > size.width || origin.y + sheetView.bounds.height > size.height {
+            origin = NSPoint(x: (size.width - sheetView.bounds.width) / 2,
+                             y: size.height - sheetView.bounds.height)
+        }
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = context
+        context.cgContext.scaleBy(x: scale, y: scale)
+        NSColor.white.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        parent.draw(in: NSRect(origin: .zero, size: size))
+        child.draw(in: NSRect(origin: origin, size: sheetView.bounds.size))
+        return result
+    }
+
+    @MainActor
+    private func bitmap(of view: NSView?) throws -> NSBitmapImageRep {
+        let view = try XCTUnwrap(view, "The window view is unavailable")
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds), "The window could not create a bitmap")
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        return bitmap
     }
 
     /// App Store Connect rejects screenshots that carry an alpha channel, so compose the

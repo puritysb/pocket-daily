@@ -4,6 +4,25 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## IA and UX integration — 2026-10-08 (not released)
+
+- Library and My Reader remain equal first-class destinations. Library owns
+  ordinary book/text creation; On Reader owns observed files and SD space.
+- Home/Sleep layout editing has one apply action. Shared cards and weather/
+  calendar open dedicated editors, preserving drafts and parent scope through
+  connection. Reading uses model/orientation-specific button diagrams.
+- Selected-book tasks retain content through Wi-Fi/SD destination selection;
+  SD outcomes do not erase uncertain wireless publication. Recovery returns
+  to the actual task owner. Mac Overview no longer duplicates sidebar menus.
+- The 2026-10-06 verification baseline is documented with exact evidence and
+  reruns in `docs/IA_IMPLEMENTATION_REPORT.md`: 529 iOS unit tests, 44 final
+  focused tests, 26 iPhone and 6 iPad flows, Mac checks with two harness fixes
+  rechecked, and 19 refreshed store captures. Physical radio/SD/firmware
+  acceptance remains pending; this is not an App Store release.
+- This integration records the formerly uncommitted Settings/Studio and IA
+  work alongside the companion connectivity commits. Product contracts and
+  remaining scope are in `docs/PRODUCT_IA.md` and `docs/PRODUCT_UX_SPEC.md`.
+
 ## Companion connectivity revision — 2026-10-05 (local, not released)
 
 - ReaderWorkLane consolidates admission, cancellation draining and task ownership;

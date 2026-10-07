@@ -97,6 +97,8 @@ struct PreparedTransfer: Codable, Identifiable, Equatable, Sendable {
     var remoteStagingID: UUID? = nil
     /// Write-ahead marker: a missing commit response must not cause blind republication.
     var publicationPending: Bool? = nil
+    var bookJobID: UUID? = nil
+    var libraryBookID: UUID? = nil
     var stagingID: UUID? { remoteStagingID ?? (readerID == nil ? nil : id) }
     var kind: TransferKind { filename.lowercased().hasSuffix(".bin") ? .firmware : .content }
 }
@@ -108,11 +110,25 @@ enum TransferPreparation {
             .appendingPathComponent("Pocket/Transfers", isDirectory: true)
     }
 
-    static func prepare(_ source: URL, directory: URL = directory) throws -> PreparedTransfer {
+    static func prepare(_ source: URL, directory: URL = directory, id: UUID = UUID(),
+                        bookJobID: UUID? = nil, libraryBookID: UUID? = nil) throws -> PreparedTransfer {
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
-        let id = UUID()
         let folder = directory.appendingPathComponent(id.uuidString, isDirectory: true)
+        if FileManager.default.fileExists(atPath: folder.path), bookJobID != nil {
+            let record = folder.appendingPathComponent("transfer.json")
+            if FileManager.default.fileExists(atPath: record.path) {
+                let existing = try JSONDecoder().decode(PreparedTransfer.self, from: Data(contentsOf: record))
+                guard existing.id == id, existing.bookJobID == bookJobID,
+                      existing.libraryBookID == libraryBookID, existing.filename == source.lastPathComponent else {
+                    throw BookTransferError.missingCopy
+                }
+                return existing
+            }
+            // The job persisted this exact ID before copying. Without its first
+            // record it could never enter a sender, so a partial copy is safe to replace.
+            try FileManager.default.removeItem(at: folder)
+        }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         do {
             let destination = folder.appendingPathComponent(source.lastPathComponent)
@@ -128,7 +144,8 @@ enum TransferPreparation {
             let firmware = source.pathExtension.lowercased() == "bin"
                 ? try FirmwareImageValidator.validate(fileURL: destination) : nil
             let item = PreparedTransfer(id: id, filename: source.lastPathComponent,
-                                        firmwareVersion: firmware?.version)
+                                        firmwareVersion: firmware?.version,
+                                        bookJobID: bookJobID, libraryBookID: libraryBookID)
             try JSONEncoder().encode(item).write(to: folder.appendingPathComponent("transfer.json"), options: .atomic)
             return item
         } catch {
@@ -148,10 +165,16 @@ final class PocketModel: ObservableObject, DeviceSession {
         var prepare: @Sendable (URL) async throws -> PreparedTransfer = { url in
             try await Task.detached(priority: .userInitiated) { try TransferPreparation.prepare(url) }.value
         }
-        var copy: @Sendable (URL, URL) async throws -> SDCopyResult = { source, root in
+        var prepareBook: @Sendable (URL, UUID, UUID, UUID) async throws -> PreparedTransfer = { url, id, jobID, bookID in
             try await Task.detached(priority: .userInitiated) {
-                try PocketModel.copyToSDOffMain(source: source, root: root)
+                try TransferPreparation.prepare(url, id: id, bookJobID: jobID, libraryBookID: bookID)
             }.value
+        }
+        var copy: @Sendable (URL, URL) async throws -> SDCopyResult = { source, root in
+            let task = Task.detached(priority: .userInitiated) {
+                try PocketModel.copyToSDOffMain(source: source, root: root)
+            }
+            return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
         }
     }
     /// Official firmware release lookup and download (tests substitute both).
@@ -289,6 +312,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 screenShow = .idle
             }
             if oldValue?.deviceID != readerStatus?.deviceID || readerStatus == nil { loadedContentRevision = nil }
+            updateBookJobAvailability()
         }
     }
     /// Resolved content-page inputs of the connected reader; nil means previews
@@ -325,7 +349,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         didSet { if preferences == nil { preferencesBaseline = nil } }
     }
     /// The reader's settings as last loaded or saved; Revert returns to them.
-    private var preferencesBaseline: ReaderPreferences?
+    @Published private(set) var preferencesBaseline: ReaderPreferences?
     @Published var crashDiagnostic: CrashDiagnostic?
     @Published var preferencesDirty = false
     @Published var preferredHardware: PocketHardware = .x3
@@ -496,7 +520,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             return
         }
         let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
-        startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+        startReaderWork(attempt: attempt, kind: .settings, destination: .connection) { [self] owner in
             var sent = 0
             do {
                 let list = try await client.readingProgress(identity: identity, host: host, port: port)
@@ -524,9 +548,12 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
-    func sendReaderLayout(profile: PocketProfile?, cards: ContentRevision?, show: ReaderScreen? = nil) {
+    func sendReaderLayout(profile: PocketProfile?, cards: ContentRevision?, show: ReaderScreen? = nil, drawCards: Bool = true,
+                          settingsOverride: ReaderPreferences? = nil, includePendingPreferences: Bool = true,
+                          taskDestination: ReaderTaskDestination? = nil, taskScreen: ReaderScreen? = nil) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, readerStatus != nil else { return }
-        let settings = preferencesDirty ? preferences : nil
+        let settings = settingsOverride ?? (includePendingPreferences && preferencesDirty ? preferences : nil)
+        let startingPreferences = preferencesBaseline ?? preferences
         let profile = canEditReaderProfile ? profile : nil
         guard profile != nil || settings != nil || cards != nil else { return }
         let host = activeHost
@@ -536,11 +563,12 @@ final class PocketModel: ObservableObject, DeviceSession {
         let generation = readerProfile?.generation ?? 0
         final class Outcome { var succeeded = false }
         let outcome = Outcome()
+        let operationScreen = taskScreen ?? show
         let show = canShowScreens ? show : nil
         screenShow = .idle
-        if profile != nil { profileSend = .sending }
+        if profile != nil || settings != nil { profileSend = .sending }
         let settingsWork = profile == nil && settings == nil ? nil :
-            startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+            startReaderWork(attempt: attempt, kind: .settings, destination: taskDestination ?? (profile != nil || operationScreen != nil ? .screens : .reading), screenTarget: operationScreen) { [self] owner in
                 do {
                     if let profile, let identity {
                         do {
@@ -559,19 +587,24 @@ final class PocketModel: ObservableObject, DeviceSession {
                     if let settings {
                         try await client.save(preferences: settings, host: host, port: port, expectedDeviceID: identity)
                         guard ownsReaderWork(owner, attempt: attempt) else { return }
+                        if let startingPreferences, let current = preferences {
+                            preferences = ProfileMerge.merge(base: startingPreferences, mine: current, reader: settings).preferences
+                        } else { preferences = settings }
                         preferencesBaseline = settings
                         preferencesDirty = preferences != settings
+                        profileSend = .saved(readerProfile?.generation ?? generation)
                     }
-                    if canSendGlance, glanceSettings.isConfigured, let identity {
+                    if (includePendingPreferences || show != nil), canSendGlance, glanceSettings.isConfigured, let identity {
                         await saveGlance(deviceID: identity, host: host, port: port)
                     }
                     outcome.succeeded = true
                     if cards == nil {
-                        if let show, profile != nil, let identity, let generation = readerProfile?.generation {
+                        if let show, let identity, let generation = readerProfile?.generation {
                             await showScreen(show, generation: generation, deviceID: identity, host: host, port: port,
                                              attempt: attempt)
                         } else {
-                            post("Applied on \(hardware.rawValue). Settings take effect now; Home and Sleep changes show when you leave Sync.",
+                            post(profile == nil ? "Settings saved on \(hardware.rawValue). Open a book to see reading changes."
+                                                : "Saved on \(hardware.rawValue). Home and Sleep show when you leave Sync.",
                                  tone: .success)
                         }
                     }
@@ -591,11 +624,11 @@ final class PocketModel: ObservableObject, DeviceSession {
                 await settingsWork.value
                 guard outcome.succeeded, attempt == connectionAttempt else { return }
             }
-            guard let content = applyContent(cards, drawCards: show == nil) else { return }
+            guard let content = applyContent(cards, drawCards: drawCards && show == nil) else { return }
             await content.value
             guard let show, attempt == connectionAttempt, case .complete? = contentDeployment?.phase,
                   let identity, let generation = readerProfile?.generation else { return }
-            startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+            startReaderWork(attempt: attempt, kind: .settings, destination: taskDestination ?? .screens, screenTarget: operationScreen) { [self] owner in
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
                 await showScreen(show, generation: generation, deviceID: identity, host: host, port: port,
                                  attempt: attempt)
@@ -635,10 +668,13 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     /// Composes from the cached weather and today's calendar and stores it on
     /// the reader. Called inside a reader lane.
-    private func saveGlance(deviceID: String, host: String, port: Int) async {
-        let glance = glanceSettings.glance(events: glanceSettings.includeEvents ? CalendarSource.today() : [])
+    private func saveGlance(deviceID: String, host: String, port: Int, applyDraft: Bool = false) async {
+        guard applyDraft || !glanceSettings.hasUnappliedSourceChanges else { return }
+        let sourceRevision = glanceSettings.sourceRevision
+        let glance = glanceSettings.glance(events: glanceSettings.includeEvents ? CalendarSource.today(selectedCalendarIDs: glanceSettings.selectedCalendarIDs) : [])
         do {
             try await client.saveGlance(glance, deviceID: deviceID, host: host, port: port)
+            if applyDraft { glanceSettings.markSourcesApplied(ifRevision: sourceRevision) }
             glanceSentAt = Date()
             glanceError = nil
         } catch {
@@ -648,24 +684,24 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     /// Sends weather and events now, in the reader lane, when nothing else
     /// holds it. Data sync, not an edit: it changes nothing the user authored.
-    func pushGlance() {
-        guard canSendGlance, glanceSettings.isConfigured, !isWorking, !hasReaderWork,
+    func pushGlance(applyDraft: Bool = false) {
+        guard canSendGlance, (glanceSettings.isConfigured || applyDraft), !isWorking, !hasReaderWork,
               let identity = readerStatus?.deviceID else { return }
         let host = activeHost
         let port = activeHTTPPort
         let attempt = connectionAttempt
-        startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+        startReaderWork(attempt: attempt, kind: .settings, destination: .weatherCalendar) { [self] owner in
             guard ownsReaderWork(owner, attempt: attempt) else { return }
-            await saveGlance(deviceID: identity, host: host, port: port)
+            await saveGlance(deviceID: identity, host: host, port: port, applyDraft: applyDraft)
         }
     }
 
     /// Refreshes Apple Weather when stale (never inside a reader lane: it
     /// needs the internet), then sends the result to a connected reader.
-    func refreshGlance(force: Bool = false) {
+    func refreshGlance(force: Bool = false, send: Bool = true) {
         Task { @MainActor [self] in
             await glanceSettings.refreshWeatherIfNeeded(force: force)
-            pushGlance()
+            if send { pushGlance() }
         }
     }
 
@@ -795,6 +831,21 @@ final class PocketModel: ObservableObject, DeviceSession {
     private var expectedDeviceID: String?
     @Published private(set) var directConnectionRequested = false
     @Published private(set) var preparedTransfers: [PreparedTransfer] = []
+    /// The fixed admitted batch remains available after confirmed items leave
+    /// the mutable queue, so its progress and cancellation keep the same scope.
+    @Published private(set) var activePreparedFileBatch: [PreparedTransfer] = []
+    @Published private(set) var bookTransferJobs: [BookTransferJob] = []
+    @Published private(set) var bookTransferJobsLoading = true
+    @Published private(set) var bookTransferError: String?
+    @Published private(set) var activeReaderTask: ReaderTaskDestination?
+    @Published private(set) var activeScreenTarget: ReaderScreen?
+    private let bookTransferStore: BookTransferJobStore
+    private var bookTransferLoadTask: Task<Void, Never>?
+    private var activeBookTransferJobID: UUID?
+    private var activePreparedTransferIDs: Set<UUID> = []
+    private var unidentifiedBookTargetConnections: [UUID: Int] = [:]
+    private var bookTransferLoadFailed = false
+    private var bookTransferRecoveryGeneration = 0
     @Published private(set) var isCancellingConnection = false
     var isSearchingForReader: Bool { readerWorkKind == .discovery }
     var canCancelConnection: Bool {
@@ -823,11 +874,13 @@ final class PocketModel: ObservableObject, DeviceSession {
          localFiles: LocalFileOperations = .init(),
          associationIO: (any ReaderAssociationIO)? = nil,
          glanceSettings: GlanceSettings? = nil,
-         releaseSource: ReleaseOperations = .init()) {
+         releaseSource: ReleaseOperations = .init(),
+         bookTransferStore: BookTransferJobStore = BookTransferJobStore()) {
         self.client = client
         self.releaseSource = releaseSource
         self.glanceSettings = glanceSettings ?? GlanceSettings()
         self.localFiles = localFiles
+        self.bookTransferStore = bookTransferStore
         self.contentTransportFactory = contentTransportFactory ?? { revision, identity, host, port in
             ReaderContentTransport(target: revision, deviceID: identity, host: host, port: port, client: client)
         }
@@ -864,6 +917,34 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
         if ProcessInfo.processInfo.arguments.contains("--demo") {
             enterDemoMode()
+        }
+        startBookTransferRecovery()
+    }
+
+    private func startBookTransferRecovery() {
+        bookTransferRecoveryGeneration += 1
+        let generation = bookTransferRecoveryGeneration
+        bookTransferLoadTask?.cancel()
+        bookTransferJobsLoading = true
+        bookTransferLoadFailed = false
+        bookTransferError = nil
+        bookTransferLoadTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if generation == bookTransferRecoveryGeneration { bookTransferJobsLoading = false } }
+            guard !isDemoMode else { return }
+            do {
+                var jobs = try await bookTransferStore.load()
+                guard !isDemoMode, !Task.isCancelled, generation == bookTransferRecoveryGeneration else { return }
+                jobs = try BookTransferJob.recoveringOrphans(jobs, prepared: preparedTransfers)
+                for index in jobs.indices { jobs[index].recover(prepared: preparedTransfers) }
+                bookTransferJobs = jobs
+                // Persist conservative recovery before any explicitly requested work.
+                try await bookTransferStore.save(jobs)
+            } catch {
+                guard generation == bookTransferRecoveryGeneration, !isDemoMode else { return }
+                bookTransferLoadFailed = true
+                bookTransferError = BookTransferError.storage(error.localizedDescription).localizedDescription
+            }
         }
     }
 
@@ -1030,6 +1111,11 @@ final class PocketModel: ObservableObject, DeviceSession {
         isWorking = false
         uploadProgress = 0
         isDemoMode = true
+        bookTransferRecoveryGeneration += 1
+        bookTransferLoadTask?.cancel()
+        bookTransferJobsLoading = false
+        bookTransferJobs = []
+        bookTransferError = nil
         readerStatus = CrossPointStatus(
             version: "DEMO 1.0",
             ip: "LOCAL PREVIEW",
@@ -1048,7 +1134,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             totalHeap: 262_144
         )
         // Demo shows every control a current reader offers.
-        preferences = ReaderPreferences(sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
+        preferences = ReaderPreferences(orientation: .portrait, lineSpacing: .normal, screenMargin: 5, sideButtons: .previousNext, frontButtonsFollowOrientation: false, sleepWakeIndicator: true)
         preferencesBaseline = preferences
         crashDiagnostic = nil
         preferencesDirty = false
@@ -1062,6 +1148,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     func exitDemoMode() {
         guard isDemoMode else { return }
         isDemoMode = false
+        startBookTransferRecovery()
         readerStatus = nil
         preferences = nil
         preferencesDirty = false
@@ -1454,6 +1541,12 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// Set on a new session and after anything that changes the reader's files.
     private var readerInventoryWanted = false
 
+    func requestReaderInventoryRefresh() {
+        guard !isDemoMode else { return }
+        readerInventoryWanted = true
+        refreshReaderInventoryIfWanted()
+    }
+
     /// Reads the files in the folders the app sends to and the reader's recent
     /// books, once per session and after each change, whenever the reader lane is
     /// free. A folder the reader does not have yet (`/Articles`) reads as empty.
@@ -1586,6 +1679,9 @@ final class PocketModel: ObservableObject, DeviceSession {
         guard let loaded = preferences else { return }
         var supported = draft
         if loaded.sleepWakeIndicator == nil { supported.sleepWakeIndicator = nil }
+        if loaded.orientation == nil { supported.orientation = nil }
+        if loaded.lineSpacing == nil { supported.lineSpacing = nil }
+        if loaded.screenMargin == nil { supported.screenMargin = nil }
         if loaded.sideButtons == nil { supported.sideButtons = nil }
         if loaded.frontButtonsFollowOrientation == nil { supported.frontButtonsFollowOrientation = nil }
         preferencesDirty = supported != loaded
@@ -1619,7 +1715,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         let port = activeHTTPPort
         let attempt = connectionAttempt
         let identity = readerStatus?.deviceID
-        startReaderWork(attempt: attempt, kind: .settings) { [self] owner in
+        startReaderWork(attempt: attempt, kind: .settings, destination: .reading) { [self] owner in
             do {
                 try await client.save(preferences: preferences, host: host, port: port, expectedDeviceID: identity)
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
@@ -1911,6 +2007,365 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
+    func bookTransferJob(_ id: UUID) -> BookTransferJob? { bookTransferJobs.first { $0.id == id } }
+
+    private func updateBookJobAvailability() {
+        for index in bookTransferJobs.indices {
+            let job = bookTransferJobs[index]
+            guard activeBookTransferJobID != job.id,
+                  [.ready, .needsConnection, .connecting, .waitingForOtherWork].contains(job.stage) else { continue }
+            if job.items.contains(where: { $0.transferID == nil && $0.result != .saved }) {
+                bookTransferJobs[index].stage = .waitingForOtherWork
+            } else if canCancelConnection {
+                bookTransferJobs[index].stage = .connecting
+            } else if hasReaderWork {
+                bookTransferJobs[index].stage = .waitingForOtherWork
+            } else if let status = readerStatus,
+                      job.target?.readerID == nil || job.target?.readerID == status.deviceID {
+                bookTransferJobs[index].stage = .ready
+            } else {
+                bookTransferJobs[index].stage = .needsConnection
+            }
+        }
+    }
+
+    private func changeBookJob(_ id: UUID, _ change: (inout BookTransferJob) -> Void) {
+        guard let index = bookTransferJobs.firstIndex(where: { $0.id == id }) else { return }
+        change(&bookTransferJobs[index])
+        bookTransferJobs[index].updatedAt = Date()
+    }
+
+    @discardableResult
+    func selectBookTransferDestination(_ id: UUID, destination: BookTransferDestination) async -> Bool {
+        guard let job = bookTransferJob(id), job.stage != .discarded, activeBookTransferJobID != id else { return false }
+        changeBookJob(id) { $0.destination = destination }
+        do { try await persistBookJobs(); return true }
+        catch { changeBookJob(id) { $0.destination = job.destination }; return false }
+    }
+
+    func isBookSDCopyActive(_ id: UUID) -> Bool {
+        activeBookTransferJobID == id && bookTransferJob(id)?.latestSDCopy?.stage == .copying
+    }
+
+    func copyBookTransferJobToSD(_ id: UUID, root: URL, library: LibraryModel) {
+        guard canPrepareFiles, !bookTransferLoadFailed, bookTransferError == nil,
+              let job = bookTransferJob(id), job.stage != .discarded, !job.items.isEmpty else { return }
+        let copy = BookSDCopy(id: UUID(), folderName: root.lastPathComponent,
+                              items: job.items.map { .init(bookID: $0.bookID) })
+        changeBookJob(id) { job in
+            job.destination = .sdCard
+            if job.sdCopies == nil { job.sdCopies = [] }
+            job.sdCopies?.append(copy)
+        }
+        activeBookTransferJobID = id
+        startReaderWork(attempt: connectionAttempt, kind: .local, destination: .bookTransfer(id)) { [self] _ in
+            defer { if activeBookTransferJobID == id { activeBookTransferJobID = nil } }
+            do {
+                try await persistBookJobs()
+                for selected in job.items {
+                    try Task.checkCancellation()
+                    changeSDCopy(id, copyID: copy.id) { state in
+                        if let index = state.items.firstIndex(where: { $0.bookID == selected.bookID }) { state.items[index].result = .copying }
+                    }
+                    // A crash after publication but before its local receipt
+                    // remains uncertain. Existing paths are never overwritten.
+                    try await persistBookJobs()
+                    do {
+                        guard let book = library.book(selected.bookID) else { throw LibraryError.missing }
+                        let source = try await library.fileURL(for: book)
+                        let mayAlreadyExist = job.sdCopies?.contains { previous in
+                            previous.items.contains { $0.bookID == selected.bookID && ($0.result == .copied || $0.result == .confirmationUnknown || $0.result == .copying) }
+                        } == true
+                        let relativePath = destination(for: source).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                        let path = (relativePath.isEmpty ? "/" : "/\(relativePath)/") + source.lastPathComponent
+                        let existingMatches = mayAlreadyExist ? await Task.detached(priority: .utility) {
+                            let scoped = root.startAccessingSecurityScopedResource()
+                            defer { if scoped { root.stopAccessingSecurityScopedResource() } }
+                            return FileManager.default.contentsEqual(atPath: source.path, andPath: root.appendingPathComponent(String(path.dropFirst())).path)
+                        }.value : false
+                        // Explicit folder reselection plus a full byte comparison
+                        // can resolve a prior copy without repeating publication.
+                        let result = existingMatches ? SDCopyResult(path: path, firmwareVersion: nil) : try await localFiles.copy(source, root)
+                        guard result.firmwareVersion == nil else { throw LibraryError.unsupportedFormat("bin") }
+                        changeSDCopy(id, copyID: copy.id) { state in
+                            if let index = state.items.firstIndex(where: { $0.bookID == selected.bookID }) {
+                                state.items[index].result = .copied
+                                state.items[index].path = result.path
+                                state.items[index].failure = nil
+                            }
+                        }
+                        do { try await persistBookJobs() }
+                        catch {
+                            changeSDCopy(id, copyID: copy.id) { state in
+                                if let index = state.items.firstIndex(where: { $0.bookID == selected.bookID }) { state.items[index].result = .confirmationUnknown }
+                            }
+                            throw error
+                        }
+                    } catch {
+                        changeSDCopy(id, copyID: copy.id) { state in
+                            if let index = state.items.firstIndex(where: { $0.bookID == selected.bookID }), state.items[index].result == .copying {
+                                state.items[index].result = .failed
+                                state.items[index].failure = error.localizedDescription
+                            }
+                        }
+                        throw error
+                    }
+                }
+                changeSDCopy(id, copyID: copy.id) { $0.stage = .completed; $0.failure = nil }
+                try await persistBookJobs()
+                post("Selected books copied to SD card. Insert the card in the reader to use them.", tone: .success)
+            } catch {
+                changeSDCopy(id, copyID: copy.id) { state in
+                    if state.items.contains(where: { $0.result == .confirmationUnknown }) { state.stage = .confirmationUnknown }
+                    else if state.copiedCount == state.items.count { state.stage = .completed }
+                    else if Task.isCancelled { state.stage = .paused }
+                    else { state.stage = state.copiedCount > 0 ? .partialCompletion : .failed }
+                    state.failure = Task.isCancelled ? nil : error.localizedDescription
+                }
+                do { try await persistBookJobs() } catch { post(error) }
+                if !Task.isCancelled { post(error) }
+            }
+        }
+    }
+
+    private func changeSDCopy(_ id: UUID, copyID: UUID, _ change: (inout BookSDCopy) -> Void) {
+        changeBookJob(id) { job in
+            guard let index = job.sdCopies?.firstIndex(where: { $0.id == copyID }) else { return }
+            if var state = job.sdCopies?[index] {
+                change(&state)
+                job.sdCopies?[index] = state
+            }
+        }
+    }
+
+    /// The sheet keeps the selected books and target while the old session
+    /// closes. Discovery and any eventual Send remain explicit user actions.
+    func disconnectForBookTransferRecovery(_ id: UUID) async -> Bool {
+        guard bookTransferJob(id) != nil, !isDemoMode, !isInBackground,
+              !isWorking, !hasReaderWork else { return false }
+        autoReconnectHeld = true
+        guard let task = startReaderWork(attempt: connectionAttempt, kind: .session, destination: .bookTransfer(id), operation: { [self] _ in
+            await finishConnection(preserveMessage: true)
+        }) else { return false }
+        await task.value
+        return readerStatus == nil && !isInBackground && !Task.isCancelled
+    }
+
+    private func persistBookJobs() async throws {
+        guard !bookTransferLoadFailed else { throw BookTransferError.storage("Reopen the app after recovering its transfer record.") }
+        do {
+            if !isDemoMode { try await bookTransferStore.save(bookTransferJobs) }
+            bookTransferError = nil
+        } catch {
+            let failure = BookTransferError.storage(error.localizedDescription)
+            bookTransferError = failure.localizedDescription
+            throw failure
+        }
+    }
+
+    /// Selection admission happens before awaiting preparation. Reopening a
+    /// sheet reuses the same live job, including an interrupted publication.
+    func createBookTransferJob(books: [LibraryBook], library: LibraryModel,
+                               target: BookTransferTarget? = nil,
+                               origin: BookTransferOrigin = .init()) async -> UUID? {
+        await bookTransferLoadTask?.value
+        guard !bookTransferLoadFailed else { return nil }
+        var seen = Set<UUID>()
+        let selected = books.filter { seen.insert($0.id).inserted }
+        guard !selected.isEmpty else { bookTransferError = BookTransferError.emptySelection.localizedDescription; return nil }
+        let chosen = target ?? readerStatus.map { BookTransferTarget(readerID: $0.deviceID, displayName: $0.device) }
+        let selection = Set(selected.map(\.id))
+        if let existing = bookTransferJobs.first(where: {
+            !$0.isFinished && Set($0.items.map(\.bookID)) == selection
+                && (target == nil || $0.target == chosen)
+        }) { return existing.id }
+        let job = BookTransferJob(id: UUID(), target: chosen, origin: origin,
+                                  items: selected.map { .init(bookID: $0.id, title: $0.title) })
+        bookTransferJobs.insert(job, at: 0)
+        if chosen != nil, chosen?.readerID == nil, readerStatus != nil {
+            unidentifiedBookTargetConnections[job.id] = connectionAttempt
+        }
+        if isDemoMode {
+            changeBookJob(job.id) { $0.stage = .needsConnection }
+            return job.id
+        }
+        // Persist selection before a provider copy can complete or the app can stop.
+        do { try await persistBookJobs() }
+        catch { changeBookJob(job.id) { $0.stage = .failed; $0.failure = error.localizedDescription }; return job.id }
+        await prepareBookTransferJob(job.id, library: library, waitForCompletion: false)
+        return job.id
+    }
+
+    private func prepareBookTransferJob(_ id: UUID, library: LibraryModel, waitForCompletion: Bool = true) async {
+        guard canPrepareFiles else {
+            changeBookJob(id) { $0.stage = .waitingForOtherWork; $0.failure = BookTransferError.unavailable.localizedDescription }
+            do { try await persistBookJobs() } catch { post(error) }
+            return
+        }
+        activeBookTransferJobID = id
+        guard let task = startReaderWork(attempt: connectionAttempt, kind: .local, operation: { [self] _ in
+            activeBookTransferJobID = id
+            defer { if activeBookTransferJobID == id { activeBookTransferJobID = nil } }
+            changeBookJob(id) { $0.stage = .preparing; $0.failure = nil }
+            do {
+                try await persistBookJobs()
+                let items = bookTransferJob(id)?.items ?? []
+                for selection in items where selection.result == .unprepared || (selection.transferID == nil && selection.result == .failed) {
+                    try Task.checkCancellation()
+                    do {
+                        guard let book = library.book(selection.bookID) else { throw LibraryError.missing }
+                        let url = try await library.fileURL(for: book)
+                        let plannedID = selection.transferID ?? UUID()
+                        changeBookJob(id) { job in
+                            if let index = job.items.firstIndex(where: { $0.bookID == selection.bookID }) {
+                                job.items[index].transferID = plannedID
+                                job.items[index].result = .unprepared
+                            }
+                        }
+                        try await persistBookJobs()
+                        let prepared = try await localFiles.prepareBook(url, plannedID, id, selection.bookID)
+                        guard prepared.kind == .content, prepared.id == plannedID,
+                              prepared.bookJobID == id, prepared.libraryBookID == selection.bookID else { throw BookTransferError.missingCopy }
+                        preparedTransfers.append(prepared)
+                        changeBookJob(id) { job in
+                            guard let index = job.items.firstIndex(where: { $0.bookID == selection.bookID }) else { return }
+                            job.items[index].transferID = prepared.id
+                            job.items[index].result = prepared.publicationPending == true ? .confirmationUnknown : .prepared
+                            job.items[index].failure = nil
+                        }
+                        try await persistBookJobs()
+                    } catch {
+                        changeBookJob(id) { job in
+                            guard let index = job.items.firstIndex(where: { $0.bookID == selection.bookID }) else { return }
+                            job.items[index].result = .failed
+                            if !preparedTransfers.contains(where: { $0.id == job.items[index].transferID }) { job.items[index].transferID = nil }
+                            job.items[index].failure = error.localizedDescription
+                            job.failure = error.localizedDescription
+                        }
+                        // A storage failure stops preparation as well as publication.
+                        if bookTransferError != nil { throw error }
+                        try await persistBookJobs()
+                    }
+                }
+                try Task.checkCancellation()
+                changeBookJob(id) { job in
+                    if job.needsConfirmation { job.stage = .confirmationUnknown }
+                    else if job.items.contains(where: { $0.result == .failed }) { job.stage = job.savedCount > 0 ? .partialCompletion : .failed }
+                    else { job.stage = readerStatus == nil ? .needsConnection : .ready }
+                }
+                try await persistBookJobs()
+            } catch {
+                changeBookJob(id) { $0.stage = Task.isCancelled ? .paused : .failed; $0.failure = Task.isCancelled ? nil : error.localizedDescription }
+                do { try await persistBookJobs() } catch { post(error) }
+            }
+        }) else { activeBookTransferJobID = nil; return }
+        if waitForCompletion {
+            await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        }
+    }
+
+    private func persistPreparedTransfer(_ item: PreparedTransfer) async throws {
+        let data = try JSONEncoder().encode(item)
+        let record = TransferPreparation.directory.appendingPathComponent(item.id.uuidString).appendingPathComponent("transfer.json")
+        try await Task.detached(priority: .utility) { try data.write(to: record, options: .atomic) }.value
+    }
+
+    /// Target changes cannot carry a staged or uncertain publication onto a
+    /// different device. Discard that staging safely before choosing another.
+    @discardableResult
+    func selectBookTransferTarget(_ id: UUID, target: BookTransferTarget) async -> Bool {
+        guard let job = bookTransferJob(id), !job.isFinished, activeBookTransferJobID != id,
+              (job.target == target || !job.items.contains(where: { item in
+                  guard let transferID = item.transferID else { return false }
+                  return preparedTransfers.first(where: { $0.id == transferID })?.stagingID != nil
+                      || item.result == .confirmationUnknown || item.result == .saved
+              })) else {
+            bookTransferError = BookTransferError.targetChanged.localizedDescription
+            return false
+        }
+        changeBookJob(id) { $0.target = target; $0.failure = nil; $0.stage = readerStatus == nil ? .needsConnection : .ready }
+        if target.readerID == nil, readerStatus?.device == target.displayName {
+            unidentifiedBookTargetConnections[id] = connectionAttempt
+        }
+        do { try await persistBookJobs(); return true }
+        catch { changeBookJob(id) { $0.target = job.target; $0.stage = .failed; $0.failure = error.localizedDescription }; return false }
+    }
+
+    func canSendBookTransferJob(_ id: UUID) -> Bool {
+        guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground, !bookTransferJobsLoading,
+              bookTransferError == nil, let status = readerStatus, status.supportsAtomicUpload,
+              let job = bookTransferJob(id), !job.isFinished, !job.needsConfirmation,
+              job.target?.readerID == nil || job.target?.readerID == status.deviceID else { return false }
+        if let target = job.target, target.readerID == nil {
+            guard target.displayName == status.device,
+                  unidentifiedBookTargetConnections[id] == connectionAttempt else { return false }
+        }
+        let remaining = job.items.filter { $0.result != .saved && $0.result != .discarded }
+        return !remaining.isEmpty && remaining.allSatisfy { selection in
+            selection.result != .unprepared && preparedTransfers.contains {
+                $0.id == selection.transferID && $0.kind == .content && $0.bookJobID == id && $0.libraryBookID == selection.bookID
+            }
+        }
+    }
+
+    func sendBookTransferJob(_ id: UUID) {
+        guard let job = bookTransferJob(id), !job.needsConfirmation else { return }
+        guard canSendBookTransferJob(id) else {
+            changeBookJob(id) { job in
+                if readerStatus == nil { job.failure = "Connect the selected reader to send these books." }
+                else if job.target?.readerID != nil, job.target?.readerID != readerStatus?.deviceID {
+                    job.failure = BookTransferError.targetChanged.localizedDescription
+                } else { job.failure = BookTransferError.unavailable.localizedDescription }
+            }
+            return
+        }
+        let ids = Set(job.items.filter { $0.result != .saved && $0.result != .discarded }.compactMap(\.transferID))
+        sendPreparedFiles(ids: ids, kind: .content, jobID: id)
+    }
+
+    func pauseBookTransferJob(_ id: UUID) {
+        guard activeBookTransferJobID == id, let task = readerWorkTask else { return }
+        task.cancel() // The lane retains ownership until the request drains.
+    }
+
+    func checkBookTransferJob(_ id: UUID) {
+        guard let job = bookTransferJob(id), job.needsConfirmation else { return }
+        let ids = Set(job.items.filter { $0.result == .confirmationUnknown }.compactMap(\.transferID))
+        guard !ids.isEmpty, ids.allSatisfy({ id in preparedTransfers.contains { $0.id == id } }) else {
+            changeBookJob(id) { $0.failure = BookTransferError.missingCopy.localizedDescription }
+            return
+        }
+        sendPreparedFiles(ids: ids, kind: .content, jobID: id, checkOnly: true)
+    }
+
+    /// Retries preparation and remaining items only on this explicit command.
+    /// Unknown publications are receipt-checked first and never uploaded again.
+    func retryBookTransferJob(_ id: UUID, library: LibraryModel) async {
+        await bookTransferLoadTask?.value
+        guard let job = bookTransferJob(id), !job.isFinished, !isDemoMode else { return }
+        do { try await persistBookJobs() }
+        catch { changeBookJob(id) { $0.failure = error.localizedDescription }; return }
+        if job.needsConfirmation { checkBookTransferJob(id); return }
+        if job.items.contains(where: { $0.result == .unprepared || ($0.transferID == nil && $0.result == .failed) }) {
+            await prepareBookTransferJob(id, library: library)
+        }
+        // Preparation recovery only makes Send available; it never starts publication.
+    }
+
+    func discardBookTransferJob(_ id: UUID, localOnly: Bool = false) {
+        guard let job = bookTransferJob(id), !job.isFinished, !isDemoMode else { return }
+        if activeBookTransferJobID == id, let task = readerWorkTask {
+            task.cancel()
+            Task { [weak self] in
+                await task.value
+                self?.discardBookTransferJob(id, localOnly: localOnly)
+            }
+            return
+        }
+        let ids = Set(job.items.filter { $0.result != .saved }.compactMap(\.transferID))
+        removePreparedFiles(ids: ids, kind: .content, localOnly: localOnly, jobID: id)
+    }
+
     @discardableResult
     func upload(_ url: URL) -> Task<Void, Never>? {
         guard canPrepareFiles else { return nil }
@@ -1920,7 +2375,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             return nil
         }
         post("Preparing an offline copy before transfer…")
-        return startReaderWork(attempt: connectionAttempt, kind: .local) { [self] _ in
+        return startReaderWork(attempt: connectionAttempt, kind: .local, destination: url.pathExtension.lowercased() == "bin" ? .firmware : (url.pathExtension.lowercased() == "cpfont" ? .diagnostics : .preparedFiles)) { [self] _ in
             do {
                 let item = try await localFiles.prepare(url)
                 // A completed file receipt must survive background cancellation:
@@ -1943,27 +2398,77 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func sendPreparedFiles(kind: TransferKind = .content) {
+        // Older category batches never adopt the new task-owned prepared copies.
+        let ids = Set(preparedTransfers.filter { $0.kind == kind && $0.bookJobID == nil }.map(\.id))
+        sendPreparedFiles(ids: ids, kind: kind)
+    }
+
+    func sendPreparedFiles(ids: Set<UUID>, kind: TransferKind = .content,
+                           jobID: UUID? = nil, checkOnly: Bool = false) {
         guard !isDemoMode, !isWorking, !hasReaderWork, !isInBackground,
-              let expectedStatus = readerStatus, preparedTransfers.contains(where: { $0.kind == kind }) else { return }
+              let expectedStatus = readerStatus, !ids.isEmpty,
+              preparedTransfers.contains(where: { ids.contains($0.id) && $0.kind == kind }) else { return }
+        if let jobID {
+            guard let job = bookTransferJob(jobID), ids.allSatisfy({ transferID in
+                guard let selection = job.items.first(where: { $0.transferID == transferID }) else { return false }
+                return preparedTransfers.contains {
+                    $0.id == transferID && $0.kind == .content && $0.bookJobID == jobID && $0.libraryBookID == selection.bookID
+                }
+            }) else {
+                changeBookJob(jobID) { $0.failure = BookTransferError.missingCopy.localizedDescription }
+                return
+            }
+        } else if preparedTransfers.contains(where: { ids.contains($0.id) && $0.bookJobID != nil }) {
+            return
+        }
         let host = activeHost
         let port = activeHTTPPort
         let key = firmwareKey
         let attempt = connectionAttempt
-        startReaderWork(attempt: attempt) { [self] owner in
+        if let jobID {
+            guard let job = bookTransferJob(jobID), !job.isFinished,
+                  job.target?.readerID == nil || job.target?.readerID == expectedStatus.deviceID else {
+                bookTransferError = BookTransferError.targetChanged.localizedDescription
+                return
+            }
+            activeBookTransferJobID = jobID
+            changeBookJob(jobID) { job in
+                if job.target == nil { job.target = .init(readerID: expectedStatus.deviceID, displayName: expectedStatus.device) }
+                job.stage = checkOnly ? .checking : .sending
+                job.failure = nil
+            }
+        }
+        let batch = preparedTransfers.filter { ids.contains($0.id) && $0.kind == kind }.map(\.id)
+        activePreparedFileBatch = preparedTransfers.filter { ids.contains($0.id) && $0.kind == kind }
+        activePreparedTransferIDs = Set(batch)
+        startReaderWork(attempt: attempt, destination: jobID.map { .bookTransfer($0) } ?? (kind == .firmware ? .firmware : (preparedTransfers.filter { ids.contains($0.id) }.allSatisfy { $0.filename.lowercased().hasSuffix(".cpfont") } ? .diagnostics : .preparedFiles))) { [self] owner in
+            defer {
+                if activeBookTransferJobID == jobID { activeBookTransferJobID = nil }
+                activePreparedTransferIDs = []
+                activePreparedFileBatch = []
+            }
             do {
+                if jobID != nil { try await persistBookJobs() }
                 let status = try await client.status(host: host, port: port)
                 try Task.checkCancellation()
                 guard status.device == expectedStatus.device,
                       expectedStatus.deviceID == nil || expectedStatus.deviceID == status.deviceID else {
                     throw CrossPointClient.ClientError.unexpectedMessage("The reader changed. Reconnect before sending files.")
                 }
-                if let expectedDeviceID, let actual = status.deviceID, expectedDeviceID != actual {
+                if let expectedDeviceID, expectedDeviceID != status.deviceID {
                     throw CrossPointClient.ClientError.unexpectedMessage("The reader does not match the paired identity.")
+                }
+                if let jobID, let target = bookTransferJob(jobID)?.target {
+                    guard target.readerID == nil || target.readerID == status.deviceID,
+                          target.readerID != nil || target.displayName == status.device else { throw BookTransferError.targetChanged }
+                    // An unknown identity remains unknown; the UI never calls it verified.
                 }
                 guard status.supportsAtomicUpload else {
                     throw CrossPointClient.ClientError.unexpectedMessage("This reader does not advertise verified Pocket transfers. Update its firmware or copy the file to SD on Mac. Nothing was uploaded.")
                 }
-                while let index = preparedTransfers.firstIndex(where: { $0.kind == kind }) {
+                for selectedID in batch {
+                    guard let index = preparedTransfers.firstIndex(where: { $0.id == selectedID }) else { continue }
+                    if let jobID, bookTransferJob(jobID)?.items.first(where: { $0.transferID == selectedID })?.result == .saved { continue }
                     var item = preparedTransfers[index]
                     try Task.checkCancellation()
                     if let bound = item.readerID, bound != status.deviceID {
@@ -1981,9 +2486,17 @@ final class PocketModel: ObservableObject, DeviceSession {
                     }
                     item.readerID = status.deviceID
                     item.remoteStagingID = item.remoteStagingID ?? item.id
-                    try JSONEncoder().encode(item).write(to: TransferPreparation.directory
-                        .appendingPathComponent(item.id.uuidString).appendingPathComponent("transfer.json"), options: .atomic)
+                    try await persistPreparedTransfer(item)
                     preparedTransfers[index] = item
+                    if let jobID {
+                        changeBookJob(jobID) { job in
+                            if let index = job.items.firstIndex(where: { $0.transferID == item.id }) {
+                                job.items[index].result = checkOnly || item.publicationPending == true ? .confirmationUnknown : .sending
+                                job.items[index].failure = nil
+                            }
+                        }
+                        try await persistBookJobs()
+                    }
                     activeTransferKind = kind
                     uploadProgress = 0
                     post(kind == .content ? "Sending content to SD card: \(item.filename)…"
@@ -1999,7 +2512,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                         transferID: item.remoteStagingID ?? item.id,
                         transferControl: status.transferControl == 1,
                         publicationReceipt: status.publicationReceipt == 1,
-                        recoverPublicationOnly: item.publicationPending == true,
+                        recoverPublicationOnly: checkOnly || item.publicationPending == true,
                         transferKind: kind,
                         note: { [weak self] text in Task { @MainActor in
                             guard let self, self.ownsReaderWork(owner, attempt: attempt) else { return }
@@ -2014,6 +2527,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                             guard let self, self.ownsReaderWork(owner, attempt: attempt) else { return }
                             let progress = total > 0 ? Double(sent) / Double(total) : 0
                             self.uploadProgress = progress
+                            if let jobID { self.changeBookJob(jobID) { $0.progress = progress } }
                             self.mirror.apply(.transferProgress(progress))
                         }
                     }
@@ -2027,13 +2541,43 @@ final class PocketModel: ObservableObject, DeviceSession {
                     } else {
                         post("Content saved on the reader’s SD card: \(path). Open it from the reader’s library.", tone: .success)
                     }
-                    try FileManager.default.removeItem(at: url.deletingLastPathComponent())
+                    if let jobID {
+                        // Durable saved result precedes deletion of the only receipt recovery copy.
+                        changeBookJob(jobID) { job in
+                            if let index = job.items.firstIndex(where: { $0.transferID == item.id }) {
+                                job.items[index].result = .saved
+                                job.items[index].publishedPath = path
+                                job.items[index].failure = nil
+                            }
+                            job.progress = 1
+                        }
+                        do { try await persistBookJobs() }
+                        catch {
+                            changeBookJob(jobID) { job in
+                                if let index = job.items.firstIndex(where: { $0.transferID == item.id }) {
+                                    job.items[index].result = .confirmationUnknown
+                                    job.items[index].publishedPath = nil
+                                }
+                            }
+                            throw error
+                        }
+                    }
+                    let folder = url.deletingLastPathComponent()
+                    try await Task.detached(priority: .utility) { try FileManager.default.removeItem(at: folder) }.value
                     preparedTransfers.removeAll { $0.id == item.id }
+                }
+                if let jobID {
+                    finishBookJobBatch(jobID, error: nil, paused: false)
+                    try await persistBookJobs()
                 }
                 if hasDirectSession || (kind == .firmware && status.sessionEnd == true) {
                     await finishConnection(preserveMessage: true)
                 }
             } catch {
+                if let jobID {
+                    finishBookJobBatch(jobID, error: error, paused: Task.isCancelled)
+                    do { try await persistBookJobs() } catch { post(error) }
+                }
                 guard attempt == connectionAttempt else { return }
                 if Task.isCancelled, preparedTransfers.contains(where: { $0.kind == kind }) { post("Transfer paused. The prepared copy is kept. Resume this category, or remove it to clean up the reader’s temporary file. If saving had already started, check the reader for the completed file.", tone: .pending) }
                 else if !Task.isCancelled { post(error) }
@@ -2052,32 +2596,79 @@ final class PocketModel: ObservableObject, DeviceSession {
         // Keep the in-memory queue conservative even if persistence fails.
         preparedTransfers[index] = item
         try await Task.detached(priority: .utility) { try data.write(to: record, options: .atomic) }.value
+        if let jobID = item.bookJobID {
+            changeBookJob(jobID) { job in
+                job.stage = .checking
+                if let index = job.items.firstIndex(where: { $0.transferID == id }) { job.items[index].result = .confirmationUnknown }
+            }
+            try await persistBookJobs()
+        }
         guard ownsReaderWork(owner, attempt: attempt) else { throw CancellationError() }
+    }
+
+    private func finishBookJobBatch(_ id: UUID, error: Error?, paused: Bool) {
+        changeBookJob(id) { job in
+            for index in job.items.indices where job.items[index].result != .saved && job.items[index].result != .discarded {
+                let copy = preparedTransfers.first { $0.id == job.items[index].transferID }
+                if copy?.publicationPending == true { job.items[index].result = .confirmationUnknown }
+                else if job.items[index].result == .sending { job.items[index].result = paused ? .prepared : .failed }
+                if let error, job.items[index].result == .failed || job.items[index].result == .confirmationUnknown {
+                    job.items[index].failure = error.localizedDescription
+                }
+            }
+            if job.savedCount == job.items.count { job.stage = .completed; job.failure = nil }
+            else if job.needsConfirmation { job.stage = .confirmationUnknown; job.failure = error?.localizedDescription }
+            else if paused { job.stage = .paused; job.failure = nil }
+            else if job.savedCount > 0 { job.stage = .partialCompletion; job.failure = error?.localizedDescription }
+            else { job.stage = error == nil ? .ready : .failed; job.failure = error?.localizedDescription }
+        }
     }
 
     @Published private(set) var activeTransferKind: TransferKind?
 
     /// A cancelled network task must finish before cleanup opens a new request.
     func stopAndRemoveTransfer() {
-        guard let kind = activeTransferKind, let task = readerWorkTask, isTransferring else { return }
+        guard activeBookTransferJobID == nil,
+              let kind = activeTransferKind, let task = readerWorkTask, isTransferring else { return }
+        let ids = activePreparedTransferIDs
         task.cancel()
         post("Stopping transfer…", tone: .pending)
         Task { [weak self] in
             await task.value
-            self?.removePreparedFiles(kind: kind)
+            self?.removePreparedFiles(ids: ids, kind: kind)
         }
     }
 
     func removePreparedFiles(kind: TransferKind = .content, localOnly: Bool = false) {
+        let ids = Set(preparedTransfers.filter { $0.kind == kind && $0.bookJobID == nil }.map(\.id))
+        removePreparedFiles(ids: ids, kind: kind, localOnly: localOnly)
+    }
+
+    func removePreparedFiles(ids: Set<UUID>, kind: TransferKind = .content,
+                             localOnly: Bool = false, jobID: UUID? = nil) {
         guard !isWorking, !hasReaderWork, !isDemoMode, !isInBackground else { return }
-        let items = preparedTransfers.filter { $0.kind == kind }
-        guard !items.isEmpty else { return }
+        let items = preparedTransfers.filter { item in
+            guard ids.contains(item.id), item.kind == kind else { return false }
+            if let jobID {
+                return item.bookJobID == jobID && bookTransferJob(jobID)?.items.contains {
+                    $0.transferID == item.id && $0.bookID == item.libraryBookID
+                } == true
+            }
+            return item.bookJobID == nil
+        }
+        guard !items.isEmpty || jobID != nil else { return }
+        if let jobID, bookTransferJob(jobID)?.needsConfirmation == true, !localOnly {
+            changeBookJob(jobID) { $0.failure = BookTransferError.unknownPublication.localizedDescription }
+            return
+        }
         post(localOnly ? "Removing local prepared copies…" : "Cleaning up \(kind.rawValue) transfers…")
         let host = activeHost
         let port = activeHTTPPort
-        startReaderWork(attempt: connectionAttempt, kind: .session) { [self] _ in
+        startReaderWork(attempt: connectionAttempt, kind: .session, destination: jobID.map { .bookTransfer($0) } ?? (kind == .firmware ? .firmware : (!items.isEmpty && items.allSatisfy { $0.filename.lowercased().hasSuffix(".cpfont") } ? .diagnostics : .preparedFiles))) { [self] _ in
             do {
+                if jobID != nil { try await persistBookJobs() }
                 for item in items {
+                    try Task.checkCancellation()
                     if let stagingID = item.stagingID, !localOnly {
                         guard let bound = item.readerID, let status = readerStatus,
                               status.deviceID == bound, status.transferControl == 1 else {
@@ -2092,9 +2683,28 @@ final class PocketModel: ObservableObject, DeviceSession {
                             destination: destination(for: TransferPreparation.file(item)), kind: item.kind,
                             host: host, port: port)
                     }
+                    if let jobID {
+                        changeBookJob(jobID) { job in
+                            if let index = job.items.firstIndex(where: { $0.transferID == item.id }) {
+                                job.items[index].result = .discarded
+                                job.items[index].failure = nil
+                            }
+                        }
+                        try await persistBookJobs()
+                    }
                     let folder = TransferPreparation.file(item).deletingLastPathComponent()
-                    if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
+                    try await Task.detached(priority: .utility) {
+                        if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
+                    }.value
                     preparedTransfers.removeAll { $0.id == item.id }
+                }
+                if let jobID {
+                    changeBookJob(jobID) { job in
+                        for index in job.items.indices where job.items[index].result != .saved { job.items[index].result = .discarded }
+                        job.stage = .discarded
+                        job.failure = nil
+                    }
+                    try await persistBookJobs()
                 }
                 uploadProgress = 0
                 if kind == .firmware {
@@ -2105,7 +2715,13 @@ final class PocketModel: ObservableObject, DeviceSession {
                          ? "Local prepared copies removed. Reader files were not changed; temporary data may remain until Sync closes or another transfer cleans it up."
                          : "Prepared copies and any tracked temporary reader files removed. Original sources and already saved reader files are unchanged.", tone: .success)
                 }
-            } catch { post(error) }
+            } catch {
+                if let jobID {
+                    changeBookJob(jobID) { $0.failure = error.localizedDescription; $0.stage = .failed }
+                    do { try await persistBookJobs() } catch { post(error) }
+                }
+                post(error)
+            }
         }
     }
 
@@ -2146,6 +2762,8 @@ final class PocketModel: ObservableObject, DeviceSession {
     func cancelConnectionAttempt() {
         guard canCancelConnection else { return }
         guard let reservation = readerWork.reserve(.session, cancelling: true) else { return }
+        activeReaderTask = .connection
+        activeScreenTarget = nil
         let previous = reservation.predecessor
         let owner = reservation.owner
         connectionAttempt += 1
@@ -2175,7 +2793,22 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
     }
 
-    func pauseTransfer() { if isTransferring { readerWorkTask?.cancel() } }
+    func pauseTransfer() {
+        if activeBookTransferJobID == nil, isTransferring { readerWorkTask?.cancel() }
+    }
+
+    func isSendingPreparedFiles(ids: Set<UUID>) -> Bool {
+        activeBookTransferJobID == nil && isTransferring && !ids.isEmpty && activePreparedTransferIDs == ids
+    }
+
+    func pausePreparedFiles(ids: Set<UUID>) {
+        if isSendingPreparedFiles(ids: ids) { readerWorkTask?.cancel() }
+    }
+
+    func stopAndRemovePreparedFiles(ids: Set<UUID>) {
+        guard isSendingPreparedFiles(ids: ids) else { return }
+        stopAndRemoveTransfer()
+    }
 
     /// One exclusive lane for device work and local file/session operations.
     /// Cancellation retains ownership until the underlying I/O has drained.
@@ -2183,10 +2816,25 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// same session, so delayed callbacks also carry an operation token.
     @discardableResult
     private func startReaderWork(attempt: Int, kind: ReaderWorkKind = .transfer,
+                                 destination: ReaderTaskDestination? = nil,
+                                 screenTarget: ReaderScreen? = nil,
                                  operation: @escaping @MainActor (UUID) async -> Void) -> Task<Void, Never>? {
         guard let reservation = readerWork.reserve(kind) else { return nil }
         let previous = reservation.predecessor
         let owner = reservation.owner
+        if let destination { activeReaderTask = destination }
+        else if let id = activeBookTransferJobID { activeReaderTask = .bookTransfer(id) }
+        else {
+            switch kind {
+            case .storage, .inventory, .download: activeReaderTask = .readerInventory
+            case .connection, .discovery, .session: activeReaderTask = .connection
+            case .settings: activeReaderTask = .screens
+            case .preview: activeReaderTask = .cards
+            case .local, .transfer: activeReaderTask = .preparedFiles
+            case .quietReading: activeReaderTask = nil
+            }
+        }
+        activeScreenTarget = activeReaderTask == .screens ? (screenTarget ?? .home) : nil
         isWorking = kind != .quietReading
         let task = Task {
             defer { finishReaderWork(owner: owner, attempt: attempt) }
@@ -2199,6 +2847,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             await operation(owner)
         }
         readerWork.attach(task, owner: owner)
+        updateBookJobAvailability()
         return task
     }
 
@@ -2213,8 +2862,11 @@ final class PocketModel: ObservableObject, DeviceSession {
         if readerWorkKind == .transfer { readerInventoryWanted = true }
         let resumeTraffic = readerWorkKind != .local && readerWorkKind != .quietReading
         readerWork.finish(owner)
+        activeReaderTask = nil
+        activeScreenTarget = nil
         isWorking = false
         activeTransferKind = nil
+        updateBookJobAvailability()
         if resumeTraffic { resumeReaderTraffic(attempt: attempt) }
     }
 
@@ -2416,7 +3068,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         contentDeploymentReaderID = identity
         uploadProgress = 0
         post("Verifying the reader before applying content…")
-        return startReaderWork(attempt: attempt) { [self] owner in
+        return startReaderWork(attempt: attempt, destination: .cards) { [self] owner in
             do {
                 try Task.checkCancellation()
                 guard attempt == connectionAttempt else { return }
@@ -2488,7 +3140,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         let attempt = connectionAttempt
         let host = activeHost
         let port = activeHTTPPort
-        startReaderWork(attempt: attempt) { [self] owner in
+        startReaderWork(attempt: attempt, destination: .cards) { [self] owner in
             do {
                 try Task.checkCancellation()
                 guard attempt == connectionAttempt else { return }
@@ -2562,7 +3214,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             publishedName = "update.bin"
             relativeDirectory = ""
         default:
-            relativeDirectory = ""
+            relativeDirectory = ArticleEPUB.isFilename(source.lastPathComponent) ? "Articles" : ""
         }
 
         let directory = relativeDirectory.isEmpty ? root : root.appendingPathComponent(relativeDirectory, isDirectory: true)
@@ -2575,7 +3227,9 @@ final class PocketModel: ObservableObject, DeviceSession {
 
         let staging = directory.appendingPathComponent(".\(publishedName).pocket-staging-\(UUID().uuidString)")
         defer { try? manager.removeItem(at: staging) }
+        try Task.checkCancellation()
         try manager.copyItem(at: source, to: staging)
+        try Task.checkCancellation()
         if isFirmware, manager.fileExists(atPath: destination.path) {
             _ = try manager.replaceItemAt(destination, withItemAt: staging)
         } else {

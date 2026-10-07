@@ -146,6 +146,45 @@ struct ReaderPreferences: Equatable, Sendable, Codable {
         }
     }
 
+    enum Orientation: Int, CaseIterable, Sendable, Codable {
+        case portrait = 0, landscape = 1, inverted = 2, landscapeReversed = 3
+        var title: String {
+            switch self {
+            case .portrait: "Portrait"
+            case .landscape: "Landscape"
+            case .inverted: "Portrait reversed"
+            case .landscapeReversed: "Landscape reversed"
+            }
+        }
+        var isLandscape: Bool { self == .landscape || self == .landscapeReversed }
+    }
+
+    enum LineSpacing: Int, CaseIterable, Sendable, Codable {
+        case tight = 0, normal = 1, wide = 2, extraWide = 3
+        var title: String {
+            switch self {
+            case .tight: "Tight"
+            case .normal: "Normal"
+            case .wide: "Wide"
+            case .extraWide: "Extra wide"
+            }
+        }
+    }
+
+    enum Failure: LocalizedError {
+        case invalidPreferences
+        var errorDescription: String? { "Reader settings contain an unsupported value. Reload the reader settings before applying." }
+    }
+
+    var hasValidRequiredValues: Bool {
+        (0...1).contains(startupApp) && (1...Self.neverSleepMinutes).contains(sleepTimeoutMinutes) && (0...3).contains(fontSize)
+    }
+
+    // Key presence in GET is the capability: absent fields are never posted.
+    var orientation: Orientation? = nil
+    var lineSpacing: LineSpacing? = nil
+    var screenMargin: Int? = nil
+
     var startupApp = 1
     var pocketDailySleepCover = true
     var sleepTimeoutMinutes = 10
@@ -157,12 +196,24 @@ struct ReaderPreferences: Equatable, Sendable, Codable {
     /// Absent on firmware that always shows the wake cue. Never sent to those readers.
     var sleepWakeIndicator: Bool? = nil
 
+    /// Mirrors MappedInputManager for the fixed physical keys: X3 left/right,
+    /// X4 upper/lower, viewed in the chassis' upright position.
+    var sideButtonActions: (first: String, second: String) {
+        guard let sideButtons, sideButtons != .off else { return ("No page turn", "No page turn") }
+        let rotates = frontButtonsFollowOrientation == true && (orientation == .inverted || orientation == .landscapeReversed)
+        let swapped = (sideButtons == .nextPrevious) != rotates
+        return swapped ? ("Next page", "Previous page") : ("Previous page", "Next page")
+    }
+
     var hasButtonSettings: Bool { sideButtons != nil && frontButtonsFollowOrientation != nil }
 
     /// `GET /api/pocket/v1/preferences`. The button keys are optional; a value
     /// outside the known range hides that control rather than being sent back.
     static func decode(_ data: Data) throws -> ReaderPreferences {
         struct Wire: Decodable {
+            let orientation: Int?
+            let lineSpacing: Int?
+            let screenMargin: Int?
             let startupApp: Int
             let pocketDailySleepCover: Int
             let sleepTimeoutMinutes: Int
@@ -178,6 +229,12 @@ struct ReaderPreferences: Equatable, Sendable, Codable {
             sleepTimeoutMinutes: wire.sleepTimeoutMinutes,
             fontSize: wire.fontSize
         )
+        guard preferences.hasValidRequiredValues, (0...1).contains(wire.pocketDailySleepCover) else {
+            throw Failure.invalidPreferences
+        }
+        preferences.orientation = wire.orientation.flatMap(Orientation.init(rawValue:))
+        preferences.lineSpacing = wire.lineSpacing.flatMap(LineSpacing.init(rawValue:))
+        preferences.screenMargin = wire.screenMargin.flatMap { (5...40).contains($0) ? $0 : nil }
         preferences.sideButtons = wire.sideButtonLayout.flatMap(SideButtons.init(rawValue:))
         preferences.frontButtonsFollowOrientation = wire.frontButtonFollowOrientation.flatMap {
             $0 == 0 || $0 == 1 ? $0 == 1 : nil
@@ -190,12 +247,16 @@ struct ReaderPreferences: Equatable, Sendable, Codable {
 
     /// `POST /api/pocket/v1/preferences`; button keys only when the reader reported them.
     func requestBody() throws -> Data {
+        guard hasValidRequiredValues, screenMargin.map({ (5...40).contains($0) }) ?? true else { throw Failure.invalidPreferences }
         var body: [String: Int] = [
             "startupApp": startupApp,
             "pocketDailySleepCover": pocketDailySleepCover ? 1 : 0,
             "sleepTimeoutMinutes": sleepTimeoutMinutes,
             "fontSize": fontSize,
         ]
+        if let orientation { body["orientation"] = orientation.rawValue }
+        if let lineSpacing { body["lineSpacing"] = lineSpacing.rawValue }
+        if let screenMargin { body["screenMargin"] = screenMargin }
         if let sideButtons { body["sideButtonLayout"] = sideButtons.rawValue }
         if let frontButtonsFollowOrientation { body["frontButtonFollowOrientation"] = frontButtonsFollowOrientation ? 1 : 0 }
         if let sleepWakeIndicator { body["sleepWakeIndicator"] = sleepWakeIndicator ? 1 : 0 }

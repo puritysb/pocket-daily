@@ -70,7 +70,7 @@ struct WeatherControls: View {
                 try Task.checkCancellation()
                 settings.setPlace(place)
                 editingCity = false
-                model.refreshGlance(force: true)
+                model.refreshGlance(force: true, send: false)
             } catch {
                 if !Task.isCancelled { findError = error.localizedDescription }
             }
@@ -87,23 +87,25 @@ private struct WeatherSourceCredit: View {
     @State private var attribution: (mark: URL, markDark: URL, legal: URL)?
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             if let attribution {
                 AsyncImage(url: colorScheme == .dark ? attribution.markDark : attribution.mark) { image in
                     image.resizable().scaledToFit()
+                        .frame(width: 82, height: 16).clipped()
                 } placeholder: { Text("Apple Weather").font(.caption) }
-                .frame(width: 92, height: 18)
+                .frame(width: 82, height: 16).clipped()
                 .accessibilityLabel("Apple Weather")
             } else {
                 Text("Apple Weather").font(.caption)
             }
             if let legal = attribution?.legal ?? URL(string: "https://developer.apple.com/weatherkit/data-source-attribution/") {
-                Link("Data sources", destination: legal).font(.caption)
+                Link("Data sources", destination: legal).font(.caption2)
                     .accessibilityIdentifier("weather-data-sources")
             }
         }
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .contain)
+        .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("weather-source-credit")
         .task(id: loadMark) {
             guard loadMark else { return }
@@ -117,6 +119,8 @@ struct CalendarControls: View {
     @ObservedObject var model: PocketModel
     @State private var note: String?
     @State private var requestingAccess = false
+    @State private var calendars: [CalendarSource.Choice] = []
+    @State private var choosingCalendars = false
     @State private var work: Task<Void, Never>?
 
     var body: some View {
@@ -141,8 +145,45 @@ struct CalendarControls: View {
                         .disabled(requestingAccess)
                         .accessibilityIdentifier("glance-events")
                 }
-                Text("Today’s events are shared only with your connected reader.")
-                    .font(.caption).foregroundStyle(.secondary)
+                if settings.includeEvents {
+                    Button(settings.selectedCalendarIDs == nil ? "Choose calendars · All" : "Choose calendars · \(settings.selectedCalendarIDs?.count ?? 0) selected") {
+                        choosingCalendars.toggle()
+                        reloadCalendars()
+                    }
+                    .accessibilityIdentifier("glance-choose-calendars")
+                    if choosingCalendars {
+                        Toggle("All calendars", isOn: Binding(get: { settings.selectedCalendarIDs == nil }, set: {
+                            settings.setSelectedCalendarIDs($0 ? nil : [])
+                        }))
+                        .accessibilityIdentifier("glance-all-calendars")
+                        if settings.selectedCalendarIDs != nil {
+                            ForEach(calendars) { calendar in
+                                Toggle(calendar.title + " · " + calendar.source, isOn: Binding(get: {
+                                    settings.selectedCalendarIDs?.contains(calendar.id) == true
+                                }, set: { selected in
+                                    var ids = settings.selectedCalendarIDs ?? []
+                                    if selected { ids.append(calendar.id) } else { ids.removeAll { $0 == calendar.id } }
+                                    settings.setSelectedCalendarIDs(ids)
+                                }))
+                            }
+                            let missing = Set(settings.selectedCalendarIDs ?? []).subtracting(calendars.map(\.id)).count
+                            if missing > 0 { Text("\(missing) selected calendars unavailable. Selection kept.").font(.caption).foregroundStyle(.orange) }
+                            if settings.selectedCalendarIDs?.isEmpty == true { Text("No calendar events selected").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+                if CalendarSource.isDenied || (settings.includeEvents && !CalendarSource.isAuthorized) {
+                    Button("Check Calendar access") { setEvents(true) }
+                        .disabled(requestingAccess)
+                        .accessibilityIdentifier("glance-check-calendar-access")
+                    #if os(macOS)
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                        Link("Open Calendar privacy settings", destination: url)
+                    }
+                    #else
+                    if let url = URL(string: "app-settings:") { Link("Open Settings", destination: url) }
+                    #endif
+                }
                 if requestingAccess { ProgressView("Waiting for Calendar access…").font(.caption) }
                 if let note { Text(note).font(.caption).foregroundStyle(.orange) }
             }
@@ -150,12 +191,16 @@ struct CalendarControls: View {
         .onDisappear { work?.cancel() }
     }
 
+    private func reloadCalendars() {
+        guard !model.isDemoMode else { return }
+        calendars = CalendarSource.availableCalendars()
+    }
+
     private func setEvents(_ on: Bool) {
         guard !model.isDemoMode, !requestingAccess else { return }
         note = nil
         guard on else {
             settings.setIncludeEvents(false)
-            model.pushGlance()
             return
         }
         requestingAccess = true
@@ -166,7 +211,7 @@ struct CalendarControls: View {
             guard !Task.isCancelled else { return }
             if granted {
                 settings.setIncludeEvents(true)
-                model.pushGlance()
+                reloadCalendars()
             } else {
                 note = "Calendar access is off. Allow Pocket Daily in Settings → Privacy & Security → Calendars."
             }
@@ -181,9 +226,12 @@ struct GlanceDeliveryStatus: View {
 
     var body: some View {
         if model.readerStatus != nil, !model.isDemoMode, !model.canSendGlance {
-            Label("Weather and events need firmware \(FirmwareGuidance.minimumRecommended) or later. Open Reader → Connection to update.", systemImage: "exclamationmark.triangle")
+            Label("Weather and events need firmware \(FirmwareGuidance.minimumRecommended) or later. Open My Reader → Device to update.", systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange)
                 .accessibilityIdentifier("glance-unsupported")
+        } else if settings.hasUnappliedSourceChanges {
+            Text("Content changes saved locally · Apply content to Reader")
+                .font(.caption).foregroundStyle(.secondary)
         } else if model.canSendGlance, settings.isConfigured {
             HStack {
                 Group {

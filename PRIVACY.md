@@ -1,6 +1,7 @@
 # Pocket Daily privacy policy
 
 Effective date: 2026-09-27
+Last updated: 2026-10-05
 
 Pocket Daily is an account-free, local-first e-book reader and companion
 application for compatible X3/X4 readers. It does not include advertising,
@@ -54,13 +55,16 @@ local copy; deleting the app deletes the library.
 - Calendar events, only if the user turns on calendar events: with the
   system's permission, today's event titles and times are read on-device and
   sent only to the user's reader over the local connection. They are not
-  stored by the app.
+  stored by the app. The choice of all or selected calendars is stored locally;
+  a source change is sent to the reader only when the user applies it.
 - Firmware availability: outside demo mode, the app asks GitHub for the latest
   official release metadata (version and publication date) once per app launch
   and again when a reader connects, at most once every ten minutes after an
   answer and once a minute after a failed check.
-  The firmware file is downloaded and sent to the reader only after the user
-  chooses Update and confirms. Requests contain no reader identity or file
+  The firmware file is downloaded only at the user's request. Confirmed Update
+  downloads and sends to the connected reader; Download update for later only
+  prepares a local copy, with confirmation before a later Send update.
+  Requests contain no reader identity or file
   contents; GitHub receives the device's network address.
 
 
@@ -111,7 +115,10 @@ Application Support container. Temporary upload files are removed after the
 operation completes. Prepared files are retained locally across app restarts until
 successfully sent or removed with Remove prepared files. Reader IDs and pending
 firmware versions are stored locally to bind retries and installation checks to
-the intended reader. The user may remove retained app data by deleting the app
+the intended reader. Book-transfer task records retain the selected book
+references, destination reader and per-file results locally so an interrupted
+task can be reopened and an uncertain result checked without resending it.
+The user may remove retained app data by deleting the app
 and its data, and controls every diagnostic export through the system share
 sheet.
 

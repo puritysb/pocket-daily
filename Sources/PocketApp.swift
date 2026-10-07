@@ -27,12 +27,7 @@ struct PocketApp: App {
         }
 #if os(macOS)
         .defaultSize(width: 1180, height: 780)
-#endif
-#if os(macOS)
-        Settings {
-            AppSettingsWindow()
-                .environmentObject(model)
-        }
+        .commands { PocketSettingsCommands() }
 #endif
     }
 
@@ -44,3 +39,28 @@ struct PocketApp: App {
 #endif
     }
 }
+
+#if os(macOS)
+private struct SettingsPresentationKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
+extension FocusedValues {
+    var settingsPresentation: Binding<Bool>? {
+        get { self[SettingsPresentationKey.self] }
+        set { self[SettingsPresentationKey.self] = newValue }
+    }
+}
+
+private struct PocketSettingsCommands: Commands {
+    @FocusedBinding(\.settingsPresentation) private var showingSettings: Bool?
+
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") { showingSettings = true }
+                .keyboardShortcut(",", modifiers: .command)
+                .disabled(showingSettings == nil)
+        }
+    }
+}
+#endif

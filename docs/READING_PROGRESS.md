@@ -14,6 +14,16 @@ percentage, device, device_id, timestamp)를 쓴다.
 근거가 없는 구형 리더는 더 앞선 진행도만 제안하며, 페이지는 자동으로 옮기지 않는다.
 문서 식별은 partial MD5(리더도 같은 값), 위치는 XPointer + 페이지 시작 기준 진행률.
 
+## 설정 화면
+
+Settings는 Appearance → Continue Reading → Reader connection 순서의 단일 화면이다.
+iPhone은 서재 상단의 아이콘과 Settings 레이블로, iPad·Mac은 사이드바에서 연다
+(Mac은 ⌘,도 지원). 모든 플랫폼에서 현재 창에 붙는 시트로 열며 별도 Settings 창은 만들지 않는다.
+화면 모드 선택과 실제 테마는 같은 바인딩으로 갱신한다. Continue Reading에서 Apple 기기와 X3/X4의 위치 공유를 바로 켜고 끈다.
+로그인 필요, 마지막 교환, 교환 오류와 수동 교환은 해당 설정 옆에 표시하고,
+파일 일치·개인정보·연결 방식의 상세 설명은 기본 접힌 Sync & connection guide에 둔다.
+페이지 이동 전 확인 원칙은 항상 표시한다. 동기화 동작과 기본값은 바꾸지 않는다.
+
 ## iCloud 키-값 레코드
 
 - `NSUbiquitousKeyValueStore`, 키 `position.v2.<document>.<device_id>`(기기마다 한 레코드), 값은 사전

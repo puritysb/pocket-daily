@@ -1,80 +1,99 @@
 import SwiftUI
 
-/// How the app itself looks. Book pages keep their own paper, white or night
-/// color from Text & Page.
 struct AppearanceSettingsSection: View {
+    @Binding var appearance: AppAppearance
+
     var body: some View {
-        Section {
-            AppAppearancePicker()
-        } footer: {
-            Text("Book pages use the color you choose in Text & Page.")
+        Section("Appearance") {
+            AppAppearancePicker(appearance: $appearance)
         }
     }
 }
 
-/// Whether the app reopens a session on its own with the reader it connected
-/// to before (docs/SYNC_SESSIONS.md).
 struct ReaderConnectionSettingsSection: View {
     @AppStorage(PocketModel.autoReconnectKey) private var reconnect = true
 
     var body: some View {
-        Section {
-            Toggle("Reconnect on the same Wi-Fi", isOn: $reconnect)
-                .accessibilityIdentifier("reader-auto-reconnect")
-        } header: {
-            Text("Your reader")
-        } footer: {
-            Text("When the reader you connected before opens Sync → Same Wi-Fi, Pocket Daily connects to it again. Only the reader’s last address is asked; your Wi-Fi never changes. Direct connection always starts in Reader → Connection.")
+        Section("Reader connection") {
+            Toggle(isOn: $reconnect) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Auto-reconnect")
+                    Text("On the same Wi-Fi").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityIdentifier("reader-auto-reconnect")
         }
     }
 }
 
-/// App-wide preferences in one place: how the app looks and where your place
-/// in a book is kept in step. A sheet on iPhone and iPad; macOS shows the same
-/// sections in its Settings window.
+/// Shared controls stay one tap away on every platform. Explanations are optional;
+/// actionable sync status remains beside the controls in Continue Reading.
+private struct AppSettingsForm: View {
+    @ObservedObject var model: PocketModel
+    @Binding var appearance: AppAppearance
+    var openDevice: (() -> Void)?
+    @State private var showingAbout = false
+
+    var body: some View {
+        Form {
+            AppearanceSettingsSection(appearance: $appearance)
+            ReadingSyncSettingsSection(sync: .shared, model: model, library: .shared)
+            ReaderConnectionSettingsSection()
+            if let openDevice {
+                Section("Reader management") {
+                    Button("Connection and Bluetooth pairing", action: openDevice)
+                        .accessibilityIdentifier("settings-open-device")
+                }
+            }
+            Section("Help and privacy") {
+                Button("About & Privacy") { showingAbout = true }
+                Link("Support", destination: PocketLinks.support)
+                Link("Privacy policy", destination: PocketLinks.privacy)
+                DisclosureGroup("Sync & connection guide") {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Each device needs the same book file. Share it from the Library.")
+                        Text("Reading positions are shared when you connect. While the app is open, they also update as you open or close a book or return to the app with a previously connected reader in Same Wi-Fi mode.")
+                        Text("Auto-reconnect checks your reader’s last address when it opens Sync → Same Wi-Fi. Your Wi-Fi never changes. For direct connection or Bluetooth pairing, open My Reader → Device.")
+                            .accessibilityIdentifier("sync-bluetooth-hint")
+                        Text("Only a book fingerprint and your reading position are shared through your own iCloud or a local Wi-Fi or Bluetooth connection. No Pocket Daily account is needed.")
+                        Text("Book page colors are chosen separately in Text & Page.")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 8)
+                }
+                .accessibilityIdentifier("settings-guide")
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(PocketPalette.workspace)
+        .tint(PocketPalette.accent)
+        .sheet(isPresented: $showingAbout) { ProjectInformationSheet() }
+    }
+}
+
 struct AppSettingsSheet: View {
     @ObservedObject var model: PocketModel
     @Environment(\.dismiss) private var dismiss
+    @Binding var appearance: AppAppearance
+    var openDevice: (() -> Void)? = nil
 
     var body: some View {
         NavigationStack {
-            Form {
-                AppearanceSettingsSection()
-                ReaderConnectionSettingsSection()
-                ReadingSyncSettingsSection(sync: .shared, model: model, library: .shared)
-            }
-            .formStyle(.grouped)
-            .navigationTitle("Settings")
+            AppSettingsForm(model: model, appearance: $appearance, openDevice: openDevice)
+                .navigationTitle("Settings")
 #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.inline)
 #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-            }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                }
         }
-    }
-}
-
-#if os(macOS)
-/// The Settings window (⌘,).
-struct AppSettingsWindow: View {
-    @EnvironmentObject private var model: PocketModel
-    @AppStorage("appAppearance") private var appearance = AppAppearance.system
-
-    var body: some View {
-        TabView {
-            Form {
-                AppearanceSettingsSection()
-                ReaderConnectionSettingsSection()
-            }
-            .formStyle(.grouped)
-            .tabItem { Label("General", systemImage: "gearshape") }
-            Form { ReadingSyncSettingsSection(sync: .shared, model: model, library: .shared) }
-                .formStyle(.grouped)
-                .tabItem { Label("Continue Reading", systemImage: "arrow.triangle.2.circlepath") }
-        }
-        .frame(width: 520, height: 480)
         .preferredColorScheme(appearance.colorScheme)
+#if os(macOS)
+        .frame(width: 520, height: 620)
+#endif
     }
 }
-#endif

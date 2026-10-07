@@ -4,6 +4,37 @@ import XCTest
 final class ProfileMergeTests: XCTestCase {
     private var base: PocketProfile { .defaults }
 
+    @MainActor
+    func testScopedPayloadsDiscardAndSaveKeepOtherAreasPending() {
+        let editor = ProfileEditorState()
+        editor.draft.home.weather = .off
+        editor.draft.sleep.mode = .reader
+        editor.reading.startupApp = 0
+        editor.reading.sleepTimeoutMinutes = 20
+        editor.reading.fontSize = 3
+        editor.reading.orientation = .landscape
+        let home = editor.profile(in: .home)
+        XCTAssertEqual(home.home.weather, .off)
+        XCTAssertEqual(home.sleep, editor.base.sleep)
+        let reading = editor.preferences(in: .reading)
+        XCTAssertEqual(reading.fontSize, 3)
+        XCTAssertEqual(reading.orientation, .landscape)
+        XCTAssertEqual(reading.startupApp, 1)
+        XCTAssertEqual(reading.sleepTimeoutMinutes, 10)
+        editor.syncReading(reading) // A successful Reading save updates only its baseline.
+        XCTAssertTrue(editor.pending(in: .reading).isEmpty)
+        XCTAssertEqual(editor.reading.startupApp, 0)
+        XCTAssertEqual(editor.reading.sleepTimeoutMinutes, 20)
+        editor.revert(.home)
+        XCTAssertTrue(editor.pending(in: .home).isEmpty)
+        XCTAssertFalse(editor.pending(in: .sleep).isEmpty)
+        XCTAssertEqual(editor.reading.fontSize, 3)
+        editor.sync(with: ReaderProfileState(deviceID: "1234ABCD", generation: 1,
+                                             profile: editor.profile(in: .sleep), maxHomeItems: 4))
+        XCTAssertEqual(editor.draft.sleep.mode, .reader)
+        XCTAssertEqual(editor.reading.sleepTimeoutMinutes, 20)
+    }
+
     func testUntouchedFieldsFollowTheReaderAndEditedOnesAreKept() {
         var mine = base
         mine.home.weather = .top                    // edited here only
@@ -116,4 +147,93 @@ final class ProfileMergeTests: XCTestCase {
         editor.reset()
         XCTAssertEqual(editor.draft, .defaults)
     }
+    @MainActor
+    func testKnownDraftNeverMergesWithAnotherReader() async throws {
+        let editor = ProfileEditorState()
+        editor.sync(with: .init(deviceID: "1234ABCD", generation: 1, profile: .defaults, maxHomeItems: 4))
+        editor.draft.home.weather = .top
+        editor.reading.fontSize = 3
+        let original = try XCTUnwrap(editor.snapshot)
+        var other = PocketProfile.defaults
+        other.sleep.mode = .reader
+        editor.sync(with: .init(deviceID: "5678ABCD", generation: 8, profile: other, maxHomeItems: 4))
+        editor.syncReading(ReaderPreferences(fontSize: 0))
+        XCTAssertTrue(editor.targetMismatch)
+        XCTAssertEqual(editor.draft, original.draft)
+        XCTAssertEqual(editor.reading, original.reading)
+        XCTAssertEqual(editor.base, original.base)
+        XCTAssertFalse(editor.bindForApply(to: "5678ABCD"))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ProfileEditStore(url: directory.appendingPathComponent("profile.json"))
+        try await editor.useDraft(with: "5678ABCD", store: store)
+        XCTAssertFalse(editor.targetMismatch)
+        XCTAssertEqual(editor.targetDeviceID, "5678ABCD")
+        XCTAssertEqual(store.recoveredDrafts().first?.draft, original.draft)
+        XCTAssertEqual(store.recoveredDrafts().first?.targetDeviceID, "1234ABCD")
+    }
+
+    @MainActor
+    func testGenericDraftRequiresApplyAndRemembersReviewedTargetAcrossDisconnect() throws {
+        let editor = ProfileEditorState()
+        editor.draft.home.weather = .off
+        editor.sync(with: .init(deviceID: "1234ABCD", generation: 1, profile: .defaults, maxHomeItems: 4))
+        XCTAssertNil(editor.targetDeviceID)
+        let saved = try XCTUnwrap(editor.snapshot)
+        let reopened = ProfileEditorState()
+        reopened.restore(saved)
+        reopened.observeTarget(nil)
+        reopened.observeTarget("5678ABCD")
+        XCTAssertTrue(reopened.targetMismatch)
+        XCTAssertFalse(reopened.bindForApply(to: "5678ABCD"))
+        editor.observeTarget(nil)
+        editor.observeTarget("1234ABCD")
+        XCTAssertTrue(editor.bindForApply(to: "1234ABCD"))
+        XCTAssertEqual(editor.snapshot?.targetDeviceID, "1234ABCD")
+    }
+
+    func testLegacySnapshotReadsAsGenericAndMalformedOriginalIsRecovered() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("profile.json")
+        let store = ProfileEditStore(url: url)
+        var draft = base
+        draft.home.weather = .off
+        let snapshot = ProfileEditSnapshot(draft: draft, base: base, reading: ReaderPreferences(), readingBase: ReaderPreferences(), savedAt: Date())
+        try store.save(snapshot)
+        var json = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        json.removeValue(forKey: "targetDeviceID")
+        json.removeValue(forKey: "reviewDeviceID")
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertNil(try store.loadChecked()?.targetDeviceID)
+        let malformed = Data("broken original".utf8)
+        try malformed.write(to: url)
+        XCTAssertThrowsError(try store.loadChecked())
+        try store.save(nil)
+        let recovered = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        XCTAssertEqual(recovered.count, 1)
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(recovered.first)), malformed)
+    }
+
+    @MainActor
+    func testRestoringAnotherDraftClearsPreviousConflictsAndConnectionState() throws {
+        let editor = ProfileEditorState()
+        editor.draft.home.weather = .top
+        var incoming = PocketProfile.defaults
+        incoming.home.weather = .off
+        editor.sync(with: .init(deviceID: "1234ABCD", generation: 1, profile: incoming, maxHomeItems: 4))
+        XCTAssertEqual(editor.mergeReport?.bothChanged, [.weather])
+        let recovered = ProfileEditSnapshot(draft: incoming, base: incoming, baseGeneration: 1, reading: ReaderPreferences(), readingBase: ReaderPreferences(), savedAt: Date(), targetDeviceID: "1234ABCD")
+        editor.observeTarget("5678ABCD")
+        XCTAssertTrue(editor.targetMismatch)
+        editor.restore(recovered)
+        XCTAssertNil(editor.mergeReport)
+        XCTAssertNil(editor.connectedDeviceID)
+        XCTAssertFalse(editor.targetMismatch)
+        editor.sync(with: .init(deviceID: "1234ABCD", generation: 1, profile: incoming, maxHomeItems: 4))
+        XCTAssertNil(editor.mergeReport, "Identical reader baseline must not retain an unrelated recovered conflict")
+        editor.useReader(in: .home)
+        XCTAssertEqual(editor.draft, incoming)
+    }
+
 }

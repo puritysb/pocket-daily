@@ -166,17 +166,41 @@ unchanged. Physical pixels and host/device parity remain unverified.
 
 ## Studio UX
 
-Studio (2026-09-28): Screens keeps a host-rendered preview visible
-while its settings scroll independently. Wide windows place them side by side;
-compact windows pin a smaller preview above the controls. Home/Sleep selection
-and Apply stay visible. Library and Device (connection, files, firmware) are
-separate destinations in both sidebar and tab navigation. The app brand appears
-once in the sidebar; the workspace header names its current destination.
-My cards belongs to Home. The studio observes card-draft changes even while its
-preview already shows that card; preview readiness matches the rendered request,
-so an older frame cannot be reported as the current edit.
-Direct on-canvas text editing and undo last send remain
-open UX steps (NEXT_STEPS.md).
+Reader customization (2026-10-05) uses shell-selected Screens or Reading
+entry points, without a second workspace selector. Screens has Home/Sleep
+segments; every scope shares persistent preview, independently scrolling
+controls and **Apply to Reader**. Payloads copy only that area's fields onto the
+last loaded reader baseline. Discard and successful saves preserve unrelated
+pending changes. Reading does not request a Home/card redraw and reports saved
+settings with the next book render; its preview is illustrative, not device EPUB.
+Home/Daily Brief use the pinned host renderer with labeled example content.
+The layout preview is never described as a live reader capture.
+
+[Reader capabilities](READER_CAPABILITIES.md) records exact preference values,
+GET support, X3 left/right vs X4 upper/lower physical page keys, and rotation.
+Page assignments appear on one rotated chassis diagram and update immediately,
+without a duplicate assignment table. On-device
+front key remaps are not exposed by the API, so no exact front actions are
+claimed. Unsupported optional preference keys are omitted rather than guessed.
+
+Screens opens dedicated card and weather/calendar source editors from summary
+rows. Each has one Apply action, its own title and affected surfaces; no source
+Apply is nested in the Home/Sleep layout form. The parent target and preview
+survive source editing and connection. Cards use existing drafts, recovery and
+`ContentDeployment`. Weather/calendar changes save locally, mark a pending
+source revision and block automatic sends until explicit source Apply.
+A send clears pending only for its captured source
+revision. Specific calendars default to all; empty selection means none,
+unavailable selected IDs are retained and never fall back to all. Demo does
+not request permission, lookup weather or send. Apple Weather's official mark
+and legal link remain a small, readable source footer.
+
+Profile draft schema1 adds optional target/review identities without rejecting
+older records. Generic drafts merge for review and bind on explicit Apply.
+Known-target mismatches cannot merge/apply automatically; an explicit copy
+archives the original before switching and exposes recovery. Unreadable source
+records are reported and preserved before replacement. Source/store work is
+kept away from interactive rendering. See [content editor](CONTENT_EDITOR.md).
 
 Reader discovery and pending direct connections expose Cancel connection.
 Cancellation revokes late handoffs immediately and retains exclusive work
@@ -332,7 +356,7 @@ Per `AGENTS.md`, every phase verifies both sides of any contract change:
 
 ### Sleep wake indicator (2026-09-30)
 
-Screens → Sleep exposes “Show WAKE on sleep screen” as a staged reader
+Customize → Screen design → Sleep exposes “Show WAKE on sleep screen” as a staged reader
 preference. It defaults on for offline drafts/demo and takes effect only after
 Apply to a supporting reader. An absent/unknown `sleepWakeIndicator` in GET
 preferences disables editing with a firmware-support explanation and the app

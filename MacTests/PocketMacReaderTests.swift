@@ -35,9 +35,24 @@ final class PocketMacReaderTests: XCTestCase {
 
         let text = try await session.webView.evaluateJavaScript("document.querySelector('foliate-view') != null") as? Bool
         XCTAssertEqual(text, true)
-        let image = try await session.webView.takeSnapshot(configuration: nil)
+        // Relocation proves pagination, but the off-screen WebKit compositor
+        // can paint afterward. Wait for the actual pixels under test.
+        let configuration = WKSnapshotConfiguration()
+        configuration.afterScreenUpdates = true
+        let paintDeadline = ContinuousClock.now + .seconds(5)
+        hosting.layoutSubtreeIfNeeded()
+        session.webView.layoutSubtreeIfNeeded()
+        var image = try await session.webView.takeSnapshot(configuration: configuration)
+        while !Self.hasInk(image), ContinuousClock.now < paintDeadline {
+            try await Task.sleep(for: .milliseconds(100))
+            guard ContinuousClock.now < paintDeadline else { break }
+            hosting.layoutSubtreeIfNeeded()
+            session.webView.layoutSubtreeIfNeeded()
+            image = try await session.webView.takeSnapshot(configuration: configuration)
+        }
         attach(image, "mac-reader-first-page")
-        XCTAssertTrue(Self.hasInk(image), "The page drew no text")
+        XCTAssertTrue(Self.hasInk(image),
+                      "The page drew no text within 5 seconds; WebView bounds \(session.webView.bounds), host bounds \(hosting.bounds), window visible \(window.isVisible), phase \(session.phase)")
 
         // Empty page space belongs to the host document, outside the book iframe.
         _ = try await session.webView.evaluateJavaScript("document.dispatchEvent(new MouseEvent('click', { clientX: innerWidth / 2, bubbles: true }))")

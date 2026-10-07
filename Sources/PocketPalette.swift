@@ -102,12 +102,37 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 }
 
 struct AppAppearancePicker: View {
-    @AppStorage("appAppearance") private var appearance = AppAppearance.system
+    @Binding var appearance: AppAppearance
 
     var body: some View {
-        Picker("Appearance", selection: $appearance) {
-            ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
+        HStack(spacing: 8) {
+            ForEach(AppAppearance.allCases) { option in
+                Button {
+                    appearance = option
+                } label: {
+                    VStack(spacing: 8) {
+                        Image(systemName: option == .system ? "desktopcomputer" : option == .light ? "sun.max" : "moon")
+                            .font(.title3)
+                        Text(option.title).font(.callout)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 64)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .background(appearance == option ? PocketPalette.selection : PocketPalette.panel,
+                                in: RoundedRectangle(cornerRadius: 12))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(appearance == option ? PocketPalette.accent : PocketPalette.line,
+                                          lineWidth: appearance == option ? 2 : 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(appearance == option ? .isSelected : [])
+                .accessibilityIdentifier("app-appearance-" + option.rawValue)
+            }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Appearance")
         .accessibilityIdentifier("app-appearance")
     }
 }

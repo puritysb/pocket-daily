@@ -143,4 +143,76 @@ final class ReaderGlanceTests: XCTestCase {
         reopened.setPlace(nil)
         XCTAssertNil(reopened.weather)
     }
+    func testCalendarSelectionNeverFallsBackToAllWhenEmptyOrMissing() {
+        XCTAssertEqual(CalendarSource.selectedIDs(available: ["home", "work"], selection: nil), ["home", "work"])
+        XCTAssertEqual(CalendarSource.selectedIDs(available: ["home", "work"], selection: []), [])
+        XCTAssertEqual(CalendarSource.selectedIDs(available: ["home", "work"], selection: ["work"]), ["work"])
+        XCTAssertEqual(CalendarSource.selectedIDs(available: ["home", "work"], selection: ["deleted"]), [])
+    }
+
+    @MainActor
+    func testCalendarSelectionPersistsAndInFlightApplyCannotClearLaterEdits() throws {
+        let suite = "glance-selection-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = GlanceSettings(defaults: defaults)
+        XCTAssertNil(settings.selectedCalendarIDs, "Legacy default is all")
+        XCTAssertFalse(settings.hasUnappliedSourceChanges)
+        settings.setSelectedCalendarIDs(["work", "home", "work"])
+        XCTAssertEqual(settings.selectedCalendarIDs, ["home", "work"])
+        let sending = settings.sourceRevision
+        settings.setIncludeEvents(true)
+        settings.markSourcesApplied(ifRevision: sending)
+        XCTAssertTrue(settings.hasUnappliedSourceChanges)
+        settings.markSourcesApplied(ifRevision: settings.sourceRevision)
+        XCTAssertFalse(settings.hasUnappliedSourceChanges)
+        settings.setSelectedCalendarIDs([])
+        let restored = GlanceSettings(defaults: defaults)
+        XCTAssertEqual(restored.selectedCalendarIDs, [])
+        XCTAssertTrue(restored.hasUnappliedSourceChanges)
+        XCTAssertTrue(restored.includeEvents)
+        XCTAssertEqual(restored.sourceRevision, settings.sourceRevision)
+    }
+
+    @MainActor
+    func testChangingCityStartsNewestFetchAndIgnoresOldSuccessOrFailure() async throws {
+        actor DeferredWeather {
+            private var pending: [String: CheckedContinuation<WeatherSnapshot, Error>] = [:]
+            func fetch(_ place: WeatherPlace) async throws -> WeatherSnapshot {
+                try await withCheckedThrowingContinuation { pending[place.name] = $0 }
+            }
+            func has(_ name: String) -> Bool { pending[name] != nil }
+            func finish(_ name: String, result: Result<WeatherSnapshot, Error>) {
+                pending.removeValue(forKey: name)?.resume(with: result)
+            }
+        }
+        for oldFails in [false, true] {
+            let suite = "glance-city-race-\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let deferred = DeferredWeather()
+            let settings = GlanceSettings(defaults: defaults, fetch: { try await deferred.fetch($0) })
+            settings.setPlace(.init(name: "A", latitude: 1, longitude: 1))
+            let first = Task { await settings.refreshWeatherIfNeeded(force: true) }
+            while !(await deferred.has("A")) { await Task.yield() }
+            settings.setPlace(.init(name: "B", latitude: 2, longitude: 2))
+            let newest = Task { await settings.refreshWeatherIfNeeded(force: true) }
+            while !(await deferred.has("B")) { await Task.yield() }
+            XCTAssertTrue(settings.isRefreshing)
+            var current = snapshot(fetched: at(25, 10))
+            current.place = "B"
+            await deferred.finish("B", result: .success(current))
+            await newest.value
+            XCTAssertFalse(settings.isRefreshing)
+            var old = current
+            old.place = "A"
+            await deferred.finish("A", result: oldFails ? .failure(URLError(.timedOut)) : .success(old))
+            await first.value
+            XCTAssertEqual(settings.weather?.place, "B")
+            XCTAssertNil(settings.weatherError)
+            XCTAssertFalse(settings.isRefreshing)
+            XCTAssertTrue(settings.hasUnappliedSourceChanges, "Fetching never applies source edits")
+        }
+    }
+
 }

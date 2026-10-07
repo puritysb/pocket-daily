@@ -4,6 +4,12 @@ Implemented locally 2026-09-27; physical acceptance remains required.
 
 ## User flow
 
+- Library **Send to Reader…** opens a selected-content task in the current
+  window. Connection, explicit sending and saved-result checks retain that
+  selection. Closing the sheet does not cancel the task. The task sends only
+  its owned prepared IDs; it never includes unrelated books or firmware.
+  My Reader → On Reader shows device inventory, with previous category-based
+  prepared files kept in a separate supporting area.
 - **Content · SD card** owns books, articles, written EPUB/TXT and learning packs.
   Write text to read only creates a content file. Send content never sends `.bin`
   files, even if firmware was prepared in an earlier session. Articles publish
@@ -56,6 +62,36 @@ Implemented locally 2026-09-27; physical acceptance remains required.
 - Firmware already installed is not an upload and cannot be cancelled in this
   UI. Firmware already saved on SD keeps the existing on-reader install/cancel
   confirmation. No app action interrupts flashing.
+
+## Selected book task persistence
+
+The 2026-10-05 IA revision adds local `book-transfer-jobs.json` version 1.
+Records hold a task ID, selected Library book references, intended reader,
+origin context, exact prepared IDs and per-book results. They contain no book
+bytes, pairing secrets or cloud credentials. This changes local orchestration,
+not the firmware endpoint or publication protocol.
+
+Prepared `transfer.json` records gain optional `bookJobID` and `libraryBookID`.
+Old records without those fields remain the legacy category queue. Category
+send/remove operations exclude job-owned records, even if a job manifest is
+unreadable. A selected batch captures fixed IDs; later preparation cannot join
+an executing batch. Preparation retry only prepares and never starts an upload.
+
+The job stores its planned prepared ID before copying. The prepared record's
+first atomic write contains ownership, so a crash cannot publish an ownerless
+copy into the legacy queue. Before publication, both prepared state and job
+result record the uncertain outcome. Verified completion is persisted in the
+job before the prepared copy is removed. Cleanup failure never reclassifies a
+confirmed saved item as needing retransmission.
+
+Recovery requires exact ownership agreement between job and prepared records.
+An uncertain publication uses the existing same-reader receipt check; missing
+files or unreadable records are not proof of failure and cannot authorize a new
+upload. Missing job metadata with surviving ownership markers is recovered
+conservatively; a corrupt manifest stays an explicit error and is not silently
+overwritten. Demo mode does not rewrite live recovery records. No recovered
+task sends automatically. Explicit local-only forgetting warns that it neither
+confirms the saved result nor cleans the reader's copy.
 
 ## Cross-repository contract: transferControl 1
 
@@ -202,3 +238,52 @@ Sibling firmware: 865/865 host tests, strict CI cppcheck 2.11, default build wit
 zero compiler warnings/errors. These are local software results. The X3/X4 steps
 in sibling `docs/release-checklist.md` remain pending, including actual radio
 handoff, power loss, heap and installation confirmation.
+
+## Selected books: Wi-Fi or SD card — 2026-10-06
+
+The Library's selected-book task keeps its exact book IDs, origin and wireless
+reader target. On Mac, the same task sheet offers **Reader over Wi-Fi** and
+**SD card**. SD selection asks only for a destination folder; it never asks the
+user to choose the books again. Choosing a destination or folder does not start
+a transfer. An explicit Send or Copy action is required. Closing the sheet
+keeps the app-owned task; switching destinations is disabled during execution.
+
+SD copies read the unchanged Library bytes through the existing atomic local
+copy path. Ordinary files are staged in the destination directory and moved
+into place only after the copy succeeds; existing filenames are not overwritten.
+Articles use `/Articles`. Invalid folders, denied access, missing originals and
+name conflicts are errors, not successful copies. Stop cancels and drains the
+same `ReaderWorkLane`; if a non-cooperative copy already published, its confirmed
+result is retained and remaining books stop. This introduces no second queue,
+radio owner or device endpoint.
+
+The version-1 job archive has optional destination and SD-attempt records, so
+older wireless records remain readable. Each SD attempt stores exact book IDs,
+a folder display name and per-book copied/failed/uncertain results. It stores
+no directory URL or security-scoped bookmark. A directory must be selected again
+after reopening the sheet or restarting the app. An interrupted in-progress copy
+recovers as uncertain and never copies automatically. On an explicit retry in a
+selected directory, a full byte comparison can confirm a previously copied or
+uncertain book without rewriting it; any other existing file remains a conflict.
+Confirmed SD results are written before reporting completion. A record failure
+after publication preserves uncertainty and stops further copies.
+
+SD outcomes remain separate from wireless publication receipts. **Copied to SD
+card** does not mean sent to a connected reader, installed firmware, or resolved
+an earlier uncertain Wi-Fi publication. That earlier result keeps its original
+reader and recovery action. Demo never opens directory access or copies bytes.
+
+When another reader is connected while a selected task needs its original
+reader, **Reconnect selected reader** closes and drains the old session inside
+the same task, then presents the existing connection flow. The selected books
+and original target stay fixed. Connecting does not automatically send or check
+results. Current-task links use typed operation ownership; a download returns to
+On Reader, a Home/Sleep apply to its exact screen, Reading to Reading, shared
+sources to their editor, and firmware or font work to Device.
+
+Temporary-directory tests cover original bytes, atomic publication and staging
+cleanup, collision preservation, partial failure, cancellation and duplicate
+admission, persistence failure/restart, directory reselection, denied access,
+missing sources, independent wireless uncertainty and demo protection. These
+checks do not establish physical SD-card, Wi-Fi, permission-prompt or reader
+installation acceptance.

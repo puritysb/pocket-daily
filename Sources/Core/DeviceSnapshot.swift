@@ -19,21 +19,6 @@ enum DeviceCapability: String, CaseIterable, Hashable {
     case bluetoothSync
 }
 
-/// The pages under Reader in the sidebar or the Reader tab.
-enum DeviceSection: String, CaseIterable, Hashable, Identifiable {
-    case connection = "Connection", screens = "Screens", files = "Files"
-
-    var id: String { rawValue }
-
-    var symbol: String {
-        switch self {
-        case .connection: "antenna.radiowaves.left.and.right"
-        case .screens: "rectangle.3.group"
-        case .files: "folder"
-        }
-    }
-}
-
 /// The reader as the whole app shows it: sidebar, Library header and the
 /// Reader pages read the same snapshot. The app supports compatible readers
 /// rather than one product, so a model name appears only once a reader has
@@ -43,13 +28,7 @@ struct DeviceSnapshot: Equatable {
         /// X3/X4 readers running Pocket Daily or compatible CrossPoint-based firmware.
         case crossPoint
 
-        /// Screens stay available offline: editing and preview need no reader,
-        /// only Apply does.
-        var sections: [DeviceSection] {
-            switch self {
-            case .crossPoint: [.connection, .screens, .files]
-            }
-        }
+
     }
 
     enum Link: Equatable {

@@ -16,7 +16,7 @@ final class DeviceSnapshotTests: XCTestCase {
         XCTAssertEqual(device.link, .offline)
         XCTAssertFalse(device.isConnected)
         XCTAssertTrue(device.capabilities.isEmpty)
-        XCTAssertEqual(device.family.sections, [.connection, .screens, .files])
+        XCTAssertEqual(StudioSection.readerDestinations, [.files, .layout, .reading, .device], "Navigation does not disappear when capabilities are unknown")
     }
 
     func testConnectedReaderMapsStatusFieldsToCapabilities() throws {

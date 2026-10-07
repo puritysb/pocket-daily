@@ -19,7 +19,7 @@ struct PocketProfile: Equatable, Sendable, Codable {
         var detail: String {
             switch self {
             case .reading: "The open book, when there is one"
-            case .study: "The cards you write below, with their images"
+            case .study: "Your shared cards, with their images"
             case .word: "A new word each day from the reader or an SD learning pack"
             case .provider: "Retired: cards from the AgentDeck daemon"
             case .monitor: "Retired: agent usage from the AgentDeck daemon"

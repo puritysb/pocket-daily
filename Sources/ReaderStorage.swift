@@ -46,24 +46,6 @@ struct ReaderStoragePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let status = model.readerStatus {
-                HStack {
-                    Label("RAM", systemImage: "memorychip")
-                    Spacer()
-                    Text("\(bytes(Int64(max(0, status.freeHeap)))) free")
-                        .font(.caption.monospacedDigit())
-                }
-                if let total = status.totalHeap, total > 0, status.freeHeap >= 0, status.freeHeap <= total {
-                    ProgressView(value: Double(total - status.freeHeap), total: Double(total))
-                        .progressViewStyle(.pocketBar(tint: .secondary))
-                        .accessibilityLabel("RAM used")
-                        .accessibilityValue("\(Int(100 * Double(total - status.freeHeap) / Double(total))) percent")
-                    Text("\(Int(100 * Double(total - status.freeHeap) / Double(total)))% used · working memory")
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text("Working memory · this firmware reports free space only")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Divider()
                 Label("SD card · books & articles", systemImage: "sdcard")
                 if model.isDemoMode {
                     ProgressView(value: 0.25).progressViewStyle(.pocketBar)
@@ -99,6 +81,23 @@ struct ReaderStoragePanel: View {
         }
         .font(.callout)
         .sheet(isPresented: $browsing) { ReaderFileBrowser(model: model) }
+    }
+}
+
+struct ReaderMemoryDiagnostic: View {
+    let status: CrossPointStatus
+    private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .binary) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LabeledContent("Working memory", value: "\(bytes(Int64(max(0, status.freeHeap)))) free")
+            if let total = status.totalHeap, total > 0, status.freeHeap >= 0, status.freeHeap <= total {
+                ProgressView(value: Double(total - status.freeHeap), total: Double(total))
+                    .progressViewStyle(.pocketBar(tint: .secondary)).accessibilityLabel("Working memory used")
+            }
+        }
+        .font(.caption)
+        .accessibilityIdentifier("reader-memory-diagnostic")
     }
 }
 
@@ -174,7 +173,7 @@ private struct ReaderFileBrowser: View {
                     }
                 }
             } message: {
-                Text(deletion.map { "SD card \(path($0.name))\nThis cannot be undone on the reader." } ?? "")
+                Text(deletion.map { "\(model.readerStatus?.device ?? "Reader") · SD card \(path($0.name))\nThis cannot be undone on the reader." } ?? "")
             }
         }
         .frame(minWidth: 320, minHeight: 420)

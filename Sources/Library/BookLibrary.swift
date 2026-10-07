@@ -58,7 +58,7 @@ enum LibraryError: LocalizedError, Equatable {
         case .unavailable: "The library folder is unavailable. Check free storage, then open Pocket Daily again."
         case .unsupportedFormat(let ext):
             ext == "xtc" || ext == "xtch"
-                ? "XTC books are pre-rendered for the reader. Send them from Reader → Files instead."
+                ? "XTC books are pre-rendered for the reader. Send them from My Reader → On Reader instead."
                 : "Pocket Daily reads EPUB, TXT and Markdown files. Convert this file to EPUB and import it again."
         case .unreadableText: "This text file's encoding is not supported. Save it as UTF-8 and import it again."
         case .emptyText: "This text file is empty."

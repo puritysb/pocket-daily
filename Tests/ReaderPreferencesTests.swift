@@ -13,6 +13,61 @@ final class ReaderPreferencesTests: XCTestCase {
         try XCTUnwrap(JSONSerialization.jsonObject(with: preferences.requestBody()) as? [String: Int])
     }
 
+    func testPhysicalPageKeyLabelsMatchFirmwareOrientationPolicy() {
+        for orientation in ReaderPreferences.Orientation.allCases {
+            for follow in [false, true] {
+                for layout in ReaderPreferences.SideButtons.allCases {
+                    let preferences = ReaderPreferences(orientation: orientation, sideButtons: layout,
+                                                        frontButtonsFollowOrientation: follow)
+                    let actions = preferences.sideButtonActions
+                    if layout == .off {
+                        XCTAssertEqual(actions.first, "No page turn")
+                        XCTAssertEqual(actions.second, "No page turn")
+                    } else {
+                        let rotated = follow && (orientation == .inverted || orientation == .landscapeReversed)
+                        let firstIsNext = (layout == .nextPrevious) != rotated
+                        XCTAssertEqual(actions.first, firstIsNext ? "Next page" : "Previous page")
+                        XCTAssertEqual(actions.second, firstIsNext ? "Previous page" : "Next page")
+                    }
+                }
+            }
+        }
+    }
+
+    func testReadingLayoutRoundTripsAllOrientationsAndBounds() throws {
+        for direction in 0...3 {
+            for margin in [5, 40] {
+                let p = try decode("{\"startupApp\":1,\"pocketDailySleepCover\":1,\"sleepTimeoutMinutes\":10,\"fontSize\":1,\"orientation\":\(direction),\"lineSpacing\":3,\"screenMargin\":\(margin)}")
+                XCTAssertEqual(try body(p)["orientation"], direction)
+                XCTAssertEqual(try body(p)["lineSpacing"], 3)
+                XCTAssertEqual(try body(p)["screenMargin"], margin)
+            }
+        }
+        for value in [-1, 4, 255] {
+            let p = try decode("{\"startupApp\":1,\"pocketDailySleepCover\":1,\"sleepTimeoutMinutes\":10,\"fontSize\":1,\"orientation\":\(value),\"lineSpacing\":\(value),\"screenMargin\":\(value)}")
+            XCTAssertNil(p.orientation)
+            XCTAssertNil(p.lineSpacing)
+            XCTAssertNil(p.screenMargin)
+            XCTAssertEqual(try body(p).count, 4)
+        }
+    }
+
+    func testReadingLayoutMergesOfflineEditsAndDropsUnsupportedFields() {
+        let base = ReaderPreferences(orientation: .portrait, lineSpacing: .normal, screenMargin: 5)
+        var mine = base
+        mine.orientation = .landscape
+        var reader = base
+        reader.lineSpacing = .wide
+        let result = ProfileMerge.merge(base: base, mine: mine, reader: reader)
+        XCTAssertEqual(result.preferences.orientation, .landscape)
+        XCTAssertEqual(result.preferences.lineSpacing, .wide)
+        XCTAssertEqual(ProfileMerge.pending(preferences: result.preferences, reader: reader), [.orientation])
+        let legacy = ProfileMerge.merge(base: base, mine: mine, reader: ReaderPreferences()).preferences
+        XCTAssertNil(legacy.orientation)
+        XCTAssertNil(legacy.lineSpacing)
+        XCTAssertNil(legacy.screenMargin)
+    }
+
     func testOlderReaderOmitsButtonSettingsAndTheyAreNeverSent() throws {
         let preferences = try decode(#"{"startupApp":1,"pocketDailySleepCover":0,"sleepTimeoutMinutes":10,"fontSize":2}"#)
         XCTAssertEqual(preferences.fontSize, 2)
@@ -94,6 +149,9 @@ final class ReaderPreferencesTests: XCTestCase {
         model.preferences = ReaderPreferences()
         model.setSideButtons(.off)
         model.setFrontButtonsFollowOrientation(true)
+        XCTAssertNil(model.preferences?.orientation)
+        XCTAssertNil(model.preferences?.lineSpacing)
+        XCTAssertNil(model.preferences?.screenMargin)
         XCTAssertNil(model.preferences?.sideButtons)
         XCTAssertFalse(model.preferencesDirty)
 
@@ -129,7 +187,8 @@ final class ReaderPreferencesTests: XCTestCase {
         XCTAssertNil(editor.reading.sideButtons)
         let model = PocketModel()
         model.preferences = ReaderPreferences()
-        var draft = ReaderPreferences(sideButtons: .nextPrevious, frontButtonsFollowOrientation: true)
+        var draft = ReaderPreferences(orientation: .landscape, lineSpacing: .wide, screenMargin: 20,
+                                      sideButtons: .nextPrevious, frontButtonsFollowOrientation: true)
         draft.fontSize = 2
         model.stageReadingPreferences(draft)
         XCTAssertNil(model.preferences?.sideButtons)
@@ -169,4 +228,71 @@ final class ReaderFileDeletionIdentityTests: XCTestCase {
         model.deleteReaderFile("/book.epub", size: 100, folder: "/", identity: nil)
         XCTAssertFalse(model.isWorking)
     }
+    func testPageKeyActionsForEveryOrientationLayoutAndRotationPolicy() {
+        for orientation in ReaderPreferences.Orientation.allCases {
+            for layout in ReaderPreferences.SideButtons.allCases {
+                for follows in [false, true] {
+                    let preferences = ReaderPreferences(orientation: orientation, sideButtons: layout, frontButtonsFollowOrientation: follows)
+                    let reversed = follows && (orientation == .inverted || orientation == .landscapeReversed)
+                    let swapped = (layout == .nextPrevious) != reversed
+                    let actions = preferences.sideButtonActions
+                    let expected = layout == .off ? ["No page turn", "No page turn"] : swapped ? ["Next page", "Previous page"] : ["Previous page", "Next page"]
+                    XCTAssertEqual([actions.first, actions.second], expected, "\(orientation), \(layout), follows=\(follows)")
+                }
+            }
+        }
+    }
+
+    func testPhysicalKeysRemainModelSpecific() {
+        let x3 = ReaderButtonLayout(hardware: .x3)
+        let x4 = ReaderButtonLayout(hardware: .x4)
+        XCTAssertEqual(x3.firstKey, "Left edge")
+        XCTAssertEqual(x3.secondKey, "Right edge")
+        XCTAssertEqual(x3.frontControls, "Two front rocker controls")
+        XCTAssertEqual(x4.firstKey, "Upper right-edge key")
+        XCTAssertEqual(x4.secondKey, "Lower right-edge key")
+        XCTAssertEqual(x4.frontControls, "Four front keys")
+        XCTAssertNotEqual(x3.powerKey, x4.powerKey)
+        XCTAssertEqual(x3.firstKeyPanelY, 194)
+        XCTAssertEqual(x3.secondKeyPanelY, 194)
+        XCTAssertEqual(x3.panelHeight, 792)
+        XCTAssertEqual(x4.firstKeyPanelY, 385)
+        XCTAssertEqual(x4.secondKeyPanelY, 465)
+        XCTAssertEqual(x4.panelHeight, 800)
+    }
+
+    func testRequiredPreferenceBoundariesAndMalformedValues() throws {
+        let valid: [String: Int] = ["startupApp": 1, "pocketDailySleepCover": 1, "sleepTimeoutMinutes": 10, "fontSize": 1]
+        let cases: [(String, [Int])] = [
+            ("startupApp", [-1, 2]), ("pocketDailySleepCover", [-1, 2]),
+            ("sleepTimeoutMinutes", [0, 32]), ("fontSize", [-1, 4]),
+        ]
+        for (field, values) in cases {
+            for invalid in values {
+                var body = valid
+                body[field] = invalid
+                XCTAssertThrowsError(try ReaderPreferences.decode(JSONSerialization.data(withJSONObject: body)), "\(field)=\(invalid)")
+            }
+        }
+        for minutes in [1, 31] {
+            var body = valid
+            body["sleepTimeoutMinutes"] = minutes
+            body["fontSize"] = minutes == 1 ? 0 : 3
+            body["startupApp"] = minutes == 1 ? 0 : 1
+            XCTAssertNoThrow(try ReaderPreferences.decode(JSONSerialization.data(withJSONObject: body)))
+        }
+        XCTAssertThrowsError(try ReaderPreferences(fontSize: 4).requestBody())
+        XCTAssertThrowsError(try ReaderPreferences(screenMargin: 41).requestBody())
+    }
+
+    func testOneOptionalButtonCapabilityDoesNotImplyTheOther() throws {
+        let body: [String: Int] = ["startupApp": 1, "pocketDailySleepCover": 1, "sleepTimeoutMinutes": 10, "fontSize": 1, "sideButtonLayout": 1]
+        let preferences = try ReaderPreferences.decode(JSONSerialization.data(withJSONObject: body))
+        XCTAssertEqual(preferences.sideButtons, .nextPrevious)
+        XCTAssertNil(preferences.frontButtonsFollowOrientation)
+        let sent = try XCTUnwrap(try JSONSerialization.jsonObject(with: preferences.requestBody()) as? [String: Int])
+        XCTAssertEqual(sent["sideButtonLayout"], 1)
+        XCTAssertNil(sent["frontButtonFollowOrientation"])
+    }
+
 }

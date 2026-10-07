@@ -9,6 +9,7 @@ enum ProfileMerge {
     /// The parts of the Home & Sleep layout and the reading settings, named as on screen.
     enum Field: String, CaseIterable, Codable, Sendable {
         case homeItems, dailyWord, weather, nextEvent, sleepMode, sleepSections
+        case orientation, lineSpacing, screenMargin
         case startup, sleepCover, sleepTimeout, textSize, sideButtons, frontButtons, wakeCue
 
         var title: String {
@@ -19,6 +20,9 @@ enum ProfileMerge {
             case .nextEvent: "Next event"
             case .sleepMode: "Sleep screen"
             case .sleepSections: "Sleep sections"
+            case .orientation: "Reading direction"
+            case .lineSpacing: "Line spacing"
+            case .screenMargin: "Margins"
             case .startup: "Open at startup"
             case .sleepCover: "Book cover"
             case .sleepTimeout: "Sleep after"
@@ -81,7 +85,13 @@ enum ProfileMerge {
               reader: reader.frontButtonsFollowOrientation, into: &report)
         merge(.wakeCue, base: base.sleepWakeIndicator, mine: &merged.sleepWakeIndicator,
               reader: reader.sleepWakeIndicator, into: &report)
+        merge(.orientation, base: base.orientation, mine: &merged.orientation, reader: reader.orientation, into: &report)
+        merge(.lineSpacing, base: base.lineSpacing, mine: &merged.lineSpacing, reader: reader.lineSpacing, into: &report)
+        merge(.screenMargin, base: base.screenMargin, mine: &merged.screenMargin, reader: reader.screenMargin, into: &report)
         // A setting the reader does not offer is never sent back.
+        if reader.orientation == nil { merged.orientation = nil }
+        if reader.lineSpacing == nil { merged.lineSpacing = nil }
+        if reader.screenMargin == nil { merged.screenMargin = nil }
         if reader.sideButtons == nil { merged.sideButtons = nil }
         if reader.frontButtonsFollowOrientation == nil { merged.frontButtonsFollowOrientation = nil }
         if reader.sleepWakeIndicator == nil { merged.sleepWakeIndicator = nil }
@@ -106,6 +116,9 @@ enum ProfileMerge {
         if mine.pocketDailySleepCover != reader.pocketDailySleepCover { fields.append(.sleepCover) }
         if mine.sleepTimeoutMinutes != reader.sleepTimeoutMinutes { fields.append(.sleepTimeout) }
         if mine.fontSize != reader.fontSize { fields.append(.textSize) }
+        if mine.orientation != reader.orientation { fields.append(.orientation) }
+        if mine.lineSpacing != reader.lineSpacing { fields.append(.lineSpacing) }
+        if mine.screenMargin != reader.screenMargin { fields.append(.screenMargin) }
         if mine.sideButtons != reader.sideButtons { fields.append(.sideButtons) }
         if mine.frontButtonsFollowOrientation != reader.frontButtonsFollowOrientation { fields.append(.frontButtons) }
         if mine.sleepWakeIndicator != reader.sleepWakeIndicator { fields.append(.wakeCue) }
@@ -134,6 +147,9 @@ enum ProfileMerge {
             case .sleepCover: mine.pocketDailySleepCover = reader.pocketDailySleepCover
             case .sleepTimeout: mine.sleepTimeoutMinutes = reader.sleepTimeoutMinutes
             case .textSize: mine.fontSize = reader.fontSize
+            case .orientation: mine.orientation = reader.orientation
+            case .lineSpacing: mine.lineSpacing = reader.lineSpacing
+            case .screenMargin: mine.screenMargin = reader.screenMargin
             case .sideButtons: mine.sideButtons = reader.sideButtons
             case .frontButtons: mine.frontButtonsFollowOrientation = reader.frontButtonsFollowOrientation
             case .wakeCue: mine.sleepWakeIndicator = reader.sleepWakeIndicator
@@ -153,6 +169,9 @@ struct ProfileEditSnapshot: Codable, Equatable, Sendable {
     var reading: ReaderPreferences
     var readingBase: ReaderPreferences
     var savedAt: Date
+    /// Optional for schema-1 compatibility: nil is an unbound offline draft.
+    var targetDeviceID: String? = nil
+    var reviewDeviceID: String? = nil
 }
 
 /// `Application Support/Pocket/Studio/profile-edits.json`, beside the card
@@ -165,16 +184,64 @@ struct ProfileEditStore: Sendable {
         : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("Pocket/Studio/profile-edits.json"))
 
-    func load() -> ProfileEditSnapshot? {
-        guard let url, let data = try? Data(contentsOf: url),
-              let snapshot = try? JSONDecoder().decode(ProfileEditSnapshot.self, from: data),
-              snapshot.schema == 1 else { return nil }
+    enum LoadFailure: LocalizedError {
+        case unreadable, unsupported, malformed
+        var errorDescription: String? {
+            switch self {
+            case .unreadable: "Saved draft could not be read. The original is preserved."
+            case .unsupported: "Saved draft uses an unsupported format. The original is preserved."
+            case .malformed: "Saved draft is damaged. The original is preserved."
+            }
+        }
+    }
+
+    func loadChecked() throws -> ProfileEditSnapshot? {
+        guard let url, FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let attributes: [FileAttributeKey: Any]
+        do { attributes = try FileManager.default.attributesOfItem(atPath: url.path) }
+        catch { throw LoadFailure.unreadable }
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = attributes[.size] as? NSNumber, size.intValue <= 128 * 1024 else { throw LoadFailure.malformed }
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch { throw LoadFailure.unreadable }
+        let snapshot: ProfileEditSnapshot
+        do { snapshot = try JSONDecoder().decode(ProfileEditSnapshot.self, from: data) }
+        catch { throw LoadFailure.malformed }
+        guard snapshot.schema == 1 else { throw LoadFailure.unsupported }
+        guard snapshot.draft.validationError == nil, snapshot.base.validationError == nil, snapshot.reading.hasValidRequiredValues, snapshot.readingBase.hasValidRequiredValues else { throw LoadFailure.malformed }
         return snapshot
+    }
+
+    func load() -> ProfileEditSnapshot? { try? loadChecked() }
+
+    /// Keeps a previous target's draft when the user explicitly copies it.
+    /// Archived files are never removed by saving a clean active editor.
+    func archive(_ snapshot: ProfileEditSnapshot) throws {
+        guard let url else { return }
+        let folder = url.deletingLastPathComponent().appendingPathComponent("Recovered profile drafts", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let archived = folder.appendingPathComponent(UUID().uuidString + ".json")
+        try encoder.encode(snapshot).write(to: archived, options: .atomic)
+    }
+
+    func recoveredDrafts() -> [ProfileEditSnapshot] {
+        guard let url else { return [] }
+        let folder = url.deletingLastPathComponent().appendingPathComponent("Recovered profile drafts", isDirectory: true)
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return files.compactMap { ProfileEditStore(url: $0).load() }.sorted { $0.savedAt > $1.savedAt }
     }
 
     /// Writes the snapshot atomically, or removes the file when nothing is unsent.
     func save(_ snapshot: ProfileEditSnapshot?) throws {
         guard let url else { return }
+        if FileManager.default.fileExists(atPath: url.path), load() == nil {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard attributes[.type] as? FileAttributeType == .typeRegular else { throw LoadFailure.unreadable }
+            let recovery = url.deletingLastPathComponent().appendingPathComponent("profile-edits-unreadable-" + UUID().uuidString + ".json")
+            try FileManager.default.moveItem(at: url, to: recovery)
+        }
         guard let snapshot else {
             if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
             return

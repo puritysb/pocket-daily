@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 /// "My cards": up to three pages the user writes for the reader's Home (and the
 /// first one for the sleep screen), each with an optional 1-bit image such as a
 /// QR code. The cards are a list dragged into page order; the selected one is
-/// edited below it. Edits autosave locally; the Home & Sleep Apply sends them.
+/// edited below it. Edits autosave locally; Apply cards explicitly sends them.
 struct MyCardsEditor: View {
     @ObservedObject var editor: ContentEditorModel
     @ObservedObject var model: PocketModel

@@ -54,54 +54,58 @@ This is a same-version, shared-actor conflict guard, not a cross-process lock or
 protection against an older app which ignores the additional field. Backup
 comparison/import and persistent backup browsing are not yet implemented.
 
-## Studio layout (all platforms, 2026-09-25)
+## Screens and Reading (all platforms, 2026-10-05)
 
-One studio serves Mac, iPad and iPhone (`ContentView`, `StudioSection`):
-**Screens** holds everything the reader shows from Pocket Daily (Home
-items, **My cards**, weather, sleep screen, and the reader settings "Open
-Pocket Daily at startup", book cover, sleep timeout and text size)
-with one **Apply to reader** action. Screen-specific controls come first. A compact Reading group below them
-contains book/article text size. Button remapping is not exposed in the app;
-existing reader mappings are preserved. Changing text size shows a clearly
-labeled illustrative article in the device preview, with a Back to layout action.
-This example is not the EPUB renderer and does not promise exact fonts or pagination. They can be edited before connecting, in the current app window.
-Connection merges untouched fields from the reader and retains edited fields;
-Reader-only settings, including existing button mappings, retain their loaded values. Nothing is sent until the user
-connects to reader Sync and chooses Apply. The **Device** screen holds the connection, files ("Write
-text to read" prepares an EPUB by default, with a plain-text option),
-troubleshooting (folded) and About & Privacy.
-Wide windows (at least 920 pt) use a sidebar for Books, Articles, Screens and Device. Screens has a persistent preview beside independently
-scrolling controls when the workspace is at least 680 pt wide. Smaller workspaces
-pin the preview above the controls and Apply below them. Compact windows use
-Library, Screens and Device tabs. The connection/files inspector lives
-in Device on every platform, leaving the studio's width for editing and preview.
-The Home **Daily panel** contains separate Weather and Calendar settings. Its
-placement/on-off still maps to profile v1 `home.weather`; `home.nextEvent`
-controls the event line within it. Firmware HomeRenderer.cpp draws both in
-`drawUtilities`, so a calendar-only independent Home block is not offered.
-Sleep Weather and Today's schedule configure their own sources separately.
-The official Apple Weather mark (when available) and Data sources link stay
-next to Weather, with readable source text and the legal link before setup or
-offline. This follows [Apple's attribution guidance](https://developer.apple.com/weatherkit/).
-Demo shows labeled examples and makes no geocoding, WeatherKit attribution or
-Calendar permission requests. Changing a city preserves the current city until
-lookup succeeds; cancellation/disappearance discards late results.
-Device groups Connection and Files as the main tasks, with Firmware and
-troubleshooting beside them when width permits. No firmware wire changes.
+The shell selects Screens or Reading through `ProfileStudioView.Destination`.
+Screens has one Home/Sleep segment; Reading has no workspace selector. Shared
+preview/control/Apply placement works in the current Mac window and on iPhone
+and iPad. Home, Sleep and Reading each stage only their own fields onto the last
+loaded baseline. **Apply to Reader** identifies its scope in the status area.
+Discard confirms and restores only that scope; other drafts remain pending.
 
-Removed in the same change: the Cards tab (now
-My cards), the theme-metric inspector, the reader-screen capture download and
-live-frame fetching (no view showed them), the LIVE/POLL badge, JSON card
-import/export and Auto-send.
+Home controls page visibility/order, Daily panel placement, next event and
+startup. Sleep controls the chosen sleep surface, sections, cover, timeout and
+WAKE. Reading offers supported GET-advertised text size, line spacing, margins,
+orientation and button policy. See [reader capability table](READER_CAPABILITIES.md)
+for exact values, physical X3/X4 keys and rotation behavior. Reading is an
+illustrative article, not exact device EPUB font/pagination or a live screen.
+Home/Sleep previews use the pinned host renderer with sample book/weather/events
+and the local card draft; device panel parity remains unverified.
 
-Apply to reader (`PocketModel.sendReaderLayout`) posts the profile and reader settings in
-one reader work item, only the parts that changed, then applies My cards
-through the content lane when their revision differs from the reader's
-(`readerContentRevision`, read once per connection). **Discard edits…** asks for confirmation and restores the
-last loaded layout and reading settings (starting defaults before connecting).
-It does not transmit anything or discard card drafts. Preview captions identify
-example book/weather/schedule data and distinguish demo cards from user drafts;
-the layout preview is explicitly not a live reader screen.
+Screens links to dedicated **My cards** and **Weather & calendar** editors.
+Home and Sleep contain inclusion/layout controls and short source summaries,
+not inline source forms or additional Apply buttons. Each source editor owns
+its title, current values or preview, Home/Sleep impact and one Apply action.
+Closing it restores the parent selection and layout preview. Connection opens
+inside the source task and returns to those edits. Card edits continue through
+`ContentEditorModel`, its persistence/recovery and `ContentDeployment`.
+Saved, activated and receipt-confirmed shown results stay distinct.
+
+Weather city changes fetch only after a user action and never implicitly push.
+The official Apple Weather mark and data sources link stay a small, readable
+footer; existing [Apple attribution guidance](https://developer.apple.com/weatherkit/)
+continues to apply. Demo uses examples without geocoding, attribution fetch,
+Calendar access or permission requests. Cancellation suppresses late city results.
+
+Calendars default to all to preserve previous behavior. Users can choose IDs;
+explicitly empty means no events. Missing/deleted IDs remain selected and are
+reported unavailable, without falling back to another calendar. EventKit access
+is requested only from Connect Calendar / Check access, with a settings link
+when denied. Source selections and a revision are stored locally. Pending source
+changes block automatic/background sends until explicit content Apply. The
+successful captured revision alone is marked applied, so edits during a send
+remain pending.
+
+Offline layout Apply opens connection and keeps drafts. Connection does not
+apply automatically. Drafts use optional `targetDeviceID`/`reviewDeviceID` in
+schema1: older schema1 records load as generic offline drafts. The first merge
+is review-only and explicit Apply binds a generic draft. A target mismatch
+blocks profile and preferences merging/sending. **Use a copy with this reader**
+archives the original before binding; **Recovered drafts** can restore it.
+Unreadable/unsupported records produce an error via `loadChecked`, and are
+preserved byte-for-byte before any subsequent replacement. This migration
+supports older data in the current app; it does not promise downgrade safety
+with an older app that ignores identity fields.
 
 ## My cards (2026-09-25)
 
@@ -111,7 +115,8 @@ image. The image menu makes a QR code from text or a link on the device
 whole-pixel modules within 240 px because the reader never enlarges images),
 fetches an image from an HTTPS link (`ContentImageImport.load(remote:)`:
 no cookies or cache, 20 MB, image types only), or converts a chosen file.
-Editing a card shows the Card surface (the page as opened on the reader);
+Editing a card shows the Card surface inside the dedicated card editor (the
+page as opened on the reader); the parent Home/Sleep target does not change.
 Home and Sleep previews draw the user's cards through `pdui_set_cards`.
 Profile item `word` (daily word as its own page) and sleep section `card`
 (first card with its image, always shown) are offered when the reader
@@ -170,7 +175,8 @@ with the reader state they started from (profile, its generation, reading
 settings) and restored at launch; the file is removed when nothing is unsent.
 Demo starts from a clean editor and never saves. Hosted tests use no file.
 
-When the reader's settings load, edits are merged field by field
+When the matching reader's settings load (or a generic draft is reviewed against
+a first target), edits are merged field by field
 (`ProfileMerge`) against that saved base: a field the user did not touch takes
 the reader's value; a field the reader did not change keeps the edit; a field
 changed on both keeps the edit, which Apply then writes over the reader's. The
@@ -181,9 +187,9 @@ profile fields are Home pages, Daily word, Daily panel, Next event, Sleep
 screen and Sleep sections; the reading settings merge the same way. A 409 on
 Apply reloads the reader's profile and merges it like any other load.
 
-## Home & Sleep profile editor (P2, 2026-09-25)
+## Home & Sleep profile editor (P2, 2026-09-25; historical navigation)
 
-Home & Sleep is the first studio tab on every platform and edits the reader's
+This earlier layout placed Home & Sleep in the first studio tab and edited the reader's
 Pocket Daily profile (sibling docs/pocket-profile-v1.md). Since 2026-09-26 it
 is organized around the two screens: a Home | Sleep switch above the canvas
 picks the screen, and the controls show only that screen's modules. Home is

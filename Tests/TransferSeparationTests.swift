@@ -8,8 +8,7 @@ final class TransferSeparationTests: XCTestCase {
         for folder in folders { try? FileManager.default.removeItem(at: folder) }
         super.tearDown()
     }
-    private func fixture(_ name: String, attempted: Bool = false, publicationPending: Bool? = nil) throws -> PreparedTransfer {
-        let id = UUID()
+    private func fixture(_ name: String, id: UUID = UUID(), attempted: Bool = false, publicationPending: Bool? = nil) throws -> PreparedTransfer {
         let item = PreparedTransfer(id: id, filename: name, firmwareVersion: name.hasSuffix(".bin") ? "test" : nil,
                                     readerID: attempted ? "1234ABCD" : nil, remoteStagingID: attempted ? id : nil, publicationPending: publicationPending)
         let folder = TransferPreparation.file(item).deletingLastPathComponent()
@@ -19,16 +18,17 @@ final class TransferSeparationTests: XCTestCase {
         try JSONEncoder().encode(item).write(to: folder.appendingPathComponent("transfer.json"))
         return item
     }
-    private func setup(failControl: Bool = false, identity: String = "1234ABCD",
+    private func setup(failControl: Bool = false, identity: String = "1234ABCD", receipts: Bool = false,
+                       heldPublication: String? = nil,
                        localFiles: PocketModel.LocalFileOperations = .init(),
                        releases: PocketModel.ReleaseOperations = .init()) throws -> (PocketModel, URLSession) {
-        TransferControlProtocol.reset(failControl: failControl, identity: identity)
+        TransferControlProtocol.reset(failControl: failControl, identity: identity, receipts: receipts, heldPublication: heldPublication)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TransferControlProtocol.self]
         let session = URLSession(configuration: configuration)
         let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session),
                                 localFiles: localFiles, releaseSource: releases)
-        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: TransferControlProtocol.status(identity: "1234ABCD"))
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: TransferControlProtocol.status(identity: "1234ABCD", receipts: receipts))
         return (model, session)
     }
     private func wait(_ model: PocketModel) async throws {
@@ -61,6 +61,33 @@ final class TransferSeparationTests: XCTestCase {
         XCTAssertEqual(TransferControlProtocol.controls.count, 1)
         XCTAssertNil(model.preparedTransfers.first { $0.id == firmware.id }?.remoteStagingID)
     }
+    func testOriginalBatchKeepsPauseAndStopScopeAfterFirstConfirmedFileLeavesQueue() async throws {
+        let sortedIDs = [UUID(), UUID()].sorted { $0.uuidString < $1.uuidString }
+        let first = try fixture("batch-A.epub", id: sortedIDs[0], attempted: true, publicationPending: true)
+        let second = try fixture("batch-B.epub", id: sortedIDs[1], attempted: true, publicationPending: true)
+        let (model, session) = try setup(receipts: true, heldPublication: "/batch-B.epub")
+        defer { model.pauseForBackground(); session.invalidateAndCancel() }
+        let ids: Set<UUID> = [first.id, second.id]
+        model.sendPreparedFiles(ids: ids)
+        for _ in 0..<300 where model.preparedTransfers.contains(where: { $0.id == first.id }) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(model.preparedTransfers.contains { $0.id == first.id })
+        XCTAssertTrue(model.preparedTransfers.contains { $0.id == second.id })
+        XCTAssertEqual(Set(model.activePreparedFileBatch.map(\.id)), ids)
+        XCTAssertTrue(model.isSendingPreparedFiles(ids: ids))
+        XCTAssertFalse(model.isSendingPreparedFiles(ids: [second.id]), "A remaining subset cannot cancel another admitted scope")
+        model.stopAndRemovePreparedFiles(ids: ids)
+        for _ in 0..<300 where model.isWorking || model.preparedTransfers.contains(where: { $0.id == second.id }) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(model.isWorking)
+        XCTAssertTrue(model.activePreparedFileBatch.isEmpty)
+        XCTAssertFalse(model.preparedTransfers.contains { ids.contains($0.id) })
+        XCTAssertEqual(TransferControlProtocol.controls.compactMap { $0["action"] }, ["discard"])
+        XCTAssertEqual(TransferControlProtocol.controls.first?["staging"], "/.pocket-\(second.id.uuidString.lowercased()).part")
+    }
+
     func testRejectedNewFirmwareCannotSendAnOlderQueuedImage() async throws {
         let firmware = try fixture("earlier.bin")
         let (model, session) = try setup()
@@ -285,12 +312,14 @@ private final class TransferControlProtocol: URLProtocol {
     static func holdPrepare() { lock.withLock { held = true } }
     nonisolated(unsafe) private static var fail = false
     nonisolated(unsafe) private static var identity = "1234ABCD"
+    nonisolated(unsafe) private static var receipts = false
+    nonisolated(unsafe) private static var heldPublication: String?
     static var controls: [[String: String]] { lock.withLock { recorded } }
-    static func reset(failControl: Bool, identity: String) {
-        lock.withLock { recorded = []; held = false; fail = failControl; self.identity = identity }
+    static func reset(failControl: Bool, identity: String, receipts: Bool = false, heldPublication: String? = nil) {
+        lock.withLock { recorded = []; held = false; fail = failControl; self.identity = identity; self.receipts = receipts; self.heldPublication = heldPublication }
     }
-    static func status(identity: String) -> Data {
-        Data("{\"version\":\"1.7.0\",\"device\":\"X3\",\"deviceID\":\"\(identity)\",\"ip\":\"192.0.2.1\",\"mode\":\"STA\",\"rssi\":-40,\"freeHeap\":20000,\"uptime\":1,\"transferControl\":1}".utf8)
+    static func status(identity: String, receipts: Bool = false) -> Data {
+        Data("{\"version\":\"1.7.0\",\"device\":\"X3\",\"deviceID\":\"\(identity)\",\"ip\":\"192.0.2.1\",\"mode\":\"STA\",\"rssi\":-40,\"freeHeap\":20000,\"uptime\":1,\"transferControl\":1,\"publicationReceipt\":\(receipts ? 1 : 0)}".utf8)
     }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -308,13 +337,21 @@ private final class TransferControlProtocol: URLProtocol {
             }
         }
         let control = url.path == "/api/pocket/v1/transfer"
-        let (fail, id) = Self.lock.withLock { () -> (Bool, String) in
+        let (fail, id, receipts, heldPublication) = Self.lock.withLock { () -> (Bool, String, Bool, String?) in
             if control, let object = try? JSONSerialization.jsonObject(with: sent) as? [String: String] { Self.recorded.append(object) }
-            return (Self.fail, Self.identity)
+            return (Self.fail, Self.identity, Self.receipts, Self.heldPublication)
         }
         if control, Self.lock.withLock({ Self.held }),
            (try? JSONSerialization.jsonObject(with: sent) as? [String: String])?["action"] == "prepare" { return }
-        let body = url.path == "/api/status" ? Self.status(identity: id) : Data("{\"ok\":true}".utf8)
+        let body: Data
+        if url.path == "/api/status" { body = Self.status(identity: id, receipts: receipts) }
+        else if url.path == "/api/pocket/v1/publication",
+                let fields = try? JSONSerialization.jsonObject(with: sent) as? [String: Any] {
+            if let heldPublication, fields["target"] as? String == heldPublication { return }
+            guard let size = fields["size"], let crc = fields["crc32"],
+                  let receipt = try? JSONSerialization.data(withJSONObject: ["size": size, "crc32": crc]) else { return }
+            body = receipt
+        } else { body = Data("{\"ok\":true}".utf8) }
         guard let response = HTTPURLResponse(url: url, statusCode: control && fail ? 503 : 200, httpVersion: nil, headerFields: nil) else { return }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)

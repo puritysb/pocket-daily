@@ -1,13 +1,10 @@
 import XCTest
 
-/// Navigation shared by the flow and screenshot tests. The app opens on the
-/// Library. iPhone shows two tabs (Library, Reader) with the Reader pages at the
-/// top of its tab; wide layouts show Books, Articles and the Reader pages
-/// (Connection, Screens, Files) in a sidebar. The studio switches between the
-/// Home and Sleep screens above its canvas.
+/// Navigation shared by flow and screenshot tests. Library and My Reader are
+/// peers; the four reader tasks open through the overview or wide sidebar.
 extension XCUIApplication {
     /// Compact layouts use tabs instead of the sidebar.
-    var isCompact: Bool { tabBars.firstMatch.buttons["Reader"].exists }
+    var isCompact: Bool { tabBars.firstMatch.buttons["My Reader"].exists }
 
     /// Opens Settings: the sidebar's button on wide layouts, the Library
     /// header's on iPhone.
@@ -34,24 +31,43 @@ extension XCUIApplication {
         }
     }
 
-    /// Compact layouts use tabs; wide layouts use the navigation sidebar.
-    /// "Library", or a Reader page: "Reader" (its Connection page), "Screens",
-    /// "Files". On iPhone the Reader pages are a segmented control in the Reader tab.
+    /// Opens a task destination through the shipping hierarchy.
     func open(_ section: String) {
-        let tabs = tabBars.firstMatch
-        let tab = section == "Library" ? "Library" : "Reader"
-        let page = section == "Reader" ? "Connection" : section
-        let sidebarItem = buttons["navigation-\(section == "Library" ? "Books" : page)"]
+        let destination = section
+        let sidebarName = destination == "Library" ? "Books" : destination == "My Reader" ? "Overview" : destination
+        let sidebar = buttons["navigation-\(sidebarName)"]
+        let tabName = destination == "Library" ? "Library" : "My Reader"
+        let tab = tabBars.firstMatch.buttons[tabName]
         let shown = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in tabs.buttons[tab].exists || sidebarItem.exists }, object: self)
+            predicate: NSPredicate { _, _ in tab.exists || sidebar.exists }, object: self)
         XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 15), .completed)
-        let target = sidebarItem.exists ? sidebarItem : tabs.buttons[tab].firstMatch
-        XCTAssertTrue(target.exists, "Missing navigation item: \(section)")
-        select(target)
-        guard !sidebarItem.exists, section != "Library" else { return }
-        let segment = segmentedControls["device-pages"].buttons[page]
-        XCTAssertTrue(segment.waitForExistence(timeout: 5), "Missing Reader page: \(page)")
-        select(segment)
+        if sidebar.exists { sidebar.tap() }
+        else {
+            select(tab)
+            if destination != "Library" && destination != "My Reader" {
+                let entry = buttons["reader-destination-\(destination)"]
+                if !entry.exists {
+                    let back = navigationBars.buttons["My Reader"].firstMatch
+                    if back.exists { back.tap() }
+                }
+                XCTAssertTrue(entry.waitForExistence(timeout: 5), "My Reader overview is missing destination: \(destination)")
+                entry.tap()
+            }
+        }
+    }
+
+    func openReaderOnlyFiles() {
+        let disclosure = buttons["reader-only-files"]
+        revealInReader(disclosure)
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 5))
+        if !buttons["reader-only-files-add"].exists { disclosure.tap() }
+    }
+
+    func openOtherConnectionMethods() {
+        let other = buttons["connection-other-methods"]
+        revealInReader(other)
+        XCTAssertTrue(other.waitForExistence(timeout: 5))
+        if other.value as? String != "Expanded" { other.tap() }
     }
 
     private func select(_ target: XCUIElement) {
@@ -74,43 +90,86 @@ extension XCUIApplication {
     /// Scrolls the settings pane until `element` is hittable
     /// and clear of the Apply bar pinned at the bottom of compact layouts.
     func revealInStudio(_ element: XCUIElement, attempts: Int = 16) {
-        let apply = buttons["profile-apply"]
-        let controls = scrollViews["profile-controls"]
+        let content = descendants(matching: .any)["content-editor-sheet"].exists
+        let apply = content
+            ? (buttons["content-editor-connect"].exists ? buttons["content-editor-connect"] : buttons["content-editor-apply"])
+            : (buttons["profile-connect"].exists ? buttons["profile-connect"] : buttons["profile-apply"])
+        let controls = scrollViews["card-editor-controls"].exists ? scrollViews["card-editor-controls"]
+            : scrollViews["glance-editor-controls"].exists ? scrollViews["glance-editor-controls"] : scrollViews["profile-controls"]
         func clear() -> Bool {
             guard element.isHittable else { return false }
             guard isCompact, apply.exists else { return true }
             return element.frame.maxY < apply.frame.minY - 24
         }
-        for _ in 0..<attempts where !clear() {
+        for _ in 0..<attempts {
+            if clear() { return }
             // The preview stays fixed. Move only part of the shorter settings
             // pane, so a quick swipe cannot skip a row entirely.
-            let above = element.exists && !element.frame.isEmpty && element.frame.midY < controls.frame.minY
-            let start = controls.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.3 : 0.7))
-            let end = controls.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.7 : 0.3))
-            start.press(forDuration: 0.05, thenDragTo: end)
+            let visible = controls.frame.intersection(frame)
+            let bottom = apply.exists ? min(visible.maxY, apply.frame.minY - 12) : visible.maxY
+            let top = visible.minY + 8
+            let height = max(20, bottom - top)
+            let above = element.exists && !element.frame.isEmpty && element.frame.midY < top
+            let origin = coordinate(withNormalizedOffset: .zero)
+            let start = origin.withOffset(CGVector(dx: visible.minX + 8, dy: top + height * (above ? 0.25 : 0.75)))
+            let end = origin.withOffset(CGVector(dx: visible.minX + 8, dy: top + height * (above ? 0.75 : 0.25)))
+            start.press(forDuration: 0.01, thenDragTo: end)
         }
     }
 
     /// Scrolls the studio back up until the canvas is in view.
     func revealCanvas(attempts: Int = 8) {
-        let canvas = descendants(matching: .any)["profile-canvas"]
+        let canvas = descendants(matching: .any)["card-editor-canvas"].exists
+            ? descendants(matching: .any)["card-editor-canvas"] : descendants(matching: .any)["profile-canvas"]
         for _ in 0..<attempts where !canvas.isHittable { swipeDown() }
     }
 
-    /// Shows the Home or Sleep screen of the studio.
-    func openScreen(_ screen: String) {
-        revealCanvas()
-        let segment = buttons[screen]
-        XCTAssertTrue(segment.waitForExistence(timeout: 5))
-        segment.tap()
+    func chooseMenu(_ identifier: String, option: String) {
+        let menu = buttons[identifier]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        menu.tap()
+        let item = buttons[option].firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 5))
+        item.tap()
     }
 
-    /// Opens My cards under their Home page.
+    /// Screens select Home/Sleep; Reading is its own My Reader destination.
+    func openScreen(_ screen: String) {
+        if screen == "Reading" { open("Reading") }
+        else {
+            if !segmentedControls["profile-screen"].exists { open("Screens") }
+            revealCanvas()
+            let selector = segmentedControls["profile-screen"]
+            XCTAssertTrue(selector.waitForExistence(timeout: 5))
+            selector.buttons[screen].tap()
+        }
+    }
+
+    /// Opens a dedicated source editor; the parent's Home/Sleep preview stays put.
     func openCards() {
-        let disclosure = buttons["profile-edit-cards"]
-        XCTAssertTrue(disclosure.waitForExistence(timeout: 10))
-        revealInStudio(disclosure)
-        disclosure.tap()
+        let action = buttons["profile-edit-cards"]
+        XCTAssertTrue(action.waitForExistence(timeout: 10))
+        revealInStudio(action)
+        action.tap()
+        XCTAssertTrue(descendants(matching: .any)["content-editor-sheet"].waitForExistence(timeout: 10))
+        let firstCard = buttons["cards-card-0"]
+        revealInStudio(firstCard)
+        XCTAssertTrue(firstCard.waitForExistence(timeout: 10))
+        firstCard.tap()
+    }
+
+    func openWeatherAndCalendar() {
+        let action = buttons["screen-glance-settings"]
+        revealInStudio(action)
+        XCTAssertTrue(action.waitForExistence(timeout: 10))
+        action.tap()
+        XCTAssertTrue(descendants(matching: .any)["content-editor-sheet"].waitForExistence(timeout: 10))
+    }
+
+    @discardableResult
+    func waitForCardPreview(timeout: TimeInterval = 15) -> Bool {
+        let canvas = descendants(matching: .any)["card-editor-canvas"]
+        return XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Current"), object: canvas)], timeout: timeout) == .completed
     }
 
     /// The Home & Sleep canvas once its frame matches the current edit.

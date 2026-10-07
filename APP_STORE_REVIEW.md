@@ -27,36 +27,51 @@ for reading.
 iPhone, or ⌘, on Mac) holds Appearance and **Continue Reading**: iCloud
 key-value storage between the user's own Apple devices (on by default, no
 setup) and exchange with a connected X3/X4 reader over the local connection.
-Neither needs an account. Pairing a reader for Bluetooth reading sync is in
-**Reader → Connection** and is hidden in demo mode.
+Neither needs a Pocket Daily account. Pairing a reader for Bluetooth reading sync is in
+**My Reader → Device** and is hidden in demo mode. Settings opens in the current
+app window, including on Mac.
 
 The companion has an explicit, local demo mode for review without a reader:
-open **Reader** (a tab in compact windows; on iPad and Mac the **Reader**
-group in the sidebar, with Connection, Screens and Files) and choose
-**Try demo** on Connection. **Screens** then
+open **My Reader → Device** and choose **Try demo**. My Reader has an overview
+and four destinations: **On Reader**, **Screens**, **Reading**, and **Device**.
+**Screens** then
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
 from a device. Switch between the Home and Sleep screens above the preview;
-My cards open from their Home page and make QR codes on the device. Demo
+My cards and Weather & calendar open dedicated source editors from Screens,
+each with one apply action; closing returns to the same Home/Sleep layout.
+My cards makes QR codes locally. **Reading** shows an
+illustrative book and model-specific page-button actions. Demo
 settings are populated, but Apply, file transfer and applying settings are
 disabled so review data can never be mistaken for a connected device. Cards a
 connected reader already shows can be loaded back for review.
 
 Live hardware actions require a compatible reader:
 
-1. Prepare a file with Add → Choose a file… in Reader → Files before switching networks. Firmware requires
-   acknowledgement and is validated before entering the offline queue.
+1. In the Library, choose **Send to Reader…** for a book or saved article. The
+   current-window task sheet keeps that content selected through connection.
+   Other prepared books and firmware are not included in this task.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
    choose Find on same Wi-Fi. This requests local-network access without BLE or
    automatic Wi-Fi switching. Afterwards the app reconnects by itself whenever
    that reader answers again at its last address on the same Wi-Fi (Settings →
    Reconnect on the same Wi-Fi); it asks only that address and never changes networks.
 3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
-   choose Connect directly in the app, and confirm the Wi-Fi transition. BLE
+   expand the other connection methods, choose Connect directly in the app,
+   and confirm the Wi-Fi transition. BLE
    pairing supplies the temporary credentials. No router or internet is required.
-4. Choose Send under Ready to send and keep the iPhone app open. Direct sessions defer
+4. Choose Send in the task sheet and keep the iPhone app open. Closing the sheet
+   keeps the task available to reopen; it does not cancel or send another task.
+   Direct sessions defer
    preview/crash requests to preserve reader memory. Pending files survive an
    interruption; resume depends on firmware capability and retained session state.
+   An uncertain save is checked before resending. **On Reader** shows the device
+   inventory separately from prepared transfers and their progress. On Mac,
+   the same selected-book task also offers an SD card destination: choose the
+   destination folder and explicitly copy. This copies the original book bytes
+   and reports SD-copy results separately from wireless publication; it does
+   not require selecting the source book again. Demo never opens the folder
+   picker or copies files.
 5. Successful direct batches release the temporary connection. New firmware also
    exits the private session. Firmware still requires reader-side confirmation;
    reconnect to verify the version for an identified reader.
@@ -75,6 +90,9 @@ availability against the connected reader. When nothing has been published it
 says so rather than reporting a connection problem.
 Local firmware file import is not offered. The user chooses Update and confirms
 the compatibility/recovery notice before download and local transfer begin.
+Download update for later instead downloads and validates a local copy without
+transferring; compatibility/recovery acknowledgement is required before the
+later Send update action.
 Cancel stops the operation and cleans tracked temporary files when the reader
 is reachable; failed cleanup retains a retryable copy. Already published files
 are unchanged.
@@ -112,8 +130,8 @@ allows; eligible background connections are controlled by the operating system. 
 reads the reader's reading list, sends back the places that are further along
 on the iPhone or iPad, and disconnects. Only a book fingerprint, the position,
 the percentage and the device name cross the encrypted link. Nothing is shown,
-and no page moves until the user chooses an offered place. Turning off Library
-options → Continue Reading → Your X3/X4 reader cancels the pending connection;
+and no page moves until the user chooses an offered place. Turning off Settings
+→ Continue Reading → X3 / X4 reader cancels the pending connection;
 demo mode never connects. A physical reader is required to observe it.
 
 ## Weather and calendar
@@ -121,10 +139,11 @@ demo mode never connects. A physical reader is required to observe it.
 Weather is Apple WeatherKit data for a city the user types (geocoded with
 Apple's geocoder; the device's location is not used). The Apple Weather mark
 and legal link appear next to the city. Calendar access is requested only when
-the user turns on calendar events; today's event titles and times are sent to
-the user's reader over the local connection and are not stored or sent
-elsewhere. Both are optional, and the reader simply shows an empty panel
-without them.
+the user enables the calendar feature. All or selected calendars can be used;
+the selection is stored locally, but today's event titles and times are not
+stored by the app and are sent only to the user's reader over the local
+connection. Editing a source stays local until explicitly applied. Both sources
+are optional; an explicit apply after disabling them can clear the reader content.
 
 ## Privacy
 
@@ -148,7 +167,7 @@ Subscriptions and page requests go directly to publishers without browser cookie
 credentials, scripts, images or an extraction service. Demo mode does not fetch feeds.
 
 Tap an offline article to read in the app; its menu offers Save for later, read/unread,
-Edit article, Prepare for reader and Delete. Reading and saving are independent.
+Edit article, Send to Reader… and Delete. Reading and saving are independent.
 Unsubscribing retains collected articles; refresh does not restore deleted feed articles.
 Content, subscriptions and these flags stay on this device. Reader preparation and
 sending remain explicit and use the existing EPUB format. The iOS/iPadOS Share →
