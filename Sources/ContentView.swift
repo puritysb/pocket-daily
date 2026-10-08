@@ -121,7 +121,7 @@ struct ContentView: View {
             BookTransferSheet(model: model, jobID: task.id, library: library,
                               connection: {
                                   VStack(alignment: .leading, spacing: 16) {
-                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
+                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect, offersDemo: false)
                                       if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                                   }
                               },
@@ -240,7 +240,8 @@ struct ContentView: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
+                        ConnectionInspector(model: model, nearby: nearby, onConnect: connect,
+                                            offersDemo: section != .layout && section != .reading)
                         if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                     }
                 }
@@ -639,7 +640,7 @@ struct ContentView: View {
                               onScreenTaskOpened: { screenTaskRequest = nil },
                               connectionContent: {
                                   AnyView(VStack(alignment: .leading, spacing: 16) {
-                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
+                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect, offersDemo: false)
                                       if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                                   })
                               },
@@ -689,8 +690,17 @@ struct ContentView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if !model.device.isConnected {
-                    Button(model.isDemoMode ? "Explore connection" : "Connect reader…") { showingConnection = true }
-                        .buttonStyle(.borderedProminent).accessibilityIdentifier("overview-connect")
+                    if !model.isDemoMode && !model.hasKnownReader {
+                        // A first visit learns what the reader needs before choosing Connect.
+                        Text("For X3 and X4 readers running Pocket Daily or compatible CrossPoint-based firmware. On the reader, open Pocket Daily → Sync → Same Wi-Fi, then connect here.")
+                            .font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { overviewConnectActions(showsOffline: !showsDestinations) }
+                        VStack(alignment: .leading, spacing: 10) { overviewConnectActions(showsOffline: !showsDestinations) }
+                    }
+                    .padding(.top, 2)
                 }
             }
             if !showsDestinations {
@@ -710,10 +720,6 @@ struct ContentView: View {
                             Button("Continue reading settings") { section = .reading }.buttonStyle(.bordered)
                         }
                     }
-                }
-                if !model.device.isConnected && !profileEditor.isDirty && !profileEditor.readingDirty {
-                    Button(model.isDemoMode ? "Preview Home screen" : "Edit Home offline") { section = .layout }
-                        .buttonStyle(.bordered).accessibilityIdentifier("overview-edit-offline")
                 }
                 if !model.bookTransferJobs.filter({ $0.requiresAttention }).isEmpty {
                     InspectorCard(title: "Book transfers", symbol: "arrow.up.doc") {
@@ -761,6 +767,17 @@ struct ContentView: View {
         .accessibilityIdentifier("reader-overview")
     }
 
+    /// Connect leads; editing offline sits beside it in the same card, where
+    /// it reads as the alternative rather than a stray button below.
+    @ViewBuilder private func overviewConnectActions(showsOffline: Bool) -> some View {
+        Button(model.isDemoMode ? "Explore connection" : "Connect reader…") { showingConnection = true }
+            .buttonStyle(.borderedProminent).accessibilityIdentifier("overview-connect")
+        if showsOffline && !profileEditor.isDirty && !profileEditor.readingDirty {
+            Button(model.isDemoMode ? "Preview Home screen" : "Edit Home offline") { section = .layout }
+                .buttonStyle(.bordered).accessibilityIdentifier("overview-edit-offline")
+        }
+    }
+
     private func destinationSummary(_ destination: StudioSection) -> String {
         switch destination {
         case .files: "Books, articles and SD storage"
@@ -805,7 +822,9 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 if !model.isDemoMode {
                     ReaderBluetoothPairingCard(sync: sync)
-                    Button("Continue Reading settings", action: showSettings).buttonStyle(.borderless)
+                    Button("Continue Reading settings…", systemImage: "gearshape", action: showSettings)
+                        .buttonStyle(.borderless).font(.callout)
+                        .accessibilityIdentifier("device-continue-reading-settings")
                     TroubleshootingInspector(model: model, nearby: nearby)
                 }
                 DisclosureGroup("Device details", isExpanded: $deviceDetailsExpanded) {
@@ -1276,6 +1295,8 @@ struct ConnectionInspector: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
     let onConnect: () -> Void
+    /// Off inside a book or editor task: demo would abandon the work in progress.
+    var offersDemo = true
     @State private var confirmingDirectConnection = false
     @State private var otherMethods = false
 
@@ -1390,9 +1411,11 @@ struct ConnectionInspector: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Button("Try demo") { nearby.disconnect(); model.enterDemoMode() }
-                .buttonStyle(.borderless).font(.caption)
-                .accessibilityIdentifier("try-demo").disabled(model.isWorking)
+            if offersDemo {
+                Button("Try demo") { nearby.disconnect(); model.enterDemoMode() }
+                    .buttonStyle(.borderless).font(.caption)
+                    .accessibilityIdentifier("try-demo").disabled(model.isWorking)
+            }
 
         }
     }

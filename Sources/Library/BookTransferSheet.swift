@@ -61,7 +61,7 @@ struct BookTransferSheet<Connection: View>: View {
                             }
                         } else {
                             LabeledContent("Reader", value: job.target?.displayName ?? model.readerStatus?.device ?? "Choose after connecting")
-                            if job.target?.readerID == nil, job.target != nil {
+                            if job.target?.readerID == nil, job.target != nil, !model.isDemoMode {
                                 Text("This reader has no unique identity. Its connection must be selected again before sending.")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -100,7 +100,8 @@ struct BookTransferSheet<Connection: View>: View {
                             sdActions(job)
                         } else if connecting || job.stage == .connecting {
                             connection()
-                            Button("Cancel connection") { cancelConnection(); connecting = false }
+                            // Returns to this transfer; an attempt still running is stopped first.
+                            Button("Back to transfer", systemImage: "chevron.left") { cancelConnection(); connecting = false }
                                 .accessibilityIdentifier("book-transfer-connection-back")
                         } else {
                             actions(job)

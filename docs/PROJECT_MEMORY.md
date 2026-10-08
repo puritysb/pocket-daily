@@ -4,6 +4,41 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## UX handoff verification — 2026-10-09 (local, not released)
+
+- Reviewed the UX evaluation changes and added explicit UI assertions for
+  demo inventory, compact preview enlargement/return, and hiding demo entry
+  inside an editor connection. Regenerated the Xcode project and 19 store
+  screenshots; source-package validation and local Markdown links pass.
+- The share test now taps the remote share cell's visible `activityImageView`.
+  The previous container tap left the iPhone share sheet open without starting
+  the extension. The revised save/import flow passes on iPhone (iOS 26.5)
+  and iPad Pro 13 (iOS 27). An initial cold iPad run also showed an empty system
+  share sheet; these passes do not establish that OS startup issue is fixed.
+- Verification: 530 unit tests, 25 iPhone flows and 2 QA tours passed in the
+  main run; its one share failure passed after the tap correction. Two updated
+  iPhone regression tests and four iPad flows pass. macOS build and 10 tests
+  pass; the optional external-EPUB sample test is skipped. Details and local
+  result paths are in `docs/IA_IMPLEMENTATION_REPORT.md`.
+- Only `main` and the primary checkout were present, with no stashes or stale
+  worktree records. No push, Store action, or physical-reader test was performed.
+
+## UX evaluation loop — 2026-10-08 (local, not released)
+
+- Scenario renders (Mac QA tests, new `UITests/PocketQATourTests` iPhone tour
+  of first run without a reader and demo) found: a sparse Mac Overview, an
+  unlabelled "Continue Reading settings" link, demo offered inside book/editor
+  connections, a demo identity warning, a cramped iPhone Library header, a
+  tiny compact preview and an empty demo On Reader. All fixed; details and
+  evidence in `docs/IA_IMPLEMENTATION_REPORT.md` (2026-10-08 section).
+- `--ui-test-fresh-library` now also isolates prepared transfers and job
+  records (DEBUG only). Orphan prepared copies from earlier runs had been
+  recovered as "Paused" book transfers in every fresh-library UI test.
+- The share-test failures observed in this loop were followed up on 2026-10-09
+  above; the corrected tap now passes on both tested models. iPad Pro 11 portrait uses the
+  floating top tab bar, which `UITestSupport.isCompact` does not recognise,
+  so run iPad flows on the 13-inch model.
+
 ## IA and UX integration — 2026-10-08 (not released)
 
 - Library and My Reader remain equal first-class destinations. Library owns

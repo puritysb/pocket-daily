@@ -107,9 +107,11 @@ struct LibraryView: View {
         .task { await library.load() }
     }
 
+    /// Title and actions share the top row, so the subtitle and reader
+    /// status keep the full width instead of wrapping beside the buttons.
     private var header: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 16) {
                 if showsShelfMenu {
                     Menu {
                         Picker("Shelf", selection: $shelf) {
@@ -127,47 +129,16 @@ struct LibraryView: View {
                 } else {
                     Text(shelf.rawValue).font(.largeTitle.bold())
                 }
-                Text(shelf == .books ? "Your own quiet corner." : "Saved for a slower moment.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                if let openDevice, model.device.link != .offline || model.hasKnownReader {
-                    Button(action: openDevice) { DeviceStatusLabel(device: model.device) }
-                        .buttonStyle(.plain)
-                        .padding(.top, 4)
-                        .accessibilityIdentifier("library-device-status")
-                }
+                Spacer(minLength: 0)
+                headerActions
             }
-            Spacer(minLength: 0)
-            if shelf == .books {
-                Menu {
-                    Button("Import books…", systemImage: "doc.badge.plus") { importing = true }
-                        .accessibilityIdentifier("library-import")
-                    Button("Write to read…", systemImage: "square.and.pencil") { writing = true }
-                        .accessibilityIdentifier("library-write")
-                } label: {
-                    Image(systemName: "plus").frame(width: 44, height: 44).contentShape(Rectangle())
-                }
-                .accessibilityLabel("Add books").disabled(library.isWorking)
-                .accessibilityIdentifier("library-add")
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            }
-            if shelf == .articles {
-                Menu {
-                    Button("Add article", systemImage: "doc.badge.plus") { addingArticle = true }
-                        .accessibilityIdentifier("article-add")
-                    Button("Subscriptions", systemImage: "dot.radiowaves.left.and.right") { managingFeeds = true }
-                        .accessibilityIdentifier("article-subscriptions")
-                } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                .accessibilityLabel("Add to Articles").accessibilityIdentifier("article-add-menu")
-            }
-            if let openSettings {
-                Button(action: openSettings) {
-                    Label("Settings", systemImage: "gearshape")
-                        .font(.subheadline)
-                        .frame(minHeight: 44).contentShape(Rectangle())
-                }
-                .accessibilityLabel("Settings")
-                .accessibilityIdentifier("app-settings")
+            Text(shelf == .books ? "Your own quiet corner." : "Saved for a slower moment.")
+                .font(.subheadline).foregroundStyle(.secondary)
+            if let openDevice, model.device.link != .offline || model.hasKnownReader {
+                Button(action: openDevice) { DeviceStatusLabel(device: model.device) }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                    .accessibilityIdentifier("library-device-status")
             }
         }
         .buttonStyle(.plain)
@@ -177,6 +148,41 @@ struct LibraryView: View {
         .padding(.bottom, 20)
         .frame(maxWidth: 1100)
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private var headerActions: some View {
+        if shelf == .books {
+            Menu {
+                Button("Import books…", systemImage: "doc.badge.plus") { importing = true }
+                    .accessibilityIdentifier("library-import")
+                Button("Write to read…", systemImage: "square.and.pencil") { writing = true }
+                    .accessibilityIdentifier("library-write")
+            } label: {
+                Image(systemName: "plus").frame(width: 44, height: 44).contentShape(Rectangle())
+            }
+            .accessibilityLabel("Add books").disabled(library.isWorking)
+            .accessibilityIdentifier("library-add")
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        }
+        if shelf == .articles {
+            Menu {
+                Button("Add article", systemImage: "doc.badge.plus") { addingArticle = true }
+                    .accessibilityIdentifier("article-add")
+                Button("Subscriptions", systemImage: "dot.radiowaves.left.and.right") { managingFeeds = true }
+                    .accessibilityIdentifier("article-subscriptions")
+            } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .accessibilityLabel("Add to Articles").accessibilityIdentifier("article-add-menu")
+        }
+        if let openSettings {
+            Button(action: openSettings) {
+                Label("Settings", systemImage: "gearshape")
+                    .font(.subheadline)
+                    .frame(minHeight: 44).contentShape(Rectangle())
+            }
+            .accessibilityLabel("Settings")
+            .accessibilityIdentifier("app-settings")
+        }
     }
 
     // MARK: Books

@@ -231,6 +231,9 @@ struct ProfileStudioView: View {
     let onScreenTaskOpened: () -> Void
     @State private var activeContentEditor: StudioContentTask?
     @State private var preview: PreviewSurface = .home
+    /// Compact layouts keep the preview small beside the controls; a tap
+    /// shows it at full size without leaving the edit.
+    @State private var enlargedPreview = false
     @State private var schematic: CGImage?
     @StateObject private var layout = LayoutPreviewModel()
     @State private var cards: ContentEditorModel?
@@ -301,7 +304,8 @@ struct ProfileStudioView: View {
                         editorScroll
                     }
                 } else {
-                    canvas(height: condensed ? 60 : min(180, max(90, geometry.size.height * 0.24)), condensed: condensed)
+                    canvas(height: condensed ? 60 : min(180, max(90, geometry.size.height * 0.24)), condensed: condensed,
+                           enlargeable: true)
                     Divider()
                     editorScroll
                     if condensed { HStack { Spacer(); applyControls } } else { applyBar }
@@ -309,6 +313,7 @@ struct ProfileStudioView: View {
             }
             .padding(contentPadding)
         }
+        .sheet(isPresented: $enlargedPreview) { enlargedCanvas }
         .sheet(item: $activeContentEditor) { task in
             StudioContentSheet(model: model, task: task, cards: cards, loadError: cardsError,
                                reloadCards: { await openCards() }, connectionContent: connectionContent,
@@ -440,7 +445,7 @@ struct ProfileStudioView: View {
         return showsRender ? layout.image : schematic
     }
 
-    private func canvas(height: CGFloat, condensed: Bool = false) -> some View {
+    private func canvas(height: CGFloat, condensed: Bool = false, enlargeable: Bool = false) -> some View {
         VStack(spacing: 10) {
             if !showsReadingSample && !condensed {
                 Picker("Screen", selection: Binding(get: { screen }, set: { preview = $0 == .home ? .home : .sleep })) {
@@ -464,9 +469,21 @@ struct ProfileStudioView: View {
             }
                 .frame(maxWidth: 340)
                 .frame(height: height)
+                .overlay(alignment: .bottomTrailing) {
+                    if enlargeable && !condensed {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(6).background(.regularMaterial, in: Circle())
+                            .accessibilityHidden(true)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { if enlargeable { enlargedPreview = true } }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(canvasLabel)
                 .accessibilityValue(canvasIsCurrent ? "Current" : "Updating")
+                .accessibilityHint(enlargeable ? "Shows the preview at full size" : "")
+                .accessibilityAddTraits(enlargeable ? .isButton : [])
                 .accessibilityIdentifier("profile-canvas")
             if !condensed {
                 Text(showsReadingSample ? "Reading preview · approximate appearance" : "Layout preview · not a live reader screen")
@@ -488,6 +505,35 @@ struct ProfileStudioView: View {
         }
         .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
+    }
+
+    private var enlargedCanvas: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text(showsReadingSample ? "Reading preview" : "\(screen == .sleep ? "Sleep" : "Home") preview")
+                    .font(.headline)
+                Spacer()
+                Button("Done") { enlargedPreview = false }.accessibilityIdentifier("profile-canvas-done")
+            }
+            Group {
+                if showsReadingSample, let image = canvasImage {
+                    Image(decorative: image, scale: 1)
+                        .resizable().scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .padding(10)
+                        .background(PocketPalette.deviceTop, in: RoundedRectangle(cornerRadius: 14))
+                } else {
+                    PocketDevicePreview(hardware: model.hardware, status: model.readerStatus, renderedScreen: canvasImage)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(canvasLabel)
+            Text(showsReadingSample ? "Reading preview · approximate appearance" : "Layout preview · not a live reader screen")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .background(PocketPalette.workspace)
     }
 
     private var canvasIsCurrent: Bool {

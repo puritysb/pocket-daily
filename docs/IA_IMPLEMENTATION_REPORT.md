@@ -58,3 +58,41 @@ Guide 독서 검사는 페이지 위치 준비 직후 snapshot을 찍어 간헐�
 이 검토는 합의된 IA 및 사용자 시나리오와 구현의 대조다. 실제 사용자 대상 사용성 실험, 장시간 성능 측정 또는 macOS Space 영속 복원을 검증했다고 주장하지 않는다.
 
 전체 책의 자동 양방향 동기화, 여러 리더 동시 관리, 계정, 앱의 책별 외관 예외와 기기 라이브 화면 캡처는 후속 범위다. 복수 책 작업 계층 지원을 복수 선택 UI 구현으로 표현하지 않는다. 커밋·푸시·배포·App Store 제출은 수행하지 않았다.
+
+## 2026-10-08 사용자 시나리오 평가·개선 루프
+
+Mac QA 렌더(`testRendersUserFlowStates`, `testRendersReaderTasksAndButtonMappings`)와 새 iPhone 투어(`UITests/PocketQATourTests`: 리더 없는 첫 실행, 데모 동반 기능)를 캡처해 화면 단위로 평가하고, 고친 뒤 같은 시나리오로 다시 평가했다. 투어 캡처 이름은 `qa-tour-`로 시작하므로 스토어 캡처에 섞이지 않는다.
+
+| 발견 | 개선 |
+| --- | --- |
+| Mac/iPad 개요의 미연결 상태가 카드 하나와 따로 떨어진 'Edit Home offline' 버튼뿐이었다 | 처음 연결하는 경우 호환 범위와 리더 쪽 절차(Sync → Same Wi-Fi)를 카드에 표시하고, 오프라인 편집을 Connect 옆 보조 행동으로 옮겼다 |
+| Device의 'Continue Reading settings'가 제목처럼 보여 눌러지는 행동인지 알기 어려웠다 | 톱니 아이콘과 말줄임표를 붙인 버튼으로 바꿨다 |
+| 책 보내기 시트와 화면 편집의 연결 절차 안에 'Try demo'가 있어 진행 중인 작업을 버리고 데모로 갈 수 있었다 | 작업 안의 연결에서는 데모를 숨긴다. Device와 일반 연결 화면에는 남긴다 |
+| 보내기 시트의 연결 단계에서 아무것도 진행되지 않을 때도 'Cancel connection'이라고 표시됐다 | 'Back to transfer'로 바꿨다. 진행 중인 시도는 기존처럼 먼저 중단한다 |
+| 데모 보내기 시트에 '고유 ID 없음' 경고가 나타났다 | 데모에서는 표시하지 않는다 |
+| iPhone 서재 헤더의 부제와 연결 상태가 +/Settings에 밀려 두 줄로 깨졌다 | 제목 줄에 행동 버튼을 두고 부제·상태가 전체 폭을 쓰게 했다 |
+| iPhone의 Screens/Reading 미리보기가 약 100pt 폭이라 내용을 판단하기 어려웠다 | 좁은 화면에서 미리보기를 누르면 편집을 벗어나지 않고 전체 크기 시트로 본다 |
+| 데모 On Reader가 비어 있어 기기 보관함이 무엇을 보여 주는지 알 수 없었다 | 예시임을 밝힌 파일 세 개를 보여 준다. 기기에서 읽은 값이 아니며 행동 버튼은 없다 |
+| `--ui-test-fresh-library` 실행마다 이전 실행의 준비 사본이 'Paused' 책 전송으로 복구돼 하단 작업 막대가 누적됐다 | DEBUG의 fresh-library 실행에서는 준비 사본과 작업 기록도 임시 폴더를 쓴다. 정식 경로는 바뀌지 않는다 |
+
+검증: iOS 단위 테스트 530개 통과(`.build/ux-loop3/unit.xcresult`). iPhone 투어 2개 통과(`iphone-tour3.xcresult`). Mac QA 렌더 4개 통과(`mac-qa.xcresult`, `mac-qa2.xcresult`). macOS 빌드와 서명된 Debug 빌드 통과. iPhone UI 흐름은 전체 실행에서 32개 통과, 1개(`testSystemShareExtensionSavesTextIntoAppLibrary`)는 실패 후 단독 재실행에서 통과. iPad Pro 13 UI 흐름은 30개 통과, 같은 공유 확장 테스트 1개가 단독 재실행에서도 실패했다. iOS 27 iPad 공유 시트에서 Pocket Daily를 고른 뒤 확장 화면이 10초 안에 나타나지 않는다. 이번 변경은 공유 확장을 건드리지 않았지만 이전 커밋에서 같은 실패를 재현하지는 않았다. iPad Pro 11 세로 화면은 상단 부동 탭 막대를 쓰는데 UI 테스트 도우미가 하단 탭 막대만 인식해 흐름 테스트 대상이 아니다. 스토어 캡처 19장을 캡처 전용 모드로 다시 만들었고 `validate_app_store.sh`가 통과했다. 실제 리더·무선·SD 동작은 이번 루프에서 확인하지 않았다.
+
+## 2026-10-09 인계 검토와 커밋 전 검증
+
+위 UX 변경을 검토하고, 캡처 중심 투어와 별도로 `PocketFlowTests`에 데모 예시 3개·전송 차단, 작은 미리보기 확대/닫기 후 상태 유지, 편집 연결에서 데모 진입 차단을 명시적으로 검증하는 단언을 추가했다. `xcodegen generate`로 새 투어 파일의 프로젝트 등록을 확인했다. 앱/펌웨어 통신 계약은 변경하지 않았다.
+
+공유 실패를 재현한 iPhone 녹화에는 탭 이후에도 시스템 공유 시트가 남아 있었고 확장 프로세스 실행 기록이 없었다. 바깥 셀 대신 그 안의 실제 `activityImageView`를 탭하도록 테스트를 보완한 뒤 iPhone과 iPad에서 확장 입력·저장·서재 반영까지 통과했다. 최초 iPad 실행은 시스템 공유 시트 자체가 비어 있었으므로 그 시작 문제까지 해결했다고 보지는 않는다. 실패를 건너뛰거나 제한 시간을 늘리지는 않았다.
+
+검증 결과는 `.build/handoff-review/`에 보관한다.
+
+| 검사 | 결과와 근거 |
+| --- | --- |
+| iPhone 17 Pro Max, iOS 26.5 | `iphone.xcresult`: 단위 530개, 일반 UI 흐름 25개, QA 투어 2개 통과. 공유 1개 실패는 아래 재검증으로 구분 |
+| 보완한 iPhone 회귀 검사 | `iphone-regression.xcresult`: 데모/확대 미리보기와 편집 연결 2개 통과 |
+| 수정 후 iPhone 공유 | `iphone-share-final.xcresult`: 시스템 공유 → 확장 저장 → 서재 확인 1개 통과 |
+| iPad Pro 13, iOS 27 | `ipad-final.xcresult`: 데모, 책 전송 연결 복귀, 편집 연결 복귀, 수정 후 공유 4개 통과 |
+| macOS | `mac-build.log`, `mac.xcresult`: 빌드 및 10개 테스트 통과. 외부 EPUB 샘플 폴더가 필요한 1개만 건너뜀 |
+| 스토어 자산 | `screenshots-final.log`: 스크립트로 iPhone 6장·iPad 7장·Mac 6장 재생성, 화면 확인 및 소스 패키지 검사 통과 |
+| 저장소 | 문서 로컬 링크, `git diff --check` 통과. `main`과 기본 checkout만 있으며 stash와 정리할 별도 worktree/브랜치는 없음 |
+
+UI 검사는 최종적으로 순차 실행했다. 병행 실행에서 테스트 러너 시작이 대기한 두 실행은 중단한 뒤 다시 수행했으며 성공 근거로 세지 않았다. 실제 Bluetooth/Wi-Fi/SD 및 TestFlight 검증, 푸시와 App Store 제출은 수행하지 않았다.

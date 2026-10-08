@@ -94,8 +94,24 @@ struct ReaderInventoryView: View {
                         Button("Open Device", action: manage).buttonStyle(.bordered)
                             .accessibilityIdentifier("inventory-open-device")
                     }
+                } else if model.isDemoMode {
+                    // Demo shows what the shelf looks like; nothing here is read from a device.
+                    Text("Example files · a connected reader lists its own")
+                        .font(.caption).foregroundStyle(.secondary)
+                    ForEach(Self.demoItems, id: \.title) { item in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: item.article ? "doc.text" : "book.closed").foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.title).font(.headline)
+                                Text(item.detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                    .accessibilityIdentifier("inventory-demo")
                 } else {
-                    Text(model.isDemoMode ? "Connect your reader to see the books and articles on it." : "Connect a reader to see its books and articles.")
+                    Text("Connect a reader to see its books and articles.")
                         .font(.callout).foregroundStyle(.secondary)
                     Button("Connect reader…", action: connect).buttonStyle(.borderedProminent)
                         .accessibilityIdentifier("inventory-connect")
@@ -114,6 +130,12 @@ struct ReaderInventoryView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reader-inventory")
     }
+
+    private static let demoItems: [(title: String, detail: String, article: Bool)] = [
+        ("Pride and Prejudice", "/Books/pride-and-prejudice.epub · 42% read", false),
+        ("Welcome to Pocket Daily", "/Books/welcome-to-pocket-daily.epub · 0% read", false),
+        ("A little room for a slower morning", "/Articles/slower-morning.epub · saved article", true),
+    ]
 
     private func isVerifiedMatch(_ item: ReaderShelf.Item) -> Bool {
         guard let id = item.bookID, let document = item.document, let book = library.book(id) else { return false }

@@ -135,6 +135,7 @@ final class PocketFlowTests: XCTestCase {
         connect.tap()
         XCTAssertTrue(app.buttons["Find on same Wi-Fi"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Connect directly"].exists)
+        XCTAssertFalse(app.buttons["try-demo"].exists, "Demo must not abandon an editor's pending work")
         XCTAssertFalse(city.exists, "Hidden editor inputs must not remain accessible during connection")
         app.buttons["content-connection-back"].tap()
         XCTAssertTrue(app.staticTexts["Weather & calendar"].waitForExistence(timeout: 5))
@@ -222,6 +223,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(app.buttons["book-transfer-send"].exists)
         connect.tap()
         XCTAssertTrue(app.buttons["Find on same Wi-Fi"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["try-demo"].exists, "Demo must not be offered inside a book transfer")
         app.buttons["book-transfer-connection-back"].tap()
         XCTAssertTrue(connect.waitForExistence(timeout: 5))
         app.buttons["book-transfer-close"].tap()
@@ -571,7 +573,11 @@ final class PocketFlowTests: XCTestCase {
         app.buttons["Share selected article text"].tap()
         let destination = app.cells["Pocket Daily"].firstMatch
         XCTAssertTrue(destination.waitForExistence(timeout: 10))
-        destination.tap()
+        // The remote share sheet exposes a container cell as well as its
+        // icon. Tap the visible icon so activation targets the actual control.
+        let shareIcon = destination.images["activityImageView"]
+        XCTAssertTrue(shareIcon.waitForExistence(timeout: 5))
+        shareIcon.tap()
         let title = app.textFields["article-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
         title.tap()
@@ -666,12 +672,27 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Demo · nothing is sent"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Exit demo"].exists)
         app.open("On Reader")
+        XCTAssertTrue(app.staticTexts["Example files · a connected reader lists its own"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "inventory-demo").count, 3)
+        XCTAssertFalse(app.buttons["inventory-connect"].exists)
         XCTAssertFalse(app.buttons["library-write"].exists, "On Reader must not own ordinary content creation")
         app.openReaderOnlyFiles()
         XCTAssertTrue(app.buttons["reader-only-files-add"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["reader-only-files-add"].isEnabled, "Nothing may reach a device")
         // Reader settings are populated in Home & Sleep so they are reviewable...
         app.open("Screens")
+        XCTAssertTrue(app.waitForLayoutPreview())
+        if app.isCompact {
+            let canvas = app.buttons["profile-canvas"]
+            XCTAssertTrue(canvas.exists, "The compact preview must expose its enlargement action")
+            let originalPreview = canvas.label
+            canvas.tap()
+            let done = app.buttons["profile-canvas-done"]
+            XCTAssertTrue(done.waitForExistence(timeout: 5), "Tapping the preview must open its full-size sheet")
+            done.tap()
+            XCTAssertTrue(canvas.waitForExistence(timeout: 5))
+            XCTAssertEqual(canvas.label, originalPreview, "Closing the preview must preserve the editor's screen")
+        }
         let startup = app.switches["profile-startup"]
         app.revealInStudio(startup)
         XCTAssertTrue(startup.exists)

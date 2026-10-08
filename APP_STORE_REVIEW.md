@@ -34,7 +34,7 @@ app window, including on Mac.
 The companion has an explicit, local demo mode for review without a reader:
 open **My Reader → Device** and choose **Try demo**. My Reader has an overview
 and four destinations: **On Reader**, **Screens**, **Reading**, and **Device**.
-**Screens** then
+In demo, **On Reader** lists example files labelled as examples. **Screens** then
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
 from a device. Switch between the Home and Sleep screens above the preview;

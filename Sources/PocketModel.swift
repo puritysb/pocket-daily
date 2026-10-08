@@ -106,9 +106,20 @@ struct PreparedTransfer: Codable, Identifiable, Equatable, Sendable {
 /// Files are copied out of cloud/file-provider URLs before changing networks.
 enum TransferPreparation {
     static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+#if DEBUG
+        if let freshRoot { return freshRoot.appendingPathComponent("Transfers", isDirectory: true) }
+#endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Pocket/Transfers", isDirectory: true)
     }
+
+#if DEBUG
+    /// A fresh UI-test library gets new book IDs on every launch, so its
+    /// prepared copies and the transfer records beside them start fresh too.
+    private static let freshRoot: URL? = ProcessInfo.processInfo.arguments.contains("--ui-test-fresh-library")
+        ? FileManager.default.temporaryDirectory.appendingPathComponent("fresh-transfers-\(UUID().uuidString)", isDirectory: true)
+        : nil
+#endif
 
     static func prepare(_ source: URL, directory: URL = directory, id: UUID = UUID(),
                         bookJobID: UUID? = nil, libraryBookID: UUID? = nil) throws -> PreparedTransfer {
