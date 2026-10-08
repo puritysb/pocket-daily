@@ -25,7 +25,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--hardware=X3"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
         // The daily panel contains weather and the next event as sibling settings.
         let weather = app.switches["profile-home-weather"]
@@ -44,7 +44,7 @@ final class PocketFlowTests: XCTestCase {
         readerSleep.tap()
         // The reader's own sleep screen is an outline.
         XCTAssertTrue(app.waitForLayoutPreview(caption: "Layout outline"))
-        XCTAssertTrue(app.segmentedControls["profile-screen"].exists)
+        XCTAssertTrue(app.buttons["reader-setting-scope"].exists)
         let brief = app.buttons["Daily Brief"]
         brief.tap()
         XCTAssertTrue(app.waitForLayoutPreview(), "The Daily Brief was not drawn")
@@ -62,7 +62,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--hardware=X3"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         app.openScreen("Sleep")
         XCTAssertTrue(app.waitForLayoutPreview())
         let wake = app.switches["profile-sleep-wake"]
@@ -86,7 +86,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         XCTAssertTrue(app.waitForLayoutPreview())
         let canvas = app.descendants(matching: .any)["profile-canvas"]
         let home = canvas.label
@@ -100,7 +100,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(app.buttons["glance-events"].exists)
         attach(app, "qa-home-shared-content")
         app.buttons["content-editor-close"].tap()
-        XCTAssertTrue(app.segmentedControls["profile-screen"].buttons["Home"].isSelected)
+        XCTAssertTrue(app.buttons["reader-setting-scope"].value as? String == "Home screen")
         XCTAssertEqual(canvas.label, home)
         app.openScreen("Sleep")
         XCTAssertTrue(app.waitForLayoutPreview())
@@ -110,7 +110,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["weather-data-sources"].exists)
         XCTAssertEqual(app.buttons.matching(identifier: "content-editor-apply").count, 1)
         app.buttons["content-editor-close"].tap()
-        XCTAssertTrue(app.segmentedControls["profile-screen"].buttons["Sleep"].isSelected)
+        XCTAssertTrue(app.buttons["reader-setting-scope"].value as? String == "Sleep screen")
         XCTAssertEqual(canvas.label, sleep)
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
     }
@@ -119,7 +119,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-empty-discovery"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         app.openScreen("Sleep")
         let canvas = app.descendants(matching: .any)["profile-canvas"]
         let sleep = canvas.label
@@ -141,16 +141,16 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Weather & calendar"].waitForExistence(timeout: 5))
         XCTAssertEqual(city.value as? String, query, "Connect and Back must preserve the unsubmitted city query")
         app.buttons["content-editor-close"].tap()
-        XCTAssertTrue(app.segmentedControls["profile-screen"].buttons["Sleep"].isSelected)
+        XCTAssertTrue(app.buttons["reader-setting-scope"].value as? String == "Sleep screen")
         XCTAssertEqual(canvas.label, sleep)
-        app.open("Reading")
+        app.openScreen("Reading")
         XCTAssertFalse(app.descendants(matching: .any)["content-editor-sheet"].exists, "A consumed source request must not reopen on Reading")
     }
 
     func testReadingSettingsAreEditableOfflineAndDiscardIsExplicit() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         app.openScreen("Reading")
         if app.buttons["profile-revert"].isEnabled {
             app.buttons["profile-revert"].tap()
@@ -234,41 +234,61 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(springboard.alerts.firstMatch.exists, "Preparing must not request network access")
     }
 
-    func testReaderOverviewExposesFourDestinationsOffline() {
+    func testReaderWorkspaceKeepsInventoryAndSettingsAvailableOffline() {
         let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fresh-library"]
         app.launch()
         app.open("My Reader")
-        for destination in ["On Reader", "Screens", "Reading", "Device"] {
-            if app.isCompact { XCTAssertTrue(app.buttons["reader-destination-\(destination)"].waitForExistence(timeout: 5)) }
-            else {
-                XCTAssertTrue(app.buttons["navigation-\(destination)"].exists)
-                XCTAssertFalse(app.buttons["reader-destination-\(destination)"].exists, "Overview must not repeat its sidebar")
-            }
+        XCTAssertTrue(app.buttons["reader-settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["reader-management-menu"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["reader-inventory"].exists)
+        for removed in ["Overview", "On Reader", "Screens", "Reading", "Device"] {
+            XCTAssertFalse(app.buttons["navigation-\(removed)"].exists)
+            XCTAssertFalse(app.buttons["reader-destination-\(removed)"].exists)
         }
-        attach(app, "qa-reader-overview-offline")
-        app.open("Reading")
-        XCTAssertFalse(app.buttons["Screen design"].exists)
-        XCTAssertFalse(app.buttons["device-pages"].exists)
+        attach(app, "qa-reader-workspace-offline")
+        app.openScreen("Reading")
+        XCTAssertEqual(app.buttons["reader-setting-scope"].value as? String, "Reading preferences")
+        XCTAssertTrue(app.buttons["profile-connect"].exists)
+        app.open("Manage reader")
+        XCTAssertTrue(app.buttons["Find on same Wi-Fi"].waitForExistence(timeout: 5))
+        app.open("My Reader")
+        XCTAssertTrue(app.buttons["reader-settings"].waitForExistence(timeout: 5))
     }
 
     func testScreensAndReadingNavigationPreservesDistinctScopes() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--hardware=X3"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         XCTAssertTrue(app.waitForLayoutPreview())
         let weather = app.switches["profile-home-weather"]
         app.revealInStudio(weather)
         weather.tap()
         XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
-        app.open("Reading")
+        app.openScreen("Reading")
         XCTAssertTrue(app.staticTexts["Reading preview · approximate appearance"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.segmentedControls["profile-screen"].exists)
+        XCTAssertTrue(app.buttons["reader-setting-scope"].exists)
         XCTAssertFalse(app.buttons["profile-revert"].isEnabled, "Home changes must not appear as Reading changes")
-        app.open("Screens")
+        app.open("Library")
+        app.open("Reader settings")
+        XCTAssertEqual(app.buttons["reader-setting-scope"].value as? String, "Reading preferences",
+                       "Returning to reader settings must retain the editing scope")
+        app.open("My Reader")
+        app.buttons["reader-resume-edits"].tap()
+        XCTAssertEqual(app.buttons["reader-setting-scope"].value as? String, "Home screen",
+                       "Continue editing should find the scope with pending changes")
         XCTAssertTrue(app.waitForLayoutPreview())
-        XCTAssertTrue(app.segmentedControls["profile-screen"].exists)
+        XCTAssertTrue(app.buttons["reader-setting-scope"].exists)
         XCTAssertTrue(app.buttons["profile-revert"].isEnabled, "The same editor keeps Home changes across destination navigation")
+        app.openScreen("Sleep")
+        let wake = app.switches["profile-sleep-wake"]
+        app.revealInStudio(wake)
+        wake.tap()
+        app.open("My Reader")
+        app.buttons["reader-resume-edits"].tap()
+        XCTAssertEqual(app.buttons["reader-setting-scope"].value as? String, "Sleep screen",
+                       "Continue editing should prefer the last edited scope when several have changes")
         attach(app, "qa-editor-destination-scopes")
     }
 
@@ -277,7 +297,7 @@ final class PocketFlowTests: XCTestCase {
             let app = XCUIApplication()
             app.launchArguments = ["--demo", "--hardware=\(hardware)"]
             app.launch()
-            app.open("Reading")
+            app.openScreen("Reading")
             let canvas = app.descendants(matching: .any)["profile-canvas"]
             XCTAssertTrue(canvas.waitForExistence(timeout: 15))
             let diagram = app.descendants(matching: .any)["reader-button-diagram"]
@@ -315,7 +335,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         XCTAssertTrue(app.waitForLayoutPreview())
         let parent = app.descendants(matching: .any)["profile-canvas"]
         let label = parent.label
@@ -336,9 +356,9 @@ final class PocketFlowTests: XCTestCase {
         app.revealCanvas()
         attach(app, "qa-dedicated-card-editor")
         app.buttons["content-editor-close"].tap()
-        XCTAssertTrue(app.segmentedControls["profile-screen"].buttons["Home"].isSelected)
+        XCTAssertTrue(app.buttons["reader-setting-scope"].value as? String == "Home screen")
         XCTAssertEqual(parent.label, label, "Card edits must not turn the parent into Card page")
-        app.open("Reading")
+        app.openScreen("Reading")
         XCTAssertFalse(app.descendants(matching: .any)["content-editor-sheet"].exists)
     }
 
@@ -346,7 +366,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
         app.openCards()
         let menu = app.buttons["cards-image-menu"]
@@ -383,7 +403,7 @@ final class PocketFlowTests: XCTestCase {
         // Give a prompt time to appear if one were going to.
         XCTAssertFalse(springboard.alerts.firstMatch.waitForExistence(timeout: 3),
                        "A permission prompt appeared at launch: \(springboard.alerts.firstMatch.label)")
-        app.open("Device")
+        app.open("Manage reader")
         XCTAssertTrue(app.buttons["Find on same Wi-Fi"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Try demo"].exists)
     }
@@ -431,7 +451,7 @@ final class PocketFlowTests: XCTestCase {
         attach(app, "qa-settings-guide")
         app.buttons["Done"].tap()
         // Pairing sits on Device, with the other ways of reaching the reader.
-        app.open("Device")
+        app.open("Manage reader")
         XCTAssertTrue(app.buttons["sync-bluetooth-setup"].waitForExistence(timeout: 5))
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
         attach(app, "ble-reading-sync-setup")
@@ -442,7 +462,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.switches["sync-reader-exchange"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["sync-bluetooth-hint"].exists)
         app.buttons["Done"].tap()
-        app.open("Device")
+        app.open("Manage reader")
         XCTAssertTrue(app.buttons["try-demo"].exists || app.buttons["Exit demo"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["sync-bluetooth-setup"].exists)
         XCTAssertFalse(springboard.alerts.firstMatch.exists)
@@ -452,12 +472,12 @@ final class PocketFlowTests: XCTestCase {
     func testDirectConnectionRequiresConfirmationAndOfflinePreparationIsAvailable() {
         let app = XCUIApplication()
         app.launch()
-        app.open("On Reader")
+        app.open("My Reader")
         app.openReaderOnlyFiles()
         let add = app.buttons["reader-only-files-add"]
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         XCTAssertTrue(add.isEnabled, "Files can be prepared before a reader is connected")
-        app.open("Device")
+        app.open("Manage reader")
         XCTAssertTrue(app.staticTexts["On the reader: Pocket Daily → Sync → Same Wi-Fi."].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Connect directly"].exists)
         app.openOtherConnectionMethods()
@@ -476,7 +496,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("On Reader")
+        app.open("My Reader")
         XCTAssertTrue(app.buttons["inventory-choose-library"].exists)
         XCTAssertFalse(app.buttons["Write text to read…"].exists)
         XCTAssertFalse(app.buttons["prepare-symbol-font"].exists)
@@ -664,14 +684,14 @@ final class PocketFlowTests: XCTestCase {
     func testDemoModeIsPopulatedButCannotTransfer() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Device")
+        app.open("Manage reader")
         let tryDemo = app.buttons["Try demo"]
         XCTAssertTrue(tryDemo.waitForExistence(timeout: 10))
         tryDemo.tap()
 
         XCTAssertTrue(app.staticTexts["Demo · nothing is sent"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Exit demo"].exists)
-        app.open("On Reader")
+        app.open("My Reader")
         XCTAssertTrue(app.staticTexts["Example files · a connected reader lists its own"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "inventory-demo").count, 3)
         XCTAssertFalse(app.buttons["inventory-connect"].exists)
@@ -680,7 +700,7 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["reader-only-files-add"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["reader-only-files-add"].isEnabled, "Nothing may reach a device")
         // Reader settings are populated in Home & Sleep so they are reviewable...
-        app.open("Screens")
+        app.openScreen("Home")
         XCTAssertTrue(app.waitForLayoutPreview())
         if app.isCompact {
             let canvas = app.buttons["profile-canvas"]
@@ -699,7 +719,7 @@ final class PocketFlowTests: XCTestCase {
         // ...but Apply stays off.
         XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
 
-        app.open("Device")
+        app.open("Manage reader")
         let exit = app.buttons["Exit demo"]
         app.revealInReader(exit, upward: true)
         exit.tap()
@@ -713,7 +733,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-empty-discovery"]
         app.launch()
-        app.open("Device")
+        app.open("Manage reader")
         let find = app.buttons["Find on same Wi-Fi"]
         XCTAssertTrue(find.waitForExistence(timeout: 10))
 
@@ -733,7 +753,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-test-slow-discovery"]
         app.launch()
-        app.open("Device")
+        app.open("Manage reader")
         let find = app.buttons["Find on same Wi-Fi"]
         find.tap()
         let cancel = app.buttons["cancel-reader-connection"]
@@ -768,7 +788,7 @@ final class PocketFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.open("Screens")
+        app.openScreen("Home")
         let canvas = app.descendants(matching: .any)["profile-canvas"]
         XCTAssertTrue(canvas.waitForExistence(timeout: 10))
         let before = canvas.frame
@@ -787,7 +807,7 @@ final class PocketFlowTests: XCTestCase {
     func testAboutSheetStatesTheIndependenceAndPrivacyPosition() {
         let app = XCUIApplication()
         app.launch()
-        app.open("Device")
+        app.open("Manage reader")
         let about = app.buttons["about-privacy"]
         app.revealInReader(about)
         XCTAssertTrue(about.waitForExistence(timeout: 5))

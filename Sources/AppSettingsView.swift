@@ -53,7 +53,7 @@ private struct AppSettingsForm: View {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Each device needs the same book file. Share it from the Library.")
                         Text("Reading positions are shared when you connect. While the app is open, they also update as you open or close a book or return to the app with a previously connected reader in Same Wi-Fi mode.")
-                        Text("Auto-reconnect checks your reader’s last address when it opens Sync → Same Wi-Fi. Your Wi-Fi never changes. For direct connection or Bluetooth pairing, open My Reader → Device.")
+                        Text("Auto-reconnect checks your reader’s last address when it opens Sync → Same Wi-Fi. Your Wi-Fi never changes. For direct connection or Bluetooth pairing, open My Reader → Reader options → Manage reader.")
                             .accessibilityIdentifier("sync-bluetooth-hint")
                         Text("Only a book fingerprint and your reading position are shared through your own iCloud or a local Wi-Fi or Bluetooth connection. No Pocket Daily account is needed.")
                         Text("Book page colors are chosen separately in Text & Page.")

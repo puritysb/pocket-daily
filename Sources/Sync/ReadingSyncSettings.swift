@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Where your place in a book is kept in step, without a Pocket Daily
 /// account or any server to set up. A section of Settings; pairing the reader
-/// over Bluetooth lives with the other reader connections in My Reader → Device.
+/// over Bluetooth lives with the other reader connections in My Reader → Reader options → Manage reader.
 struct ReadingSyncSettingsSection: View {
     @ObservedObject var sync: ReadingSync
     @ObservedObject var model: PocketModel
@@ -62,7 +62,7 @@ struct ReadingSyncSettingsSection: View {
 }
 
 /// Pairs the reader once so it can exchange reading places over Bluetooth
-/// when it closes a book, wakes or goes to sleep. It sits in My Reader → Device with the
+/// when it closes a book, wakes or goes to sleep. It sits in My Reader → Reader options → Manage reader with the
 /// other ways of reaching the reader.
 struct ReaderBluetoothPairingCard: View {
     @ObservedObject var sync: ReadingSync

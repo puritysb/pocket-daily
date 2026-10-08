@@ -32,6 +32,56 @@ final class PocketScreenshotTests: XCTestCase {
         XCTAssertTrue(app.buttons["library-import"].waitForExistence(timeout: 5))
     }
 
+    func testCaptureAccessibleReaderWorkspace() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--ui-test-fresh-library",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        app.open("My Reader")
+        let settings = app.buttons["reader-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        app.revealInReader(settings)
+        XCTAssertTrue(settings.isHittable)
+        let overview = XCTAttachment(screenshot: app.screenshot())
+        overview.name = "qa-accessibility-reader-workspace"
+        overview.lifetime = .keepAlways
+        add(overview)
+        let addBooks = app.buttons["inventory-choose-library"]
+        app.revealInReader(addBooks)
+        XCTAssertTrue(addBooks.isHittable)
+        let inventory = XCTAttachment(screenshot: app.screenshot())
+        inventory.name = "qa-accessibility-reader-inventory"
+        inventory.lifetime = .keepAlways
+        add(inventory)
+        app.revealInReader(settings, upward: true)
+        settings.tap()
+        app.openScreen("Reading")
+        XCTAssertEqual(app.buttons["reader-setting-scope"].value as? String, "Reading preferences")
+        XCTAssertTrue(app.buttons["reader-setting-scope"].isHittable)
+        let editor = XCTAttachment(screenshot: app.screenshot())
+        editor.name = "qa-accessibility-reader-settings"
+        editor.lifetime = .keepAlways
+        add(editor)
+        let preview = app.buttons["profile-preview-open"]
+        app.revealInReader(preview)
+        preview.tap()
+        XCTAssertTrue(app.buttons["profile-canvas-done"].waitForExistence(timeout: 5))
+        app.buttons["profile-canvas-done"].tap()
+        app.chooseMenu("profile-text-size", option: "Large")
+        app.chooseMenu("profile-orientation", option: "Landscape")
+        let discard = app.buttons["profile-revert"]
+        app.revealInReader(discard, attempts: 20)
+        XCTAssertTrue(discard.isHittable)
+        XCTAssertTrue(discard.isEnabled, "Large-text users must be able to edit and discard preferences")
+        XCTAssertFalse(app.buttons["profile-apply"].isEnabled, "Demo cannot apply to a reader")
+        let actions = XCTAttachment(screenshot: app.screenshot())
+        actions.name = "qa-accessibility-reader-actions"
+        actions.lifetime = .keepAlways
+        add(actions)
+        discard.tap()
+        app.alerts.buttons["Discard edits"].tap()
+    }
+
     func testCaptureDemoScreens() throws {
         let app = launch(hardware: "X3")
         app.openShelf("Books")
@@ -53,7 +103,7 @@ final class PocketScreenshotTests: XCTestCase {
         XCTAssertTrue(app.buttons["continue-reading"].waitForExistence(timeout: 10))
         try save(name: "02-library")
 
-        app.open("Screens")
+        app.openScreen("Home")
         XCTAssertTrue(app.waitForLayoutPreview(), "The Home preview never rendered")
         try save(name: "03-home-x3")
 
@@ -65,16 +115,16 @@ final class PocketScreenshotTests: XCTestCase {
         app.buttons["content-editor-close"].tap()
 
         if app.isCompact {
-            app.open("Device")
+            app.open("Manage reader")
             XCTAssertTrue(app.buttons["Exit demo"].waitForExistence(timeout: 5))
             try save(name: "05-device")
         } else {
             app.terminate()
             let x4 = launch(hardware: "X4")
-            x4.open("Screens")
+            x4.openScreen("Home")
             XCTAssertTrue(x4.waitForLayoutPreview(), "The X4 Home preview never rendered")
             try save(name: "05-home-x4")
-            x4.open("Device")
+            x4.open("Manage reader")
             try save(name: "07-device")
         }
     }

@@ -28,19 +28,18 @@ iPhone, or ⌘, on Mac) holds Appearance and **Continue Reading**: iCloud
 key-value storage between the user's own Apple devices (on by default, no
 setup) and exchange with a connected X3/X4 reader over the local connection.
 Neither needs a Pocket Daily account. Pairing a reader for Bluetooth reading sync is in
-**My Reader → Device** and is hidden in demo mode. Settings opens in the current
+**My Reader → Reader options (•••) → Manage reader** and is hidden in demo mode. Settings opens in the current
 app window, including on Mac.
 
 The companion has an explicit, local demo mode for review without a reader:
-open **My Reader → Device** and choose **Try demo**. My Reader has an overview
-and four destinations: **On Reader**, **Screens**, **Reading**, and **Device**.
-In demo, **On Reader** lists example files labelled as examples. **Screens** then
+open **My Reader → Reader options (•••) → Manage reader** and choose **Try demo**. My Reader combines device status, saved work and its book inventory on one screen.
+In demo, the inventory lists example files labelled as examples. **Reader settings**
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
-from a device. Switch between the Home and Sleep screens above the preview;
-My cards and Weather & calendar open dedicated source editors from Screens,
+from a device. Choose Home screen, Sleep screen or Reading preferences above the preview;
+My cards and Weather & calendar open dedicated source editors from Home/Sleep settings,
 each with one apply action; closing returns to the same Home/Sleep layout.
-My cards makes QR codes locally. **Reading** shows an
+My cards makes QR codes locally. **Reading preferences** shows an
 illustrative book and model-specific page-button actions. Demo
 settings are populated, but Apply, file transfer and applying settings are
 disabled so review data can never be mistaken for a connected device. Cards a
@@ -65,7 +64,7 @@ Live hardware actions require a compatible reader:
    Direct sessions defer
    preview/crash requests to preserve reader memory. Pending files survive an
    interruption; resume depends on firmware capability and retained session state.
-   An uncertain save is checked before resending. **On Reader** shows the device
+   An uncertain save is checked before resending. The My Reader inventory shows the device
    inventory separately from prepared transfers and their progress. On Mac,
    the same selected-book task also offers an SD card destination: choose the
    destination folder and explicitly copy. This copies the original book bytes

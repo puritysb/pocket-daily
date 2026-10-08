@@ -54,14 +54,18 @@ This is a same-version, shared-actor conflict guard, not a cross-process lock or
 protection against an older app which ignores the additional field. Backup
 comparison/import and persistent backup browsing are not yet implemented.
 
-## Screens and Reading (all platforms, 2026-10-05)
+## Reader settings (all platforms, 2026-10-09)
 
-The shell selects Screens or Reading through `ProfileStudioView.Destination`.
-Screens has one Home/Sleep segment; Reading has no workspace selector. Shared
+The shell opens one Reader settings detail. Its local scope menu selects Home
+screen, Sleep screen or Reading preferences; the selection survives leaving
+and reopening the detail in the same window. Shared
 preview/control/Apply placement works in the current Mac window and on iPhone
 and iPad. Home, Sleep and Reading each stage only their own fields onto the last
 loaded baseline. **Apply to Reader** identifies its scope in the status area.
 Discard confirms and restores only that scope; other drafts remain pending.
+At accessibility text sizes the entire settings surface scrolls, including
+Apply, and **Show preview** opens the full-size canvas. This keeps controls
+reachable instead of reserving most of a small screen for fixed chrome.
 
 Home controls page visibility/order, Daily panel placement, next event and
 startup. Sleep controls the chosen sleep surface, sections, cover, timeout and
@@ -72,7 +76,7 @@ illustrative article, not exact device EPUB font/pagination or a live screen.
 Home/Sleep previews use the pinned host renderer with sample book/weather/events
 and the local card draft; device panel parity remains unverified.
 
-Screens links to dedicated **My cards** and **Weather & calendar** editors.
+Home/Sleep settings link to dedicated **My cards** and **Weather & calendar** editors.
 Home and Sleep contain inclusion/layout controls and short source summaries,
 not inline source forms or additional Apply buttons. Each source editor owns
 its title, current values or preview, Home/Sleep impact and one Apply action.
@@ -180,7 +184,7 @@ a first target), edits are merged field by field
 (`ProfileMerge`) against that saved base: a field the user did not touch takes
 the reader's value; a field the reader did not change keeps the edit; a field
 changed on both keeps the edit, which Apply then writes over the reader's. The
-Screens apply bar shows a "Merged with the reader's settings" notice listing
+Reader settings apply bar shows a "Merged with the reader's settings" notice listing
 what came from the reader and what changed in both places, with "Use the
 reader's for these", and otherwise names what Apply will change. The six
 profile fields are Home pages, Daily word, Daily panel, Next event, Sleep

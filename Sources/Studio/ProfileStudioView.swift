@@ -218,11 +218,13 @@ final class ProfileEditorState: ObservableObject {
 /// Home, Sleep and Reading each apply or discard only their own settings.
 /// Card content autosaves locally and has an explicit, separate Apply cards action.
 struct ProfileStudioView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var model: PocketModel
     @ObservedObject var editor: ProfileEditorState
     @ObservedObject private var glanceSettings: GlanceSettings
     var contentPadding: CGFloat = 0
     let onConnect: () -> Void
+    private let previewSelection: Binding<PreviewSurface>?
     let connectionContent: (() -> AnyView)?
     let cancelConnection: () -> Void
     let sourceTaskRequest: SourceTaskRequest?
@@ -254,7 +256,6 @@ struct ProfileStudioView: View {
     enum PreviewSurface: String, CaseIterable { case home = "Home", reading = "Reading", card = "Card", sleep = "Sleep" }
     /// The screens the editor is organized around.
     typealias Screen = ProfileEditorState.Scope
-    enum Destination: String, Hashable { case screens, reading }
     enum SourceEditor: Equatable, Sendable { case cards, weatherCalendar }
     struct ScreenTaskRequest: Equatable, Sendable {
         let id: UUID
@@ -267,7 +268,7 @@ struct ProfileStudioView: View {
     @State private var appliedScope: Screen?
 
     init(model: PocketModel, editor: ProfileEditorState, contentPadding: CGFloat = 0,
-         initialPreview: PreviewSurface = .home, destination: Destination? = nil,
+         initialPreview: PreviewSurface = .home, previewSelection: Binding<PreviewSurface>? = nil,
          sourceTaskRequest: SourceTaskRequest? = nil, onSourceTaskOpened: @escaping () -> Void = {},
          screenTaskRequest: ScreenTaskRequest? = nil, onScreenTaskOpened: @escaping () -> Void = {},
          connectionContent: (() -> AnyView)? = nil, cancelConnection: @escaping () -> Void = {},
@@ -277,25 +278,49 @@ struct ProfileStudioView: View {
         self.glanceSettings = model.glanceSettings
         self.contentPadding = contentPadding
         self.onConnect = onConnect
+        self.previewSelection = previewSelection
         self.connectionContent = connectionContent
         self.cancelConnection = cancelConnection
         self.sourceTaskRequest = sourceTaskRequest
         self.onSourceTaskOpened = onSourceTaskOpened
         self.screenTaskRequest = screenTaskRequest
         self.onScreenTaskOpened = onScreenTaskOpened
-        let surface = destination == .reading ? PreviewSurface.reading : initialPreview == .card || (destination == .screens && initialPreview == .reading) ? .home : initialPreview
+        let surface = initialPreview == .card ? PreviewSurface.home : initialPreview
         _preview = State(initialValue: surface)
         _activeContentEditor = State(initialValue: sourceTaskRequest.map {
             $0.destination == .cards ? .cards : .glance
         } ?? (initialPreview == .card ? .cards : nil))
     }
 
-    var body: some View {
+    @ViewBuilder private var studioLayout: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // Large text needs the whole height for controls. A dedicated
+            // preview action keeps the full-size canvas available on demand.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    settingPicker
+                    Button("Show preview", systemImage: "rectangle.portrait") { enlargedPreview = true }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("profile-preview-open")
+                    controls
+                    applyBar
+                }
+                .padding(contentPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .accessibilityIdentifier("profile-controls")
+        } else {
+            standardStudioLayout
+        }
+    }
+
+    private var standardStudioLayout: some View {
         GeometryReader { geometry in
             let sideBySide = geometry.size.width >= 680
             let condensed = !sideBySide && geometry.size.height < 430
             VStack(spacing: 12) {
-
+                settingPicker
                 if sideBySide { applyBar }
                 if sideBySide {
                     HStack(alignment: .top, spacing: 28) {
@@ -312,6 +337,14 @@ struct ProfileStudioView: View {
                 }
             }
             .padding(contentPadding)
+        }
+    }
+
+    var body: some View {
+        studioLayout
+        .onChange(of: preview) { _, value in previewSelection?.wrappedValue = value }
+        .onChange(of: previewSelection?.wrappedValue) { _, value in
+            if let value { preview = value == .card ? .home : value }
         }
         .sheet(isPresented: $enlargedPreview) { enlargedCanvas }
         .sheet(item: $activeContentEditor) { task in
@@ -445,17 +478,45 @@ struct ProfileStudioView: View {
         return showsRender ? layout.image : schematic
     }
 
+    /// A local setting scope, not another app destination. Menus fit long
+    /// labels and Dynamic Type without squeezing three segmented titles.
+    private var settingPicker: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                scopeMenu
+                Spacer(minLength: 8)
+                ReaderChip(model: model)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                scopeMenu
+                ReaderChip(model: model)
+            }
+        }
+    }
+
+    private var scopeMenu: some View {
+        Menu {
+            Button("Home screen") { preview = .home }
+            Button("Sleep screen") { preview = .sleep }
+            Button("Reading preferences") { preview = .reading }
+        } label: {
+            HStack(spacing: 8) {
+                Text(screen == .reading ? "Reading preferences" : screen.rawValue + " screen")
+                    .font(.headline)
+                    .multilineTextAlignment(.leading)
+                PocketSymbol("chevron.down", role: .accessory)
+            }
+            .frame(minHeight: PocketDesign.actionTarget)
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityIdentifier("reader-setting-scope")
+        .accessibilityLabel("Reader setting")
+        .accessibilityValue(screen == .reading ? "Reading preferences" : screen.rawValue + " screen")
+    }
+
     private func canvas(height: CGFloat, condensed: Bool = false, enlargeable: Bool = false) -> some View {
         VStack(spacing: 10) {
-            if !showsReadingSample && !condensed {
-                Picker("Screen", selection: Binding(get: { screen }, set: { preview = $0 == .home ? .home : .sleep })) {
-                    Text("Home").tag(Screen.home)
-                    Text("Sleep").tag(Screen.sleep)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .accessibilityIdentifier("profile-screen")
-            }
             Group {
                 if showsReadingSample, let image = canvasImage {
                     Image(decorative: image, scale: 1)
@@ -596,7 +657,7 @@ struct ProfileStudioView: View {
         default: break
         }
         if !model.canEditReaderProfile && scopedProfile != editor.base {
-            return ("Home & Sleep changes need compatible firmware. Open My Reader → Device.", "exclamationmark.triangle", .orange)
+            return ("Home & Sleep changes need compatible firmware. Open My Reader → Reader options → Manage reader.", "exclamationmark.triangle", .orange)
         }
         if anythingDirty { return ("\(screen.rawValue) · unapplied changes", "circle.dashed", .orange) }
         if appliedScope == screen, preview == .reading, case .saved = model.profileSend {
@@ -639,22 +700,30 @@ struct ProfileStudioView: View {
     /// One line when it fits; otherwise the status above the buttons.
     private var applyBar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    statusLabel.lineLimit(1)
-                    Spacer(minLength: 8)
-                    applyControls
+            if dynamicTypeSize.isAccessibilitySize {
+                statusLabel.fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 12) {
+                    applyControls.fixedSize(horizontal: false, vertical: true)
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    statusLabel
+            } else {
+                ViewThatFits(in: .horizontal) {
                     HStack(spacing: 12) {
-                        Spacer()
+                        statusLabel.lineLimit(1)
+                        Spacer(minLength: 8)
                         applyControls
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        statusLabel
+                        HStack(spacing: 12) {
+                            Spacer()
+                            applyControls
+                        }
                     }
                 }
             }
-            Text(screen == .reading ? "Reading settings" : screen.rawValue + " layout")
+            Text(screen == .reading ? "Reading preferences on your reader" : screen.rawValue + " layout")
                 .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if editor.targetMismatch, !model.isDemoMode {
                 Button("Use a copy with this reader…") { confirmingTarget = true }
                     .accessibilityIdentifier("profile-use-current-reader")
@@ -782,7 +851,7 @@ struct ProfileStudioView: View {
     /// Pages and the shared daily panel follow their order on the reader.
     /// The firmware places weather and the next event in that single panel.
     @ViewBuilder private var homeControls: some View {
-        ControlGroup(title: "Home screen", note: "Top to bottom · drag to arrange") {
+        ControlGroup(title: "Layout", note: "Top to bottom · drag to arrange") {
             VStack(spacing: 0) {
                 ForEach(homeBlocks, id: \.self) { block in
                     switch block {
@@ -969,7 +1038,7 @@ struct ProfileStudioView: View {
     }
 
     @ViewBuilder private var sleepControls: some View {
-        ControlGroup(title: "Sleep screen", note: editor.draft.sleep.mode == .brief ? "Drag to reorder" : nil) {
+        ControlGroup(title: "Display", note: editor.draft.sleep.mode == .brief ? "Drag to reorder" : nil) {
             Picker("Sleep screen", selection: edit(\.sleep.mode, on: .sleep)) {
                 ForEach(PocketProfile.SleepMode.allCases, id: \.self) { Text($0.title).tag($0) }
             }
@@ -1044,16 +1113,13 @@ struct ProfileStudioView: View {
             }
             if editor.reading.orientation != nil {
                 ControlGroup(title: "Orientation") {
-                    Picker("Orientation", selection: Binding(
-                        get: { readingLandscape }, set: { landscape in
-                            editor.reading.orientation = landscape
-                                ? (readingReversed ? .landscapeReversed : .landscape)
-                                : (readingReversed ? .inverted : .portrait)
-                        })) {
-                        Label("Portrait", systemImage: "rectangle.portrait").tag(false)
-                        Label("Landscape", systemImage: "rectangle").tag(true)
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            orientationPicker.pickerStyle(.menu)
+                        } else {
+                            orientationPicker.pickerStyle(.segmented)
+                        }
                     }
-                    .pickerStyle(.segmented)
                     .labelsHidden()
                     .accessibilityIdentifier("profile-orientation")
                     Toggle("Flip 180°", isOn: Binding(
@@ -1121,6 +1187,18 @@ struct ProfileStudioView: View {
                 Text("More reading options require newer reader firmware.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var orientationPicker: some View {
+        Picker("Orientation", selection: Binding(
+            get: { readingLandscape }, set: { landscape in
+                editor.reading.orientation = landscape
+                    ? (readingReversed ? .landscapeReversed : .landscape)
+                    : (readingReversed ? .inverted : .portrait)
+            })) {
+            Label("Portrait", systemImage: "rectangle.portrait").tag(false)
+            Label("Landscape", systemImage: "rectangle").tag(true)
         }
     }
 

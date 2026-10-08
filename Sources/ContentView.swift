@@ -2,21 +2,17 @@ import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The two primary destinations and the task destinations within My Reader.
-/// Capability detection stays independent of this navigation structure.
+/// Library and My Reader are peers. Settings and management are reader details,
+/// not separate app destinations. Task ownership uses the same detail routes.
 enum StudioSection: String, CaseIterable, Hashable {
-    case library = "Library", reader = "My Reader", files = "On Reader"
-    case layout = "Screens", reading = "Reading", device = "Device"
-
-    static let readerDestinations: [StudioSection] = [.files, .layout, .reading, .device]
+    case library = "Library", reader = "My Reader"
+    case customize = "Reader settings", device = "Manage reader"
 
     var symbol: String {
         switch self {
         case .library: "books.vertical"
         case .reader: "rectangle.portrait.inset.filled"
-        case .files: "folder"
-        case .layout: "rectangle.3.group"
-        case .reading: "text.book.closed"
+        case .customize: "slider.horizontal.3"
         case .device: "antenna.radiowaves.left.and.right"
         }
     }
@@ -81,7 +77,7 @@ struct ContentView: View {
     @State private var draftRevision = 0
     @State private var draftGeneration = 0
 
-    private let initialPreview: ProfileStudioView.PreviewSurface
+    @State private var readerSetting: ProfileStudioView.PreviewSurface
 
     /// The store screenshots open a given tab and preview surface.
     @MainActor
@@ -91,7 +87,7 @@ struct ContentView: View {
         _shelf = State(initialValue: initialShelf)
         _section = State(initialValue: initialSection)
         _reading = State(initialValue: initialBookID.map { ReadingTarget(id: $0) })
-        self.initialPreview = initialPreview
+        _readerSetting = State(initialValue: initialPreview)
     }
 
     var body: some View {
@@ -131,7 +127,7 @@ struct ContentView: View {
                                   }
                               },
                               cancelConnection: { nearby.disconnect(); model.cancelConnectionAttempt() },
-                              onInventory: { transferTask = nil; section = .files },
+                              onInventory: { transferTask = nil; section = .reader },
                               onDevice: { transferTask = nil; section = .device },
                               onCurrentTask: openCurrentReaderTask)
         }
@@ -246,11 +242,11 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         ConnectionInspector(model: model, nearby: nearby, onConnect: connect,
-                                            offersDemo: section != .layout && section != .reading)
+                                            offersDemo: section != .customize)
                         if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                     }
                 }
-                Text(section == .layout || section == .reading ? "Your edits stay here. Apply them when you are ready." : "Your files stay ready. Choose Send after connecting.")
+                Text(section == .customize ? "Your edits stay here. Apply them when you are ready." : "Your files stay ready. Choose Send after connecting.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .padding(24)
@@ -454,9 +450,14 @@ struct ContentView: View {
         }
         transferTask = nil
         switch task {
-        case .cards: contentTaskRequest = .init(id: UUID(), destination: .cards)
-        case .weatherCalendar: contentTaskRequest = .init(id: UUID(), destination: .weatherCalendar)
+        case .cards:
+            if readerSetting == .reading { readerSetting = .home }
+            contentTaskRequest = .init(id: UUID(), destination: .cards)
+        case .weatherCalendar:
+            if readerSetting == .reading { readerSetting = .home }
+            contentTaskRequest = .init(id: UUID(), destination: .weatherCalendar)
         case .diagnostics: deviceDetailsExpanded = true
+        case .reading: readerSetting = .reading
         case .screens:
             screenTaskRequest = .init(id: UUID(), screen: model.activeScreenTarget ?? .home)
         default: break
@@ -519,18 +520,8 @@ struct ContentView: View {
                             }.frame(height: min(CGFloat(inbox.feeds.count) * 64, 240))
                         }
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("My Reader")
-                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            .padding(.horizontal, 12).padding(.bottom, 4)
-                        sidebarRow("Overview", symbol: StudioSection.reader.symbol, selected: section == .reader,
-                                   detail: model.device) { section = .reader }
-                        ForEach(StudioSection.readerDestinations, id: \.self) { destination in
-                            sidebarRow(destination.rawValue, symbol: destination.symbol, selected: section == destination) {
-                                section = destination
-                            }
-                        }
-                    }
+                    sidebarRow("My Reader", symbol: StudioSection.reader.symbol,
+                               selected: section != .library, detail: model.device) { section = .reader }
                 }
             }
             .scrollIndicators(.hidden)
@@ -588,13 +579,17 @@ struct ContentView: View {
     private var desktopStudio: some View {
         VStack(spacing: 0) {
             HStack {
+                if section != .reader {
+                    Button { section = .reader } label: { PocketActionGlyph(name: "chevron.left") }
+                        .buttonStyle(.plain).accessibilityLabel("Back to My Reader")
+                        .accessibilityIdentifier("reader-back")
+                }
                 Text(section.rawValue).font(PocketDesign.pageTitle)
                 Spacer()
-                if section == .layout || section == .reading { ReaderChip(model: model) }
             }
             .padding(.horizontal, PocketDesign.pageInset).padding(.vertical, 12)
             Divider()
-            readerDestination(section, padding: PocketDesign.pageInset, showsReaderDestinations: false)
+            readerDestination(section, padding: PocketDesign.pageInset)
         }
         .background(PocketPalette.stage)
     }
@@ -631,12 +626,6 @@ struct ContentView: View {
                         .navigationBarTitleDisplayMode(.inline)
 #endif
                 }
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(action: showSettings) { PocketActionGlyph(name: "gearshape") }
-                            .accessibilityLabel("Settings").accessibilityIdentifier("reader-app-settings")
-                    }
-                }
         }
     }
 
@@ -650,14 +639,13 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder private func readerDestination(_ destination: StudioSection, padding: CGFloat, showsReaderDestinations: Bool = true) -> some View {
-        if destination == .layout || destination == .reading {
+    @ViewBuilder private func readerDestination(_ destination: StudioSection, padding: CGFloat) -> some View {
+        if destination == .customize {
             ProfileStudioView(model: model, editor: profileEditor, contentPadding: padding,
-                              initialPreview: initialPreview,
-                              destination: destination == .reading ? .reading : .screens,
-                              sourceTaskRequest: destination == .layout ? contentTaskRequest : nil,
+                              initialPreview: readerSetting, previewSelection: $readerSetting,
+                              sourceTaskRequest: contentTaskRequest,
                               onSourceTaskOpened: { contentTaskRequest = nil },
-                              screenTaskRequest: destination == .layout ? screenTaskRequest : nil,
+                              screenTaskRequest: screenTaskRequest,
                               onScreenTaskOpened: { screenTaskRequest = nil },
                               connectionContent: {
                                   AnyView(VStack(alignment: .leading, spacing: 16) {
@@ -674,8 +662,7 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: PocketDesign.sectionSpacing) {
                     switch destination {
-                    case .reader: readerOverview(showsDestinations: showsReaderDestinations)
-                    case .files: filesContents()
+                    case .reader: readerOverview()
                     default: connectionContents()
                     }
                 }
@@ -689,10 +676,25 @@ struct ContentView: View {
         }
     }
 
-    private func readerOverview(showsDestinations: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
+    /// One reader workspace: identity and actions, retained work, then its books.
+    /// Offline is a normal state; editors and last-observed files stay accessible.
+    private func readerOverview() -> some View {
+        VStack(alignment: .leading, spacing: PocketDesign.sectionSpacing) {
             InspectorCard(title: model.readerStatus?.device ?? readerLink.rememberedReader?.model ?? (model.hasKnownReader ? "Remembered reader" : "Your reader"), symbol: "rectangle.portrait") {
-                DeviceStatusLabel(device: model.device, showsReader: false)
+                HStack(alignment: .top) {
+                    DeviceStatusLabel(device: model.device, showsReader: false)
+                    Spacer()
+                    Menu {
+                        Button("Manage reader…", systemImage: "antenna.radiowaves.left.and.right") { section = .device }
+                            .accessibilityIdentifier("reader-manage")
+                    } label: {
+                        PocketActionGlyph(name: "ellipsis")
+                    }
+                    .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel("Reader options")
+                    .accessibilityIdentifier("reader-management-menu")
+                }
                 if let paired = readerLink.rememberedReader, !model.isDemoMode {
                     Text("Bluetooth · \(paired.model) · \(paired.supportsReadingSync == true ? readerLink.statusText : "Paired · position sharing not confirmed")")
                         .font(.caption).foregroundStyle(.secondary)
@@ -706,107 +708,73 @@ struct ContentView: View {
                     Text("Bluetooth can share reading positions. Connect over Wi-Fi to send files or settings.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if let inventory = model.readerInventory {
-                    Text("Files last checked \(inventory.readAt.formatted(.relative(presentation: .named)))")
+                if !model.isDemoMode && !model.hasKnownReader && !model.device.isConnected {
+                    Text("For X3 and X4 readers running Pocket Daily or compatible CrossPoint-based firmware.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { readerActions }
+                    VStack(alignment: .leading, spacing: 10) { readerActions }
+                }
+                if !model.device.isConnected && !model.isDemoMode {
+                    Text("Edit settings now. Connect when you’re ready to apply them.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if !model.device.isConnected {
-                    if !model.isDemoMode && !model.hasKnownReader {
-                        // A first visit learns what the reader needs before choosing Connect.
-                        Text("For X3 and X4 readers running Pocket Daily or compatible CrossPoint-based firmware. On the reader, open Pocket Daily → Sync → Same Wi-Fi, then connect here.")
+            }
+            if profileEditor.isDirty || profileEditor.readingDirty {
+                InspectorCard(title: model.isDemoMode ? "Preview changes" : profileEditor.localSaveError == nil ? "Saved edits" : "Unsaved edits", symbol: "pencil") {
+                    if let error = profileEditor.localSaveError {
+                        Text("Draft could not be saved: " + error).font(.callout).foregroundStyle(.red)
+                    } else {
+                        Text(model.isDemoMode ? "These changes stay in this demo. Nothing is sent."
+                             : "Your reader settings are saved in this app and have not been applied.")
                             .font(.callout).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) { overviewConnectActions(showsOffline: !showsDestinations) }
-                        VStack(alignment: .leading, spacing: 10) { overviewConnectActions(showsOffline: !showsDestinations) }
-                    }
-                    .padding(.top, 2)
+                    Button("Continue editing") {
+                        resumeReaderEdits()
+                    }.buttonStyle(.bordered).accessibilityIdentifier("reader-resume-edits")
                 }
             }
-            if !showsDestinations {
-                if let inventory = model.readerInventory, !model.isDemoMode {
-                    InspectorCard(title: "On your reader", symbol: "books.vertical") {
-                        Text("\(inventory.files.count) files · checked \(inventory.readAt.formatted(.relative(presentation: .named)))")
-                            .font(.callout).foregroundStyle(.secondary)
-                        Button("View books and storage") { section = .files }.buttonStyle(.bordered)
-                    }
-                }
-                if profileEditor.isDirty || profileEditor.readingDirty {
-                    InspectorCard(title: "Saved edits", symbol: "pencil") {
-                        if profileEditor.isDirty {
-                            Button("Continue screen edits") { section = .layout }.buttonStyle(.bordered)
-                        }
-                        if profileEditor.readingDirty {
-                            Button("Continue reading settings") { section = .reading }.buttonStyle(.bordered)
-                        }
-                    }
-                }
-                if !model.bookTransferJobs.filter({ $0.requiresAttention }).isEmpty {
-                    InspectorCard(title: "Book transfers", symbol: "arrow.up.doc") {
-                        ForEach(model.bookTransferJobs.filter { $0.requiresAttention }) { job in
-                            Button {
-                                transferTask = ReadingTarget(id: job.id)
-                            } label: {
-                                HStack {
-                                    Text(job.items.first?.title ?? "Selected books")
-                                    Spacer()
-                                    Text(job.presentationStatus).foregroundStyle(.secondary)
-                                    Image(systemName: "chevron.right").font(.caption)
-                                }
-                            }.buttonStyle(.plain)
-                        }
-                    }
-                }
-                if let task = auxiliaryTask {
-                    Button(task.title, action: openCurrentReaderTask).buttonStyle(.bordered)
-                }
-            } else {
-                VStack(spacing: 12) {
-                ForEach(StudioSection.readerDestinations, id: \.self) { destination in
-                    Button { section = destination } label: {
-                        HStack(alignment: .top, spacing: 14) {
-                            PocketSymbol(destination.symbol, role: .destination)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(destination.rawValue).font(.headline)
-                                Text(destinationSummary(destination)).font(.subheadline).foregroundStyle(.secondary)
+            if !model.bookTransferJobs.filter({ $0.requiresAttention }).isEmpty {
+                InspectorCard(title: "Book transfers", symbol: "arrow.up.doc") {
+                    ForEach(model.bookTransferJobs.filter { $0.requiresAttention }) { job in
+                        Button {
+                            transferTask = ReadingTarget(id: job.id)
+                        } label: {
+                            HStack {
+                                Text(job.items.first?.title ?? "Selected books")
+                                Spacer()
+                                Text(job.presentationStatus).foregroundStyle(.secondary)
+                                PocketSymbol("chevron.right", role: .accessory)
                             }
-                            Spacer(minLength: 0)
-                            PocketSymbol("chevron.right", role: .accessory).foregroundStyle(.secondary)
-                        }
-                        .padding(PocketDesign.cardInset).frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
-                        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
-                        .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(PocketPalette.line) }
+                        }.buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain).accessibilityIdentifier("reader-destination-\(destination.rawValue)")
-                }
                 }
             }
+            if let task = auxiliaryTask {
+                Button(task.title, action: openCurrentReaderTask).buttonStyle(.bordered)
+            }
+            filesContents()
         }
-        .frame(maxWidth: showsDestinations ? .infinity : 720, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reader-overview")
     }
 
-    /// Connect leads; editing offline sits beside it in the same card, where
-    /// it reads as the alternative rather than a stray button below.
-    @ViewBuilder private func overviewConnectActions(showsOffline: Bool) -> some View {
-        Button(model.isDemoMode ? "Explore connection" : "Connect reader…") { showingConnection = true }
-            .buttonStyle(.borderedProminent).accessibilityIdentifier("overview-connect")
-        if showsOffline && !profileEditor.isDirty && !profileEditor.readingDirty {
-            Button(model.isDemoMode ? "Preview Home screen" : "Edit Home offline") { section = .layout }
-                .buttonStyle(.bordered).accessibilityIdentifier("overview-edit-offline")
-        }
+    private func resumeReaderEdits() {
+        let current: ProfileEditorState.Scope = readerSetting == .reading ? .reading : readerSetting == .sleep ? .sleep : .home
+        let scope = ([current] + [.home, .sleep, .reading]).first { !profileEditor.pending(in: $0).isEmpty } ?? current
+        readerSetting = scope == .reading ? .reading : scope == .sleep ? .sleep : .home
+        section = .customize
     }
 
-    private func destinationSummary(_ destination: StudioSection) -> String {
-        switch destination {
-        case .files: "Books, articles and SD storage"
-        case .layout: "Home, Sleep and shared content"
-        case .reading: "Page appearance, rotation and buttons"
-        case .device: "Connection, position sync and firmware"
-        default: ""
+    @ViewBuilder private var readerActions: some View {
+        if !model.device.isConnected {
+            Button(model.isDemoMode ? "Explore connection" : "Connect reader…") { showingConnection = true }
+                .buttonStyle(.borderedProminent).accessibilityIdentifier("overview-connect")
         }
+        Button("Reader settings", systemImage: "slider.horizontal.3") { section = .customize }
+            .buttonStyle(.bordered).accessibilityIdentifier("reader-settings")
     }
 
     // MARK: Inspector
@@ -822,13 +790,6 @@ struct ContentView: View {
         return layout {
             VStack(alignment: .leading, spacing: 20) {
                 ConnectionInspector(model: model, nearby: nearby, onConnect: connect)
-                if model.device.isConnected {
-                    HStack {
-                        Button("Customize reader", systemImage: "slider.horizontal.3") { section = .layout }
-                        Button("On Reader", systemImage: "folder") { section = .files }
-                    }
-                    .buttonStyle(.bordered)
-                }
                 if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                 if model.device.isConnected || model.preparedTransfers.contains(where: { $0.kind == .firmware }) ||
                     model.firmwareAwaitingInstallation != nil || model.firmwareLeftForInstallation != nil {
@@ -892,11 +853,20 @@ struct ContentView: View {
     }
 
     /// The reader's observed files lead; app-readable content starts in Library.
-    private func filesContents(twoColumns: Bool = false) -> some View {
+    private func filesContents() -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            Button("Add from Library", systemImage: "books.vertical") { section = .library; shelf = .books }
-                .buttonStyle(.bordered).accessibilityIdentifier("inventory-choose-library")
-            ReaderInventoryView(model: model, library: library, open: open,
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text("On your reader").font(.headline)
+                    Spacer(minLength: 16)
+                    addFromLibrary
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("On your reader").font(.headline)
+                    addFromLibrary
+                }
+            }
+            ReaderInventoryView(model: model, library: library, showsInitialConnectionAction: false, open: open,
                                 connect: { showingConnection = true }, manage: { section = .device })
             VStack(alignment: .leading, spacing: 10) {
                 Button {
@@ -927,6 +897,13 @@ struct ContentView: View {
                                   included: { $0.filename != ReaderSymbolFont.fileName })
             if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
         }
+    }
+
+    private var addFromLibrary: some View {
+        Button("Add from Library", systemImage: "books.vertical") { section = .library; shelf = .books }
+            .buttonStyle(.bordered)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("inventory-choose-library")
     }
 
     /// The reader card already says how to connect and that demo sends
@@ -1036,7 +1013,7 @@ struct DeviceStatusLabel: View {
 
 /// Wide header reader state: the connected reader and how it is reached, or
 /// the preview hardware choice when there is none.
-private struct ReaderChip: View {
+struct ReaderChip: View {
     @ObservedObject var model: PocketModel
 
     var body: some View {

@@ -166,9 +166,9 @@ unchanged. Physical pixels and host/device parity remain unverified.
 
 ## Studio UX
 
-Reader customization (2026-10-05) uses shell-selected Screens or Reading
-entry points, without a second workspace selector. Screens has Home/Sleep
-segments; every scope shares persistent preview, independently scrolling
+Reader customization (2026-10-09) uses one Reader settings entry point. A
+local scope menu selects Home screen, Sleep screen or Reading preferences;
+every scope shares persistent preview, independently scrolling
 controls and **Apply to Reader**. Payloads copy only that area's fields onto the
 last loaded reader baseline. Discard and successful saves preserve unrelated
 pending changes. Reading does not request a Home/card redraw and reports saved
@@ -183,7 +183,7 @@ without a duplicate assignment table. On-device
 front key remaps are not exposed by the API, so no exact front actions are
 claimed. Unsupported optional preference keys are omitted rather than guessed.
 
-Screens opens dedicated card and weather/calendar source editors from summary
+Home/Sleep settings open dedicated card and weather/calendar source editors from summary
 rows. Each has one Apply action, its own title and affected surfaces; no source
 Apply is nested in the Home/Sleep layout form. The parent target and preview
 survive source editing and connection. Cards use existing drafts, recovery and

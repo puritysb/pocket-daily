@@ -102,12 +102,12 @@ Content, subscriptions and these flags stay on this device. Reader preparation a
 sending remain explicit and use the existing EPUB format. The iOS/iPadOS Share →
 Pocket Daily extension and + → Add article remain available for manual captures.
 
-Library and My Reader are the two main destinations. My Reader contains On
-Reader, Screens, Reading and Device. Sending selected content uses a task sheet
+Library and My Reader are the two main destinations. My Reader combines device status, pending work and its inventory. Reader settings
+contains Home, Sleep and Reading preferences; Reader options (•••) opens Manage reader. Sending selected content uses a task sheet
 in the current window; its connection, send and result steps preserve the
 selection. On Mac, SD card is a destination in that same task; only the output
 folder is selected, and SD-copy results stay separate from wireless results.
-It does not send unrelated prepared books or firmware. Screens opens shared
+It does not send unrelated prepared books or firmware. Home/Sleep settings open shared
 card and weather/calendar source editors separately from Home/Sleep layout,
 with one Apply action per active editor. Settings also
 opens in the current window. Local checks of this IA revision are recorded in

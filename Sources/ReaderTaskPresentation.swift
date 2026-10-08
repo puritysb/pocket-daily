@@ -5,9 +5,8 @@ extension StudioSection {
     static func owner(of task: ReaderTaskDestination) -> StudioSection? {
         switch task {
         case .bookTransfer: nil
-        case .readerInventory, .preparedFiles: .files
-        case .screens, .cards, .weatherCalendar: .layout
-        case .reading: .reading
+        case .readerInventory, .preparedFiles: .reader
+        case .screens, .reading, .cards, .weatherCalendar: .customize
         case .firmware, .connection, .diagnostics: .device
         }
     }

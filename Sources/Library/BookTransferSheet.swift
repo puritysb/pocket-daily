@@ -187,7 +187,7 @@ struct BookTransferSheet<Connection: View>: View {
                 .accessibilityIdentifier("book-transfer-stop")
         case .completed:
             Text("Reading positions are exchanged separately.").font(.caption).foregroundStyle(.secondary)
-            Button("View On Reader", action: onInventory).buttonStyle(.bordered)
+            Button("View reader library", action: onInventory).buttonStyle(.bordered)
         case .discarded:
             EmptyView()
         default:
@@ -208,7 +208,7 @@ struct BookTransferSheet<Connection: View>: View {
             } else if model.readerStatus?.supportsAtomicUpload != true {
                 Text("This reader’s firmware does not support safe book transfers. Update compatible firmware in Device, then return to this task.")
                     .font(.callout).foregroundStyle(.secondary)
-                Button("Open Device", action: onDevice).buttonStyle(.bordered)
+                Button("Manage reader", action: onDevice).buttonStyle(.bordered)
             } else if model.canSendBookTransferJob(jobID) {
                 let remaining = job.items.filter { $0.transferID != nil && $0.result != .saved && $0.result != .discarded }.count
                 Button("Send \(remaining) \(remaining == 1 ? "book" : "books")") { model.sendBookTransferJob(jobID) }

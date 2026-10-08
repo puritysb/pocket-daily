@@ -5,6 +5,7 @@ import SwiftUI
 struct ReaderInventoryView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var library: LibraryModel
+    var showsInitialConnectionAction = true
     let open: (LibraryBook) -> Void
     let connect: () -> Void
     let manage: () -> Void
@@ -91,7 +92,7 @@ struct ReaderInventoryView: View {
                         Text("Book inventory is not available with this firmware.")
                             .font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Button("Open Device", action: manage).buttonStyle(.bordered)
+                        Button("Manage reader", action: manage).buttonStyle(.bordered)
                             .accessibilityIdentifier("inventory-open-device")
                     }
                 } else if model.isDemoMode {
@@ -113,8 +114,10 @@ struct ReaderInventoryView: View {
                 } else {
                     Text("Connect a reader to see its books and articles.")
                         .font(.callout).foregroundStyle(.secondary)
-                    Button("Connect reader…", action: connect).buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("inventory-connect")
+                    if showsInitialConnectionAction {
+                        Button("Connect reader…", action: connect).buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("inventory-connect")
+                    }
                 }
                 if let error = library.error {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red)

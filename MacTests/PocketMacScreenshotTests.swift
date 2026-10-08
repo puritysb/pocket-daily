@@ -91,8 +91,10 @@ final class PocketMacScreenshotTests: XCTestCase {
                              name: "qa-device-no-reader-dark", size: Self.pointSize, dark: true)
         try await renderView(ContentView(initialSection: .reader).environmentObject(model),
                              name: "qa-reader-overview", size: Self.pointSize)
-        try await renderView(ContentView(initialSection: .files).environmentObject(model),
-                             name: "qa-files-no-reader", size: Self.pointSize)
+        let demoReader = PocketModel()
+        demoReader.enterDemoMode()
+        try await renderView(ContentView(initialSection: .reader).environmentObject(demoReader),
+                             name: "qa-reader-inventory-demo", size: Self.pointSize)
         // Saved offline edits meeting a reader that changed in the meantime.
         let editor = ProfileEditorState()
         var mine = PocketProfile.defaults
@@ -156,19 +158,19 @@ final class PocketMacScreenshotTests: XCTestCase {
         for hardware in PocketHardware.allCases {
             model.preferredHardware = hardware
             let editor = ProfileEditorState()
-            try await renderView(ProfileStudioView(model: model, editor: editor, destination: .reading),
+            try await renderView(ProfileStudioView(model: model, editor: editor, initialPreview: .reading),
                                  name: "qa-buttons-\(hardware.rawValue)-portrait", size: Self.pointSize)
             try await renderView(ReaderButtonDiagram(hardware: hardware, preferences: editor.reading).padding(24),
                                  name: "qa-reading-button-diagram-\(hardware.rawValue)-portrait", size: NSSize(width: 420, height: 420))
             editor.reading.orientation = .landscape
             try await renderView(ReaderButtonDiagram(hardware: hardware, preferences: editor.reading).padding(24),
                                  name: "qa-reading-button-diagram-\(hardware.rawValue)-landscape", size: NSSize(width: 420, height: 420))
-            try await renderView(ProfileStudioView(model: model, editor: editor, destination: .reading),
+            try await renderView(ProfileStudioView(model: model, editor: editor, initialPreview: .reading),
                                  name: "qa-buttons-\(hardware.rawValue)-landscape", size: Self.pointSize)
         }
         let returnEditor = ProfileEditorState()
         var targetConsumed = false
-        try await renderView(ProfileStudioView(model: model, editor: returnEditor, destination: .screens,
+        try await renderView(ProfileStudioView(model: model, editor: returnEditor,
                                                 screenTaskRequest: .init(id: UUID(), screen: .brief),
                                                 onScreenTaskOpened: { targetConsumed = true }),
                              name: "qa-owner-sleep-return", size: Self.pointSize)
@@ -284,7 +286,7 @@ final class PocketMacScreenshotTests: XCTestCase {
     }
 
     @MainActor
-    private func render(name: String, hardware: PocketHardware, section: StudioSection = .layout,
+    private func render(name: String, hardware: PocketHardware, section: StudioSection = .customize,
                         preview: ProfileStudioView.PreviewSurface = .home, shelf: LibraryView.Shelf = .books,
                         inbox: ArticleInboxModel? = nil, dark: Bool = false, captureSheet: Bool = false) async throws {
         let savedAppearance = UserDefaults.standard.object(forKey: "appAppearance")

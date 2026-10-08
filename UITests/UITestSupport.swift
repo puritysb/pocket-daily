@@ -1,10 +1,11 @@
 import XCTest
 
 /// Navigation shared by flow and screenshot tests. Library and My Reader are
-/// peers; the four reader tasks open through the overview or wide sidebar.
+/// peers; reader settings and management open inside the reader workspace.
 extension XCUIApplication {
-    /// Compact layouts use tabs instead of the sidebar.
-    var isCompact: Bool { tabBars.firstMatch.buttons["My Reader"].exists }
+    /// iPad may place native tabs in a floating top bar. Detect the shipping
+    /// sidebar rather than assuming every TabView is exposed as an AXTabBar.
+    var isCompact: Bool { !buttons["navigation-Books"].exists }
 
     /// Opens Settings: the sidebar's button on wide layouts, the Library
     /// header's on iPhone.
@@ -31,28 +32,37 @@ extension XCUIApplication {
         }
     }
 
-    /// Opens a task destination through the shipping hierarchy.
-    func open(_ section: String) {
-        let destination = section
-        let sidebarName = destination == "Library" ? "Books" : destination == "My Reader" ? "Overview" : destination
-        let sidebar = buttons["navigation-\(sidebarName)"]
-        let tabName = destination == "Library" ? "Library" : "My Reader"
-        let tab = tabBars.firstMatch.buttons[tabName]
+    /// Opens the shipping hierarchy rather than assuming a sidebar per feature.
+    func open(_ destination: String) {
+        let library = destination == "Library"
+        let sidebar = buttons[library ? "navigation-Books" : "navigation-My Reader"]
+        let tabName = library ? "Library" : "My Reader"
+        let bottomTab = tabBars.firstMatch.buttons[tabName]
+        let tab = bottomTab.exists ? bottomTab : buttons[tabName].firstMatch
         let shown = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in tab.exists || sidebar.exists }, object: self)
         XCTAssertEqual(XCTWaiter().wait(for: [shown], timeout: 15), .completed)
         if sidebar.exists { sidebar.tap() }
         else {
             select(tab)
-            if destination != "Library" && destination != "My Reader" {
-                let entry = buttons["reader-destination-\(destination)"]
-                if !entry.exists {
-                    let back = navigationBars.buttons["My Reader"].firstMatch
-                    if back.exists { back.tap() }
-                }
-                XCTAssertTrue(entry.waitForExistence(timeout: 5), "My Reader overview is missing destination: \(destination)")
-                entry.tap()
+            if !library {
+                let back = navigationBars.buttons["My Reader"].firstMatch
+                if back.exists { back.tap() }
             }
+        }
+        if destination == "Reader settings" {
+            let entry = buttons["reader-settings"]
+            revealInReader(entry, upward: true)
+            XCTAssertTrue(entry.waitForExistence(timeout: 5))
+            entry.tap()
+        } else if destination == "Manage reader" {
+            let menu = buttons["reader-management-menu"]
+            revealInReader(menu, upward: true)
+            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+            menu.tap()
+            let entry = buttons["reader-manage"]
+            XCTAssertTrue(entry.waitForExistence(timeout: 5))
+            entry.tap()
         }
     }
 
@@ -133,16 +143,15 @@ extension XCUIApplication {
         item.tap()
     }
 
-    /// Screens select Home/Sleep; Reading is its own My Reader destination.
+    /// All three scopes live in Reader settings, including reading preferences.
     func openScreen(_ screen: String) {
-        if screen == "Reading" { open("Reading") }
-        else {
-            if !segmentedControls["profile-screen"].exists { open("Screens") }
-            revealCanvas()
-            let selector = segmentedControls["profile-screen"]
-            XCTAssertTrue(selector.waitForExistence(timeout: 5))
-            selector.buttons[screen].tap()
-        }
+        if !buttons["reader-setting-scope"].exists { open("Reader settings") }
+        let selector = buttons["reader-setting-scope"]
+        XCTAssertTrue(selector.waitForExistence(timeout: 5))
+        selector.tap()
+        let option = buttons[screen == "Reading" ? "Reading preferences" : screen + " screen"].firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 5))
+        option.tap()
     }
 
     /// Opens a dedicated source editor; the parent's Home/Sleep preview stays put.

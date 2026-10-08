@@ -4,6 +4,28 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Reader navigation — 2026-10-09 (local, not released)
+
+- My Reader combines identity, retained work and observed files. Library and
+  My Reader are peers; Overview/On Reader/Screens/Reading/Device no longer
+  occupy separate navigation entries. Reader settings opens from the reader
+  card; Reader options → Manage reader owns connection, firmware and diagnostics.
+- Reader settings has Home screen, Sleep screen and Reading preferences scopes.
+  Returning within the window retains the selection and drafts; Continue
+  editing prefers the last scope with pending edits, including Sleep. Apply
+  and Discard still affect only the chosen scope. App reading starts in Library.
+- Accessibility text sizes use a scrolling settings surface, an explicit full
+  preview action and vertical apply controls. The inventory heading/action
+  also stack when needed. UI test navigation recognizes floating iPad tabs.
+- Verified 32 focused unit tests, iPhone/iPad offline and draft-return flows,
+  four capture/accessibility tests per simulator, and 10 Mac tests (one
+  external-EPUB sample skipped). All 19 store images and source validation
+  pass. Evidence: `docs/IA_IMPLEMENTATION_REPORT.md`, `.build/reader-ia/`.
+  The final signed, sandboxed Mac app is installed and running in My Reader.
+- This changes navigation, not the transport contract. One active Wi-Fi reader
+  session and one remembered Bluetooth reader remain the implementation;
+  multiple-reader registration and concurrent sessions are not implemented.
+
 ## App design system — 2026-10-09 (local, not released)
 
 - `Sources/PocketDesign.swift` centralizes chrome typography, spacing, icon
@@ -52,9 +74,8 @@ with a dated note below.
   records (DEBUG only). Orphan prepared copies from earlier runs had been
   recovered as "Paused" book transfers in every fresh-library UI test.
 - The share-test failures observed in this loop were followed up on 2026-10-09
-  above; the corrected tap now passes on both tested models. iPad Pro 11 portrait uses the
-  floating top tab bar, which `UITestSupport.isCompact` does not recognise,
-  so run iPad flows on the 13-inch model.
+  above; the corrected tap now passes on both tested models. the floating-tab detection limitation was corrected in the 2026-10-09
+  navigation update above. The 11-inch model itself has not been reverified.
 
 ## IA and UX integration — 2026-10-08 (not released)
 

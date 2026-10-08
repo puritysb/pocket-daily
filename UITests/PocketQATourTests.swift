@@ -76,7 +76,7 @@ final class PocketQATourTests: XCTestCase {
         app.open("My Reader")
         sleep(1)
         attach(app, "11-my-reader")
-        for (index, destination) in ["On Reader", "Screens", "Reading", "Device"].enumerated() {
+        for (index, destination) in ["My Reader", "Reader settings", "Manage reader"].enumerated() {
             app.open(destination)
             sleep(2)
             attach(app, "\(12 + index)-\(destination.replacingOccurrences(of: " ", with: "-").lowercased())")
@@ -109,10 +109,10 @@ final class PocketQATourTests: XCTestCase {
         app.open("My Reader")
         sleep(1)
         attach(app, "demo-01-my-reader")
-        app.open("On Reader")
+        app.open("My Reader")
         sleep(2)
         attach(app, "demo-02-on-reader")
-        app.open("Screens")
+        app.openScreen("Home")
         _ = app.waitForLayoutPreview()
         attach(app, "demo-03-screens-home")
         let canvas = app.descendants(matching: .any)["profile-canvas"]
@@ -131,10 +131,10 @@ final class PocketQATourTests: XCTestCase {
         sleep(1)
         attach(app, "demo-05-weather-calendar")
         if app.buttons["content-editor-close"].exists { app.buttons["content-editor-close"].tap() }
-        app.open("Reading")
+        app.openScreen("Reading")
         sleep(2)
         attach(app, "demo-06-reading")
-        app.open("Device")
+        app.open("Manage reader")
         sleep(1)
         attach(app, "demo-07-device")
     }

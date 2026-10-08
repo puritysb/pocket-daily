@@ -226,7 +226,7 @@ struct GlanceDeliveryStatus: View {
 
     var body: some View {
         if model.readerStatus != nil, !model.isDemoMode, !model.canSendGlance {
-            Label("Weather and events need firmware \(FirmwareGuidance.minimumRecommended) or later. Open My Reader → Device to update.", systemImage: "exclamationmark.triangle")
+            Label("Weather and events need firmware \(FirmwareGuidance.minimumRecommended) or later. Open My Reader → Reader options → Manage reader to update.", systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange)
                 .accessibilityIdentifier("glance-unsupported")
         } else if settings.hasUnappliedSourceChanges {

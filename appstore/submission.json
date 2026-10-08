@@ -30,7 +30,7 @@
     "verified_on": "2026-09-08",
     "development_team": "QF36NDHYHD",
     "tests": "45 iOS tests passed (40 unit, 5 UI) and the macOS render test passed, both on Xcode 26.6",
-    "screenshots": "2026-09-28: Regenerated from shipping views by scripts/capture_screenshots.sh: iPhone 6.9\" x6, iPad 13\" x7, Mac 2880x1800 x6. Reading/library first, Screens with persistent preview, separate Device management, and Articles subscriptions with local publisher fixtures; no duplicates.",
+    "screenshots": "2026-10-09: Regenerated from shipping views by scripts/capture_screenshots.sh: iPhone 6.9\" x6, iPad 13\" x7, Mac 2880x1800 x6. Library and My Reader are peers; Reader settings contains Home/Sleep/Reading preferences; Reader options opens Manage reader. No duplicates.",
     "package_validation": "scripts/validate_app_store.sh passed",
     "signed_export": "2026-09-29: scripts/package_app_store.sh --skip-tests exported and verified both distributions from c4eea1a (full test run passed on the same tree): iOS IPA arm64, Apple Distribution + store profile, iCloud key-value storage and App Group entitlements, no debugger attachment (sha256 f12a605c…); universal sandboxed macOS PKG, installer-signed (sha256 e5b7b22a…). Nothing was uploaded.",
     "public_urls": "Marketing, support, and privacy URLs returned HTTP 200 on 2026-09-06",
@@ -46,9 +46,9 @@
     "Public review-video URL showing one physical reader transfer"
   ],
   "navigation_local_verification": {
-    "verified_on": "2026-09-28",
-    "tests": "2026-09-28 full run: 398 iOS unit tests, 22 iOS UI tests (ad-hoc signed for the App Group; includes article feeds, Home/Sleep editing, Weather/Calendar separation, reading settings and connection cancellation) and 7 macOS tests (2 skipped without external samples) passed. Demo does not offer Calendar access.",
-    "builds": "iOS and sandboxed macOS builds passed. Live WeatherKit/geocoding, Calendar authorization and physical reader operations were not verified by these tests.",
-    "screenshots": "scripts/capture_screenshots.sh passed: 6 iPhone, 7 iPad and 6 Mac images. Screens and Device are separate destinations; Weather attribution sits beside Weather, with Calendar in a sibling section. Source package validation passed."
+    "verified_on": "2026-10-09",
+    "tests": "Focused final run: 32 iOS unit tests and 2 iPhone navigation/draft-return flows passed; the same 2 flows passed on iPad Pro 13. Four screenshot/accessibility tests passed on each simulator (iOS 26.5). Ten macOS tests passed, one external-EPUB sample test skipped. Earlier source-editor, connection-return and book-task flows also passed; exact runs are recorded in docs/IA_IMPLEMENTATION_REPORT.md.",
+    "builds": "iOS test builds and Apple Development-signed sandboxed macOS build passed. Installed Mac executable matches the final local build. No physical reader, radio, mounted-SD, TestFlight or new distribution export verification is implied.",
+    "screenshots": "scripts/capture_screenshots.sh passed: 6 iPhone, 7 iPad and 6 Mac images. My Reader combines status/tasks/inventory; Reader settings groups the three scopes and Manage reader opens through Reader options. Large-text QA captures stay outside the numbered store set. Source package validation passed."
   }
 }
