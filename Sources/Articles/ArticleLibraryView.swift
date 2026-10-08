@@ -11,6 +11,7 @@ struct ArticleShelf: View {
     @Binding var managingFeeds: Bool
     var sendToReader: ((LibraryBook) -> Void)? = nil
     var search: String = ""
+    var contentInset: CGFloat = PocketDesign.pageInset
     @State private var editing: ArticleRecord?
     @State private var deleting: ArticleSummary?
     @State private var error: String?
@@ -33,7 +34,7 @@ struct ArticleShelf: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(inbox.filterTitle).font(.headline).lineLimit(1)
-                        Image(systemName: "chevron.down").font(.caption)
+                        PocketSymbol("chevron.down", role: .accessory)
                     }
                 }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize(horizontal: false, vertical: true)
@@ -41,15 +42,16 @@ struct ArticleShelf: View {
                 Spacer()
                 if inbox.isRefreshing {
                     ProgressView().controlSize(.small)
-                    Button("Stop", systemImage: "stop.circle") { inbox.cancelRefresh() }.labelStyle(.iconOnly)
+                    Button { inbox.cancelRefresh() } label: { PocketActionGlyph(name: "stop.circle") }
+                        .accessibilityLabel("Stop refreshing")
                 } else if !inbox.feeds.isEmpty {
-                    Button("Refresh", systemImage: "arrow.clockwise") { inbox.refresh() }
-                        .labelStyle(.iconOnly).disabled(model.isDemoMode)
+                    Button { inbox.refresh() } label: { PocketActionGlyph(name: "arrow.clockwise") }
+                        .accessibilityLabel("Refresh").disabled(model.isDemoMode)
                         .accessibilityIdentifier("article-refresh")
                 }
             }
             .buttonStyle(.plain).tint(.primary)
-            .padding(.horizontal, 24).padding(.bottom, 12)
+            .padding(.horizontal, contentInset).padding(.bottom, 8)
 
             List {
                 if busy { ProgressView("Preparing article…") }
@@ -89,7 +91,7 @@ struct ArticleShelf: View {
                         .accessibilityIdentifier("Read " + article.title)
                         .disabled(busy)
                         Menu { actions(for: article) } label: {
-                            Image(systemName: "ellipsis").frame(width: 36, height: 36).contentShape(Rectangle())
+                            PocketActionGlyph(name: "ellipsis")
                         }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().tint(.primary)
                         .accessibilityLabel("Options for " + article.title)
@@ -97,7 +99,7 @@ struct ArticleShelf: View {
                         .disabled(busy)
                     }
                     .padding(.vertical, 12)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 24, bottom: 0, trailing: 24))
+                    .listRowInsets(EdgeInsets(top: 0, leading: contentInset, bottom: 0, trailing: contentInset))
                     .listRowBackground(Color.clear)
                     .contextMenu { actions(for: article) }
                     .swipeActions(edge: .leading) {
@@ -129,8 +131,8 @@ struct ArticleShelf: View {
         }
         // The same measure as the Library header and the book grid, so the
         // filter and the rows share one left edge on wide windows.
-        .frame(maxWidth: 1100)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: PocketDesign.contentWidth)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: $adding, onDismiss: { Task { await inbox.load() } }) {
             ArticleCaptureView(initialURL: "", store: inbox.store, completed: {})
         }

@@ -12,6 +12,26 @@ final class PocketScreenshotTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Chrome must stay operable when its labels scale up. This QA capture is
+    /// deliberately excluded from the numbered App Store screenshot set.
+    func testCaptureAccessibleLibrary() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--ui-test-fresh-library",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let add = app.buttons["library-add"]
+        let settings = app.buttons["app-settings"]
+        XCTAssertTrue(add.waitForExistence(timeout: 15))
+        XCTAssertTrue(add.isHittable, "Add books must remain reachable with large text")
+        XCTAssertTrue(settings.isHittable, "Settings must remain reachable with large text")
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "qa-accessibility-library"
+        attachment.lifetime = .keepAlways
+        self.add(attachment)
+        add.tap()
+        XCTAssertTrue(app.buttons["library-import"].waitForExistence(timeout: 5))
+    }
+
     func testCaptureDemoScreens() throws {
         let app = launch(hardware: "X3")
         app.openShelf("Books")

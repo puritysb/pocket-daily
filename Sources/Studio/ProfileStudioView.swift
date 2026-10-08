@@ -653,7 +653,8 @@ struct ProfileStudioView: View {
                     }
                 }
             }
-            Text(screen == .reading ? "Reading settings" : screen.rawValue + " layout").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(screen == .reading ? "Reading settings" : screen.rawValue + " layout")
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             if editor.targetMismatch, !model.isDemoMode {
                 Button("Use a copy with this reader…") { confirmingTarget = true }
                     .accessibilityIdentifier("profile-use-current-reader")
@@ -669,10 +670,10 @@ struct ProfileStudioView: View {
                     .accessibilityIdentifier("profile-pending")
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, PocketDesign.cardInset)
         .padding(.vertical, 10)
-        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(contentPadding > 0 ? 0.08 : 0), radius: 8, y: 2)
+        .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+        .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(PocketPalette.line) }
     }
 
     /// What Apply would change, named as on screen; a setting hidden by another

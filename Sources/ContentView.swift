@@ -43,6 +43,7 @@ struct ContentView: View {
     @AppStorage("appAppearance") private var appearance = AppAppearance.system
     @ObservedObject private var readerAppearance = ReaderAppearanceStore.shared
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var model: PocketModel
     @StateObject private var nearby = NearbySyncController(ownershipChanged: {
         ReaderBluetoothLink.shared.nearbySessionActive = $0
@@ -96,8 +97,12 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             GeometryReader { proxy in
-                if proxy.size.width >= Self.wideWidth {
-                    wideLayout.safeAreaInset(edge: .bottom, spacing: 0) { transferTaskEntry }
+                if proxy.size.width >= Self.wideWidth && !dynamicTypeSize.isAccessibilitySize {
+                    wideLayout(titlebarInset: proxy.safeAreaInsets.top)
+                        .safeAreaInset(edge: .bottom, spacing: 0) { transferTaskEntry }
+#if os(macOS)
+                        .ignoresSafeArea(.container, edges: .top)
+#endif
                 } else {
                     compactStudio
                 }
@@ -465,9 +470,9 @@ struct ContentView: View {
     }
 
     /// One navigation rail replaces the two stacked section pickers.
-    private var wideLayout: some View {
+    private func wideLayout(titlebarInset: CGFloat) -> some View {
         HStack(spacing: 0) {
-            sidebar
+            sidebar(titlebarInset: titlebarInset)
             Divider()
             if section == .library {
                 libraryView(showsShelfMenu: false)
@@ -477,58 +482,66 @@ struct ContentView: View {
         }
     }
 
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 24) {
+    private func sidebar(titlebarInset: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 10) {
                 PocketMark()
-                Text("Pocket Daily").font(.headline)
+                Text("Pocket Daily").font(.subheadline.weight(.semibold))
             }
-            .padding(.horizontal, 12)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Library")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 12).padding(.bottom, 4)
-                ForEach(LibraryView.Shelf.allCases) { item in
-                    sidebarRow(item.rawValue, symbol: item == .books ? "books.vertical" : "doc.text",
-                               selected: section == .library && shelf == item) {
-                        shelf = item
-                        section = .library
-                    }
-                }
-            }
-            if section == .library && shelf == .articles && !inbox.feeds.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Following").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                    ScrollView {
-                        VStack(spacing: 2) {
-                            ForEach(inbox.feeds) { feed in
-                                sidebarRow(feed.title, symbol: "dot.radiowaves.left.and.right", selected: inbox.filter == .feed(feed.id)) {
-                                    inbox.filter = .feed(feed.id)
-                                }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 4)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Library")
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 12).padding(.bottom, 4)
+                        ForEach(LibraryView.Shelf.allCases) { item in
+                            sidebarRow(item.rawValue, symbol: item == .books ? "books.vertical" : "doc.text",
+                                       selected: section == .library && shelf == item) {
+                                shelf = item
+                                section = .library
                             }
                         }
-                    }.frame(height: min(CGFloat(inbox.feeds.count) * 64, 240))
-                }
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("My Reader")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 12).padding(.bottom, 4)
-                sidebarRow("Overview", symbol: StudioSection.reader.symbol, selected: section == .reader,
-                           detail: model.device) { section = .reader }
-                ForEach(StudioSection.readerDestinations, id: \.self) { destination in
-                    sidebarRow(destination.rawValue, symbol: destination.symbol, selected: section == destination) {
-                        section = destination
+                    }
+                    if section == .library && shelf == .articles && !inbox.feeds.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Following").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                            ScrollView {
+                                VStack(spacing: 2) {
+                                    ForEach(inbox.feeds) { feed in
+                                        sidebarRow(feed.title, symbol: "dot.radiowaves.left.and.right", selected: inbox.filter == .feed(feed.id)) {
+                                            inbox.filter = .feed(feed.id)
+                                        }
+                                    }
+                                }
+                            }.frame(height: min(CGFloat(inbox.feeds.count) * 64, 240))
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("My Reader")
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            .padding(.horizontal, 12).padding(.bottom, 4)
+                        sidebarRow("Overview", symbol: StudioSection.reader.symbol, selected: section == .reader,
+                                   detail: model.device) { section = .reader }
+                        ForEach(StudioSection.readerDestinations, id: \.self) { destination in
+                            sidebarRow(destination.rawValue, symbol: destination.symbol, selected: section == destination) {
+                                section = destination
+                            }
+                        }
                     }
                 }
             }
-            Spacer()
+            .scrollIndicators(.hidden)
             Button(action: showSettings) {
-                Label("Settings", systemImage: "gearshape")
-                    .font(.subheadline)
+                HStack(spacing: 10) {
+                    PocketSymbol("gearshape", role: .navigation)
+                    Text("Settings").font(.subheadline)
+                }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12).padding(.vertical, 11)
+                    .frame(minHeight: PocketDesign.navigationTarget)
+                    .padding(.horizontal, 10)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -536,8 +549,12 @@ struct ContentView: View {
             .accessibilityIdentifier("app-settings")
         }
         .padding(12)
-        .padding(.top, 12)
-        .frame(width: 200)
+#if os(macOS)
+        .padding(.top, 4 + titlebarInset)
+#else
+        .padding(.top, 4)
+#endif
+        .frame(width: PocketDesign.sidebarWidth)
         .background(PocketPalette.panel)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("app-sidebar")
@@ -546,20 +563,21 @@ struct ContentView: View {
     private func sidebarRow(_ title: String, symbol: String, selected: Bool, detail: DeviceSnapshot? = nil,
                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label {
+            HStack(alignment: detail == nil ? .center : .top, spacing: 10) {
+                PocketSymbol(symbol, role: .navigation)
+                    .padding(.top, detail == nil ? 0 : 1)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).lineLimit(2)
                     if let detail {
                         DeviceStatusLabel(device: detail, showsReader: false)
                     }
                 }
-            } icon: {
-                Image(systemName: symbol)
             }
                 .font(.subheadline.weight(selected ? .semibold : .regular))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12).padding(.vertical, detail == nil ? 11 : 8)
-                .background(selected ? PocketPalette.selection : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .frame(minHeight: PocketDesign.navigationTarget)
+                .background(selected ? PocketPalette.selection : Color.clear, in: RoundedRectangle(cornerRadius: PocketDesign.controlRadius))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -570,13 +588,13 @@ struct ContentView: View {
     private var desktopStudio: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(section.rawValue).font(.title2.weight(.semibold))
+                Text(section.rawValue).font(PocketDesign.pageTitle)
                 Spacer()
                 if section == .layout || section == .reading { ReaderChip(model: model) }
             }
-            .padding(.horizontal, 24).padding(.vertical, 18)
+            .padding(.horizontal, PocketDesign.pageInset).padding(.vertical, 12)
             Divider()
-            readerDestination(section, padding: 24, showsReaderDestinations: false)
+            readerDestination(section, padding: PocketDesign.pageInset, showsReaderDestinations: false)
         }
         .background(PocketPalette.stage)
     }
@@ -601,8 +619,11 @@ struct ContentView: View {
         NavigationStack(path: Binding(
             get: { section != .library && section != .reader ? [section] : [] },
             set: { section = $0.last ?? .reader })) {
-            compactReaderContent(.reader, padding: 16)
+            compactReaderContent(.reader, padding: PocketDesign.compactInset)
                 .navigationTitle("My Reader")
+#if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+#endif
                 .navigationDestination(for: StudioSection.self) { destination in
                     compactReaderContent(destination, padding: 12)
                         .navigationTitle(destination.rawValue)
@@ -612,7 +633,7 @@ struct ContentView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
-                        Button(action: showSettings) { Image(systemName: "gearshape") }
+                        Button(action: showSettings) { PocketActionGlyph(name: "gearshape") }
                             .accessibilityLabel("Settings").accessibilityIdentifier("reader-app-settings")
                     }
                 }
@@ -647,11 +668,11 @@ struct ContentView: View {
                               cancelConnection: { nearby.disconnect(); model.cancelConnectionAttempt() },
                               onConnect: { showingConnection = true })
                 .id(destination)
-                .frame(maxWidth: 1100, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: PocketDesign.contentWidth, maxHeight: .infinity, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: PocketDesign.sectionSpacing) {
                     switch destination {
                     case .reader: readerOverview(showsDestinations: showsReaderDestinations)
                     case .files: filesContents()
@@ -659,7 +680,7 @@ struct ContentView: View {
                     }
                 }
                 .padding(padding)
-                .frame(maxWidth: 1100, alignment: .leading)
+                .frame(maxWidth: PocketDesign.contentWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .accessibilityIdentifier("inspector")
@@ -745,17 +766,17 @@ struct ContentView: View {
                 ForEach(StudioSection.readerDestinations, id: \.self) { destination in
                     Button { section = destination } label: {
                         HStack(alignment: .top, spacing: 14) {
-                            Image(systemName: destination.symbol).font(.title2).frame(width: 30)
+                            PocketSymbol(destination.symbol, role: .destination)
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(destination.rawValue).font(.headline)
                                 Text(destinationSummary(destination)).font(.subheadline).foregroundStyle(.secondary)
                             }
                             Spacer(minLength: 0)
-                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                            PocketSymbol("chevron.right", role: .accessory).foregroundStyle(.secondary)
                         }
-                        .padding(20).frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
-                        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 13))
-                        .overlay { RoundedRectangle(cornerRadius: 13).stroke(PocketPalette.line) }
+                        .padding(PocketDesign.cardInset).frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+                        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+                        .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(PocketPalette.line) }
                     }
                     .buttonStyle(.plain).accessibilityIdentifier("reader-destination-\(destination.rawValue)")
                 }
@@ -1081,14 +1102,14 @@ private struct PocketMark: View {
             RoundedRectangle(cornerRadius: 7)
                 .fill(PocketPalette.deviceTop)
                 .overlay { RoundedRectangle(cornerRadius: 7).stroke(Color.white.opacity(0.14), lineWidth: 0.5) }
-                .frame(width: 32, height: 38)
+                .frame(width: 24, height: 29)
             RoundedRectangle(cornerRadius: 3)
                 .fill(PocketPalette.paper)
-                .frame(width: 22, height: 27)
+                .frame(width: 16, height: 20)
             Capsule()
                 .fill(PocketPalette.accent)
-                .frame(width: 10, height: 3)
-                .offset(y: 11)
+                .frame(width: 8, height: 2)
+                .offset(y: 8)
         }
         .accessibilityHidden(true)
     }
@@ -1776,13 +1797,15 @@ struct InspectorCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: symbol).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+            Label(title, systemImage: symbol)
+                .labelStyle(PocketSectionLabel())
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 13))
-        .overlay { RoundedRectangle(cornerRadius: 13).stroke(PocketPalette.line, lineWidth: 1) }
+        .padding(PocketDesign.cardInset)
+        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+        .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(PocketPalette.line, lineWidth: 1) }
     }
 }
 

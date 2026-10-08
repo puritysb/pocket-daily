@@ -96,3 +96,22 @@ Mac QA 렌더(`testRendersUserFlowStates`, `testRendersReaderTasksAndButtonMappi
 | 저장소 | 문서 로컬 링크, `git diff --check` 통과. `main`과 기본 checkout만 있으며 stash와 정리할 별도 worktree/브랜치는 없음 |
 
 UI 검사는 최종적으로 순차 실행했다. 병행 실행에서 테스트 러너 시작이 대기한 두 실행은 중단한 뒤 다시 수행했으며 성공 근거로 세지 않았다. 실제 Bluetooth/Wi-Fi/SD 및 TestFlight 검증, 푸시와 App Store 제출은 수행하지 않았다.
+
+## 2026-10-09 디자인 시스템 정비
+
+[디자인 시스템](DESIGN_SYSTEM.md)과 `Sources/PocketDesign.swift`를 추가해 제목, 아이콘 칸, 행동 영역, 간격과 카드 규격을 공통화했다. Mac의 반복 창 제목을 숨기고 본문 헤더가 제목 표시줄 영역까지 사용하도록 했다. 창 조작 버튼에는 여유를 남기며, 실제 창에서 상단 추가 메뉴가 눌리는 것도 확인했다. 서재의 장식용 부제를 제거하고 서재·편집 화면의 왼쪽 기준선을 맞췄다. 사이드바와 공통 카드의 아이콘은 고정 칸에 배치하고 작은 화면의 아이콘 행동은 44pt 영역을 유지한다.
+
+큰 글자 캡처에서 책 격자의 제목과 iPad 사이드바 이름이 잘리는 것을 확인해 보완했다. 접근성 크기에서는 서재가 제목 전체를 보여 주는 한 열 가로 행으로, iPad 내비게이션이 탭으로 바뀐다. 기본 글자 크기의 격자와 사이드바는 유지한다. `PocketScreenshotTests/testCaptureAccessibleLibrary`가 추가·설정의 접근 가능 여부와 추가 메뉴를 검사하며, QA 이미지는 스토어 세트에서 제외한다.
+
+검증 자료는 `.build/design-system/`에 있다.
+
+| 검사 | 결과 |
+| --- | --- |
+| 플랫폼 빌드 | `ios-build.log`, `mac-final-build.log` 통과. 접근성 보완 뒤의 iOS 코드는 아래 UI 테스트에서 다시 빌드 |
+| iPhone 기능 흐름 | `iphone-flows.xcresult`: 개요, 설정 외관, 화면/읽기 범위, 데모/미리보기, 기사 빈 상태, 편집 미리보기 6개 통과 |
+| Mac QA | `mac-qa.xcresult`: 어두운 화면, 사용자 흐름 렌더, 같은 창 읽기 복귀 3개 통과. 왼쪽 정렬 보완 뒤 `mac-dark-final.xcresult` 1개 통과 |
+| 최종 접근성 레이아웃 | `iphone-accessible-layout.xcresult`, `ipad-accessible-layout.xcresult`: 가장 큰 접근성 글자 크기에서 각 1개 통과. 캡처로 책 제목 전체 표시와 iPad 탭 배치 확인 |
+| 스토어 캡처 | `screenshots.log`: 기본 글자 크기의 iPhone 6장, iPad 7장, Mac 6장 생성 및 패키지 검증 통과. 밝은/어두운 화면의 여백·정렬을 확인 |
+| 실제 실행 창 | Apple Development로 서명된 설치 앱을 교체하고 빌드와 실행 파일 해시 일치 확인. 중복 제목 제거, 창 조작 영역, 추가 메뉴와 저장된 읽기 편집 진입 확인 |
+
+오프스크린 Mac 캡처는 native 제목 표시줄을 포함하지 않으므로 실제 실행 창에서도 별도로 확인했다. 이 작업은 앱 UI 정비이며 새로운 기기 연결·전송 계약이나 실제 하드웨어 동작을 검증한 것은 아니다.

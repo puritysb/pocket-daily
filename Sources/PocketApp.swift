@@ -26,6 +26,7 @@ struct PocketApp: App {
 #endif
         }
 #if os(macOS)
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1180, height: 780)
         .commands { PocketSettingsCommands() }
 #endif

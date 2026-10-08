@@ -28,6 +28,13 @@ struct LibraryView: View {
     @State private var targeted = false
     @State private var sharing: SharedBook?
     @State private var search = ""
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var contentInset: CGFloat { showsShelfMenu ? PocketDesign.compactInset : PocketDesign.pageInset }
+    private var bookColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible(), alignment: .leading)]
+            : [GridItem(.adaptive(minimum: 128, maximum: 180), spacing: 18, alignment: .top)]
+    }
 
     struct SharedBook: Identifiable {
         let id = UUID()
@@ -50,24 +57,25 @@ struct LibraryView: View {
                     switch shelf {
                     case .books: books
                     case .articles: ArticleShelf(model: model, library: library, read: open, inbox: inbox,
-                                                 adding: $addingArticle, managingFeeds: $managingFeeds, sendToReader: sendToReader, search: search)
+                                                 adding: $addingArticle, managingFeeds: $managingFeeds, sendToReader: sendToReader,
+                                                 search: search, contentInset: contentInset)
                     }
                 }
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
                         header
                         HStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                            PocketSymbol("magnifyingglass", role: .action).foregroundStyle(.secondary)
                             TextField(shelf == .books ? "Search books and authors" : "Search articles", text: $search)
                                 .textFieldStyle(.plain).accessibilityIdentifier("library-search")
                             if !search.isEmpty {
-                                Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                                Button { search = "" } label: { PocketSymbol("xmark.circle.fill", role: .action) }
                                     .buttonStyle(.plain).accessibilityLabel("Clear search")
                                     .accessibilityIdentifier("library-clear-search")
                             }
                         }
-                        .padding(10).background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 9))
-                        .padding(.horizontal, 24).padding(.bottom, 16).frame(maxWidth: 1100)
+                        .padding(8).background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: PocketDesign.controlRadius))
+                        .padding(.horizontal, contentInset).padding(.bottom, 12).frame(maxWidth: PocketDesign.contentWidth)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -107,8 +115,7 @@ struct LibraryView: View {
         .task { await library.load() }
     }
 
-    /// Title and actions share the top row, so the subtitle and reader
-    /// status keep the full width instead of wrapping beside the buttons.
+    /// One title row with actions; only actionable reader state adds a line.
     private var header: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 16) {
@@ -119,21 +126,20 @@ struct LibraryView: View {
                         }
                     } label: {
                         HStack(spacing: 8) {
-                            Text(shelf.rawValue).font(.largeTitle.bold()).foregroundStyle(.primary)
-                            Image(systemName: "chevron.down").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            Text(shelf.rawValue).font(PocketDesign.pageTitle).foregroundStyle(.primary)
+                            PocketSymbol("chevron.down", role: .accessory).foregroundStyle(.secondary)
                         }
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                    .frame(minHeight: PocketDesign.actionTarget)
                     .fixedSize()
                     .accessibilityIdentifier("library-shelf")
                 } else {
-                    Text(shelf.rawValue).font(.largeTitle.bold())
+                    Text(shelf.rawValue).font(PocketDesign.pageTitle)
                 }
                 Spacer(minLength: 0)
                 headerActions
             }
-            Text(shelf == .books ? "Your own quiet corner." : "Saved for a slower moment.")
-                .font(.subheadline).foregroundStyle(.secondary)
             if let openDevice, model.device.link != .offline || model.hasKnownReader {
                 Button(action: openDevice) { DeviceStatusLabel(device: model.device) }
                     .buttonStyle(.plain)
@@ -143,11 +149,11 @@ struct LibraryView: View {
         }
         .buttonStyle(.plain)
         .tint(Color.primary)
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .padding(.bottom, 20)
-        .frame(maxWidth: 1100)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, contentInset)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .frame(maxWidth: PocketDesign.contentWidth)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var headerActions: some View {
@@ -158,7 +164,7 @@ struct LibraryView: View {
                 Button("Write to read…", systemImage: "square.and.pencil") { writing = true }
                     .accessibilityIdentifier("library-write")
             } label: {
-                Image(systemName: "plus").frame(width: 44, height: 44).contentShape(Rectangle())
+                PocketActionGlyph(name: "plus")
             }
             .accessibilityLabel("Add books").disabled(library.isWorking)
             .accessibilityIdentifier("library-add")
@@ -170,17 +176,16 @@ struct LibraryView: View {
                     .accessibilityIdentifier("article-add")
                 Button("Subscriptions", systemImage: "dot.radiowaves.left.and.right") { managingFeeds = true }
                     .accessibilityIdentifier("article-subscriptions")
-            } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
+            } label: { PocketActionGlyph(name: "plus") }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .accessibilityLabel("Add to Articles").accessibilityIdentifier("article-add-menu")
         }
         if let openSettings {
             Button(action: openSettings) {
-                Label("Settings", systemImage: "gearshape")
-                    .font(.subheadline)
-                    .frame(minHeight: 44).contentShape(Rectangle())
+                PocketActionGlyph(name: "gearshape")
             }
             .accessibilityLabel("Settings")
+            .help("Settings")
             .accessibilityIdentifier("app-settings")
         }
     }
@@ -198,8 +203,7 @@ struct LibraryView: View {
                     .font(.headline)
                     .padding(.top, 4)
                 let shelf = readerShelf
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 180), spacing: 18, alignment: .top)],
-                          alignment: .leading, spacing: 22) {
+                LazyVGrid(columns: bookColumns, alignment: .leading, spacing: 22) {
                     ForEach(library.books.filter { !$0.isArticle && (search.isEmpty || $0.title.localizedStandardContains(search) || $0.author.localizedStandardContains(search)) }) { book in
                         Button { open(book) } label: {
                             BookTile(book: book, library: library, onReader: shelf?.item(for: book))
@@ -218,10 +222,10 @@ struct LibraryView: View {
                         .accessibilityIdentifier("library-add-hint")
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
-            .frame(maxWidth: 1100, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, contentInset)
+            .padding(.bottom, PocketDesign.pageInset)
+            .frame(maxWidth: PocketDesign.contentWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(targeted ? PocketPalette.selection : Color.clear)
         .dropDestination(for: URL.self) { urls, _ in
@@ -287,8 +291,8 @@ private struct ContinueReadingCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(14)
-            .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: 14))
+            .padding(PocketDesign.cardInset)
+            .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("continue-reading")
@@ -300,14 +304,37 @@ private struct BookTile: View {
     @ObservedObject var library: LibraryModel
     /// The reader's copy of this book, when the reader holds one.
     var onReader: ReaderShelf.Item?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                HStack(alignment: .top, spacing: 16) {
+                    BookCover(book: book, library: library, compact: true)
+                        .frame(width: 56, height: 84)
+                        .accessibilityHidden(true)
+                    details.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    BookCover(book: book, library: library)
+                        .aspectRatio(2 / 3, contentMode: .fit)
+                        .accessibilityHidden(true)
+                    details
+                }
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 6) {
-            BookCover(book: book, library: library)
-                .aspectRatio(2 / 3, contentMode: .fit)
-            Text(book.title).font(.subheadline.weight(.medium)).lineLimit(2)
+            Text(book.title).font(.subheadline.weight(.medium))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .fixedSize(horizontal: false, vertical: true)
             if !book.author.isEmpty {
-                Text(book.author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(book.author).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
             if book.progress > 0 {
                 ProgressView(value: book.progress).progressViewStyle(.pocketBar)
@@ -319,7 +346,6 @@ private struct BookTile: View {
                     .accessibilityIdentifier("on-reader-\(book.title)")
             }
         }
-        .contentShape(Rectangle())
     }
 }
 

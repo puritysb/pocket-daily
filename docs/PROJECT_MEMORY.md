@@ -4,6 +4,23 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## App design system — 2026-10-09 (local, not released)
+
+- `Sources/PocketDesign.swift` centralizes chrome typography, spacing, icon
+  slots, action targets and card metrics; `docs/DESIGN_SYSTEM.md` defines their
+  use. Paper/charcoal and amber remain the palette. Mac hides the duplicated
+  window title and lets the main header use that area, preserving the sidebar's
+  traffic-light inset. Library and reader content share a leading alignment.
+- Accessible Dynamic Type uses a one-column book row with untruncated titles
+  and tabs instead of a fixed-width sidebar. Standard-size layouts keep the
+  cover grid/sidebar. Native settings, menus and book/device rendering retain
+  their own semantics.
+- Verified iOS/macOS builds, six focused iPhone flows, three Mac QA/reading
+  tests and a final dark render, plus final large-text captures/tests on both
+  iPhone and iPad. Nineteen store screenshots and source validation pass.
+  Result paths are in `docs/IA_IMPLEMENTATION_REPORT.md`. The signed Mac app
+  was updated and its native titlebar/actions and saved edit entry were checked.
+
 ## UX handoff verification — 2026-10-09 (local, not released)
 
 - Reviewed the UX evaluation changes and added explicit UI assertions for
