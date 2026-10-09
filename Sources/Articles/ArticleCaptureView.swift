@@ -22,7 +22,7 @@ struct ArticleCaptureView: View {
             Form {
                 Section("Article link") {
                     TextField("https://…", text: $source).disabled(busy).accessibilityIdentifier("article-url")
-                    Button("Get article text") { fetch() }.disabled(busy || source.isEmpty)
+                    Button("Get Article Text") { fetch() }.disabled(busy || source.isEmpty)
                 }
                 Section("Check the text before saving") {
                     TextField("Title", text: $title).accessibilityIdentifier("article-title")
@@ -32,16 +32,16 @@ struct ArticleCaptureView: View {
                 }
                 .disabled(busy)
                 if busy { ProgressView("Preparing article…") }
-                if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("article-error") }
+                if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).accessibilityIdentifier("article-error") }
             }
             .formStyle(.grouped)
-            .navigationTitle("Save an article")
+            .navigationTitle("Save an Article")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { work?.cancel(); dismiss(); completed() }.disabled(saving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(text.isEmpty ? "Save link" : "Save") { save() }.disabled(busy || (text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && source.isEmpty))
+                    Button(text.isEmpty ? "Save Link" : "Save") { save() }.disabled(busy || (text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && source.isEmpty))
                         .accessibilityIdentifier("article-save")
                 }
             }

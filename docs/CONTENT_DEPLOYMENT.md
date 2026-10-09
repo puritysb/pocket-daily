@@ -32,7 +32,7 @@ unresolved record before any staging, and never overwrites it. Malformed,
 oversized or unsupported records fail closed. The store is one app-owned actor,
 not a cross-process lock or a power-loss durability guarantee.
 
-“Archive pending check…” is an explicit, separately confirmed local action for
+“Archive Pending Check…” is an explicit, separately confirmed local action for
 an unreachable reader or permanently unconfirmable intent. It copies the exact
 current record to a unique sibling archive before clearing the matching pending
 record. A mismatch or persistence error retains the unknown state. This never

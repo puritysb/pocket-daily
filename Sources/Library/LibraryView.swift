@@ -33,7 +33,7 @@ struct LibraryView: View {
     private var bookColumns: [GridItem] {
         dynamicTypeSize.isAccessibilitySize
             ? [GridItem(.flexible(), alignment: .leading)]
-            : [GridItem(.adaptive(minimum: 128, maximum: 180), spacing: 18, alignment: .top)]
+            : [GridItem(.adaptive(minimum: 128, maximum: 180), spacing: 16, alignment: .top)]
     }
 
     struct SharedBook: Identifiable {
@@ -58,7 +58,7 @@ struct LibraryView: View {
                     case .books: books
                     case .articles: ArticleShelf(model: model, library: library, read: open, inbox: inbox,
                                                  adding: $addingArticle, managingFeeds: $managingFeeds, sendToReader: sendToReader,
-                                                 search: search, contentInset: contentInset)
+                                                 search: $search, contentInset: contentInset)
                     }
                 }
                 .safeAreaInset(edge: .top, spacing: 0) {
@@ -69,8 +69,8 @@ struct LibraryView: View {
                             TextField(shelf == .books ? "Search books and authors" : "Search articles", text: $search)
                                 .textFieldStyle(.plain).accessibilityIdentifier("library-search")
                             if !search.isEmpty {
-                                Button { search = "" } label: { PocketSymbol("xmark.circle.fill", role: .action) }
-                                    .buttonStyle(.plain).accessibilityLabel("Clear search")
+                                Button { search = "" } label: { PocketActionGlyph(name: "xmark.circle.fill") }
+                                    .buttonStyle(.plain).accessibilityLabel("Clear Search")
                                     .accessibilityIdentifier("library-clear-search")
                             }
                         }
@@ -92,7 +92,7 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $writing) { LibraryTextComposer(library: library) }
             .sheet(item: $sharing) { shared in
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text(shared.title).font(.headline)
                     Text("Send this exact file to your other devices and open it there with Pocket Daily. The same file is recognized as the same book, so you can continue where you left off.")
                         .font(.callout).foregroundStyle(.secondary)
@@ -117,7 +117,7 @@ struct LibraryView: View {
 
     /// One title row with actions; only actionable reader state adds a line.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 16) {
                 if showsShelfMenu {
                     Menu {
@@ -141,7 +141,11 @@ struct LibraryView: View {
                 headerActions
             }
             if let openDevice, model.device.link != .offline || model.hasKnownReader {
-                Button(action: openDevice) { DeviceStatusLabel(device: model.device) }
+                Button(action: openDevice) {
+                    DeviceStatusLabel(device: model.device)
+                        .frame(minHeight: PocketDesign.navigationTarget, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
                     .buttonStyle(.plain)
                     .padding(.top, 4)
                     .accessibilityIdentifier("library-device-status")
@@ -159,20 +163,20 @@ struct LibraryView: View {
     @ViewBuilder private var headerActions: some View {
         if shelf == .books {
             Menu {
-                Button("Import books…", systemImage: "doc.badge.plus") { importing = true }
+                Button("Import Books…", systemImage: "doc.badge.plus") { importing = true }
                     .accessibilityIdentifier("library-import")
-                Button("Write to read…", systemImage: "square.and.pencil") { writing = true }
+                Button("Write to Read…", systemImage: "square.and.pencil") { writing = true }
                     .accessibilityIdentifier("library-write")
             } label: {
                 PocketActionGlyph(name: "plus")
             }
-            .accessibilityLabel("Add books").disabled(library.isWorking)
+            .accessibilityLabel("Add Books").disabled(library.isWorking)
             .accessibilityIdentifier("library-add")
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
         if shelf == .articles {
             Menu {
-                Button("Add article", systemImage: "doc.badge.plus") { addingArticle = true }
+                Button("Add Article", systemImage: "doc.badge.plus") { addingArticle = true }
                     .accessibilityIdentifier("article-add")
                 Button("Subscriptions", systemImage: "dot.radiowaves.left.and.right") { managingFeeds = true }
                     .accessibilityIdentifier("article-subscriptions")
@@ -203,8 +207,17 @@ struct LibraryView: View {
                     .font(.headline)
                     .padding(.top, 4)
                 let shelf = readerShelf
-                LazyVGrid(columns: bookColumns, alignment: .leading, spacing: 22) {
-                    ForEach(library.books.filter { !$0.isArticle && (search.isEmpty || $0.title.localizedStandardContains(search) || $0.author.localizedStandardContains(search)) }) { book in
+                let books = library.books.filter { !$0.isArticle && (search.isEmpty || $0.title.localizedStandardContains(search) || $0.author.localizedStandardContains(search)) }
+                if books.isEmpty, !search.isEmpty {
+                    // A search that finds nothing says so and offers the way back.
+                    HStack(spacing: 12) {
+                        Text("No books match “\(search)”.").font(.callout).foregroundStyle(.secondary)
+                        Button("Clear Search") { search = "" }.buttonStyle(.bordered)
+                    }
+                    .accessibilityIdentifier("library-search-empty")
+                }
+                LazyVGrid(columns: bookColumns, alignment: .leading, spacing: 20) {
+                    ForEach(books) { book in
                         Button { open(book) } label: {
                             BookTile(book: book, library: library, onReader: shelf?.item(for: book))
                         }
@@ -233,15 +246,17 @@ struct LibraryView: View {
             return true
         } isTargeted: { targeted = $0 }
         .overlay {
-            if library.isWorking { ProgressView("Adding…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) }
+            if library.isWorking { ProgressView("Adding…").padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius)) }
         }
     }
 
     @ViewBuilder private var messages: some View {
         if let error = library.error {
-            Label(error, systemImage: "exclamationmark.triangle")
-                .font(.callout).foregroundStyle(.red)
-                .onTapGesture { library.error = nil }
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                PocketStatusLabel(error, tone: .failure).font(.callout)
+                Spacer(minLength: 0)
+                Button("Dismiss") { library.error = nil }.buttonStyle(.borderless).font(.callout)
+            }
         } else if let notice = library.notice {
             Text(notice).font(.callout).foregroundStyle(.secondary)
                 .task { try? await Task.sleep(for: .seconds(4)); library.notice = nil }
@@ -250,7 +265,7 @@ struct LibraryView: View {
 
     @ViewBuilder private func menu(for book: LibraryBook) -> some View {
         Button("Read", systemImage: "book") { open(book) }
-        Button("Share book file…", systemImage: "square.and.arrow.up") { share(book) }
+        Button("Share Book File…", systemImage: "square.and.arrow.up") { share(book) }
         if let sendToReader {
             Button("Send to Reader…", systemImage: "arrow.up.doc") { sendToReader(book) }
                 .accessibilityIdentifier("send-book-to-reader")
@@ -293,6 +308,7 @@ private struct ContinueReadingCard: View {
             }
             .padding(PocketDesign.cardInset)
             .background(PocketPalette.panel, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+            .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(PocketPalette.line) }
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("continue-reading")
@@ -341,7 +357,7 @@ private struct BookTile: View {
             }
             if let onReader {
                 Label(onReader.percentage.map { "On reader · \(Int(($0 * 100).rounded()))%" } ?? "On reader",
-                      systemImage: "checkmark.circle")
+                      systemImage: "rectangle.portrait")
                     .font(.caption2).foregroundStyle(.secondary)
                     .accessibilityIdentifier("on-reader-\(book.title)")
             }

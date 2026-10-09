@@ -100,13 +100,13 @@ iOS 활성화에서는 foreground 상태 복원을 먼저 처리한 뒤 위치 �
 펌웨어 계약 원본은 형제 저장소 `docs/reading-sync-ble-v1.md`다. 같은 목록·오퍼 JSON을 본딩된
 Nearby Sync 서비스로 나른다. 하드웨어 검증 전이다.
 
-- 페어링: Device → Reading sync over Bluetooth → Pair reader, 또는 Connect directly. 리더는
+- 페어링: Device → Reading sync over Bluetooth → Pair Reader, 또는 Connect Directly. 리더는
   Pocket Daily → Sync 메뉴에서 **Direct connection**을 골라야 BLE 광고를 시작한다(Sync 메뉴 자체는
   광고하지 않는다).
 - 리더는 본딩을 2개까지 저장하고(`CONFIG_BT_NIMBLE_MAX_BONDS 2`) 세 번째 기기가 페어링하면 가장 오래된 것을
   지운다. 펌웨어 재설치로 NVS가 지워져도 같다. 이때 Apple 기기는 옛 키로 `CBError.peerRemovedPairingInformation`을
   받으며, 앱은 시스템 Bluetooth 설정에서 `Pocket-…`를 Forget This Device한 뒤 다시 페어링하라고 안내한다.
-- 기억: Connect directly(Nearby Sync)에서 인증된 연결(암호화 상태 읽기 + 이벤트 구독)이 되면 앱은
+- 기억: Connect Directly(Nearby Sync)에서 인증된 연결(암호화 상태 읽기 + 이벤트 구독)이 되면 앱은
   주변기기 식별자와 상태의 `ID`, `MODEL`만 UserDefaults `readerLink.remembered.v1`에 저장한다.
   패스키·핫스팟 정보는 저장하지 않는다. 페어링한 리더가 없으면 Bluetooth를 켜지 않는다(권한 창 없음).
 - 링크(`Sources/Sync/ReaderBluetoothLink.swift`): 스캔하지 않고 기억한 주변기기에 대기 `connect`만
@@ -127,7 +127,7 @@ Nearby Sync 서비스로 나른다. 하드웨어 검증 전이다.
   잡고, 시스템이 시간을 먼저 끝내면 그때 바로 다시 건다.
 - 보고: 목록을 병합하기 시작한 뒤의 실패와 목록 자체의 오류(`ERR`, CRC·형식)는 설정의 "마지막
   교환 실패"에 남고, 받은 위치는 유지된다. 다른 리더·구 펌웨어·응답 없음은 조용히 넘어간다.
-- 물러섬: Connect directly가 스캔·연결 중이면(`NearbySyncController.ownsBluetooth`) 진행 중인 교환을
+- 물러섬: Connect Directly가 스캔·연결 중이면(`NearbySyncController.ownsBluetooth`) 진행 중인 교환을
   끊고 대기 연결도 취소한다. 데모 모드와 "Your X3/X4 reader" 끄기도 같다. 페이지는 절대 옮기지 않는다.
 
 ### 2026-09-30 통합 점검

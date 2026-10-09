@@ -44,7 +44,7 @@ struct ReaderStoragePanel: View {
     private func bytes(_ value: Int64) -> String { ByteCountFormatter.string(fromByteCount: value, countStyle: .binary) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             if let status = model.readerStatus {
                 Label("SD card · books & articles", systemImage: "sdcard")
                 if model.isDemoMode {
@@ -67,16 +67,16 @@ struct ReaderStoragePanel: View {
                     Text("Connect a reader to browse its SD card.").font(.caption).foregroundStyle(.secondary)
                 } else if (status.readerFiles ?? 0) >= 1 {
                     HStack {
-                        Button("Browse files") { browsing = true }.accessibilityIdentifier("reader-browse-files")
+                        Button("Browse Files") { browsing = true }.accessibilityIdentifier("reader-browse-files")
                         Spacer()
-                        Button(model.readerSpace?.deviceID == status.deviceID ? "Refresh usage" : "Check usage") { model.refreshReaderSpace() }.font(.caption)
+                        Button(model.readerSpace?.deviceID == status.deviceID ? "Refresh Usage" : "Check Usage") { model.refreshReaderSpace() }.font(.caption)
                     }
                     .disabled(model.isWorking || model.isDemoMode)
                 } else {
                     Text("Update reader firmware to view SD usage and manage files in Sync.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if let error = model.readerFilesError { Text(error).font(.caption).foregroundStyle(.secondary) }
+                if let error = model.readerFilesError { PocketStatusLabel(error, tone: .failure).font(.caption) }
             }
         }
         .font(.callout)
@@ -122,7 +122,7 @@ private struct ReaderFileBrowser: View {
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     if folder != "/" {
-                        Button("Parent folder", systemImage: "arrow.up") {
+                        Button("Parent Folder", systemImage: "arrow.up") {
                             folder = (folder as NSString).deletingLastPathComponent
                             if folder.isEmpty { folder = "/" }
                             model.loadReaderFiles(folder)
@@ -133,7 +133,7 @@ private struct ReaderFileBrowser: View {
                     if model.isWorking { ProgressView() }
                 }.disabled(model.isWorking)
                 if model.isReadingStorage { Button("Cancel") { model.cancelStorageRead() } }
-                if let error = model.readerFilesError { Text(error).font(.callout).foregroundStyle(.red) }
+                if let error = model.readerFilesError { PocketStatusLabel(error, tone: .failure).font(.callout) }
                 List {
                     ForEach(page?.entries ?? []) { entry in
                         HStack {
@@ -154,7 +154,7 @@ private struct ReaderFileBrowser: View {
                         }.disabled(model.isWorking || model.readerStatus == nil)
                     }
                     if let page, page.nextCursor > 0 {
-                        Button("Next files") { model.loadReaderFiles(folder, cursor: page.nextCursor) }
+                        Button("Next Files") { model.loadReaderFiles(folder, cursor: page.nextCursor) }
                             .disabled(model.isWorking)
                     } else if page?.entries.isEmpty == true {
                         Text("No visible files in this folder.").foregroundStyle(.secondary)
@@ -162,7 +162,7 @@ private struct ReaderFileBrowser: View {
                 }
             }
             .padding()
-            .navigationTitle("Reader files")
+            .navigationTitle("Reader Files")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task { model.loadReaderFiles(folder) }
             .confirmationDialog("Delete from SD card?", isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } }), titleVisibility: .visible) {

@@ -94,4 +94,15 @@ enum ContentSendStatus: Equatable {
         case .demo, .disconnected, .empty: "info.circle"
         }
     }
+
+    /// The shared status meaning; `symbol` stays the more specific glyph.
+    var tone: StatusTone {
+        switch self {
+        case .shown: .success
+        case .sending, .changed, .ready: .onReader
+        case .storedNotShown, .needsCheck, .unsupported: .pending
+        case .invalid, .failed: .failure
+        case .demo, .disconnected, .empty: .neutral
+        }
+    }
 }

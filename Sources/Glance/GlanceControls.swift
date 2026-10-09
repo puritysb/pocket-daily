@@ -25,7 +25,11 @@ struct WeatherControls: View {
                     Button("Change") { cityQuery = place.name; editingCity = true }
                         .buttonStyle(.borderless).font(.caption)
                 }
-                Text(weatherStatus).font(.caption).foregroundStyle(settings.weatherError == nil ? Color.secondary : .orange)
+                if settings.weatherError == nil {
+                    Text(weatherStatus).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    PocketStatusLabel(weatherStatus, tone: .failure).font(.caption)
+                }
             } else {
                 HStack(spacing: 8) {
                     TextField("City for weather", text: $cityQuery)
@@ -42,7 +46,7 @@ struct WeatherControls: View {
                         if editingCity { Button("Cancel") { editingCity = false; findError = nil } }
                     }
                 }
-                if let findError { Text(findError).font(.caption).foregroundStyle(.red) }
+                if let findError { Text(findError).font(.caption).foregroundStyle(PocketPalette.critical) }
                 Text("Choose a city. Your current location is not used.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -99,7 +103,7 @@ private struct WeatherSourceCredit: View {
                 Text("Apple Weather").font(.caption)
             }
             if let legal = attribution?.legal ?? URL(string: "https://developer.apple.com/weatherkit/data-source-attribution/") {
-                Link("Data sources", destination: legal).font(.caption2)
+                Link("Data Sources", destination: legal).font(.caption2)
                     .accessibilityIdentifier("weather-data-sources")
             }
         }
@@ -131,14 +135,14 @@ struct CalendarControls: View {
             } else {
                 if settings.includeEvents {
                     HStack {
-                        Label("Calendar connected", systemImage: "checkmark.circle")
-                            .font(.subheadline).foregroundStyle(.secondary)
+                        PocketStatusLabel("Calendar connected", tone: .success, symbol: "checkmark.circle")
+                            .font(.subheadline)
                         Spacer()
                         Menu {
                             Button("Disconnect Calendar") { setEvents(false) }
-                        } label: { Image(systemName: "ellipsis.circle") }
+                        } label: { PocketActionGlyph(name: "ellipsis") }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                        .accessibilityLabel("Calendar options")
+                        .accessibilityLabel("Calendar Options")
                     }
                 } else {
                     Button("Connect Calendar", systemImage: "calendar.badge.plus") { setEvents(true) }
@@ -146,7 +150,7 @@ struct CalendarControls: View {
                         .accessibilityIdentifier("glance-events")
                 }
                 if settings.includeEvents {
-                    Button(settings.selectedCalendarIDs == nil ? "Choose calendars · All" : "Choose calendars · \(settings.selectedCalendarIDs?.count ?? 0) selected") {
+                    Button(settings.selectedCalendarIDs == nil ? "Choose Calendars · All" : "Choose Calendars · \(settings.selectedCalendarIDs?.count ?? 0) Selected") {
                         choosingCalendars.toggle()
                         reloadCalendars()
                     }
@@ -167,25 +171,28 @@ struct CalendarControls: View {
                                 }))
                             }
                             let missing = Set(settings.selectedCalendarIDs ?? []).subtracting(calendars.map(\.id)).count
-                            if missing > 0 { Text("\(missing) selected calendars unavailable. Selection kept.").font(.caption).foregroundStyle(.orange) }
+                            if missing > 0 {
+                                PocketStatusLabel("\(missing) selected calendars unavailable · selection kept", tone: .pending,
+                                                  symbol: "exclamationmark.triangle").font(.caption)
+                            }
                             if settings.selectedCalendarIDs?.isEmpty == true { Text("No calendar events selected").font(.caption).foregroundStyle(.secondary) }
                         }
                     }
                 }
                 if CalendarSource.isDenied || (settings.includeEvents && !CalendarSource.isAuthorized) {
-                    Button("Check Calendar access") { setEvents(true) }
+                    Button("Check Calendar Access") { setEvents(true) }
                         .disabled(requestingAccess)
                         .accessibilityIdentifier("glance-check-calendar-access")
                     #if os(macOS)
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                        Link("Open Calendar privacy settings", destination: url)
+                        Link("Open Calendar Privacy Settings", destination: url)
                     }
                     #else
                     if let url = URL(string: "app-settings:") { Link("Open Settings", destination: url) }
                     #endif
                 }
                 if requestingAccess { ProgressView("Waiting for Calendar access…").font(.caption) }
-                if let note { Text(note).font(.caption).foregroundStyle(.orange) }
+                if let note { PocketStatusLabel(note, tone: .pending, symbol: "exclamationmark.triangle").font(.caption) }
             }
         }
         .onDisappear { work?.cancel() }
@@ -214,38 +221,6 @@ struct CalendarControls: View {
                 reloadCalendars()
             } else {
                 note = "Calendar access is off. Allow Pocket Daily in Settings → Privacy & Security → Calendars."
-            }
-        }
-    }
-}
-
-/// One delivery status for the panel's sources, outside their individual controls.
-struct GlanceDeliveryStatus: View {
-    @ObservedObject var settings: GlanceSettings
-    @ObservedObject var model: PocketModel
-
-    var body: some View {
-        if model.readerStatus != nil, !model.isDemoMode, !model.canSendGlance {
-            Label("Weather and events need firmware \(FirmwareGuidance.minimumRecommended) or later. Open My Reader → Reader options → Manage reader to update.", systemImage: "exclamationmark.triangle")
-                .font(.caption).foregroundStyle(.orange)
-                .accessibilityIdentifier("glance-unsupported")
-        } else if settings.hasUnappliedSourceChanges {
-            Text("Content changes saved locally · Apply content to Reader")
-                .font(.caption).foregroundStyle(.secondary)
-        } else if model.canSendGlance, settings.isConfigured {
-            HStack {
-                Group {
-                    if let error = model.glanceError { Text("Not sent · \(error)").foregroundStyle(.orange) }
-                    else if let sent = model.glanceSentAt {
-                        Text("Sent at \(sent.formatted(date: .omitted, time: .shortened))").foregroundStyle(.secondary)
-                    } else { Text("Updates when your reader connects").foregroundStyle(.secondary) }
-                }.font(.caption)
-                Spacer()
-                if model.glanceError != nil {
-                    Button("Retry") { model.refreshGlance(force: true) }
-                        .buttonStyle(.borderless).font(.caption).disabled(model.isWorking)
-                        .accessibilityIdentifier("glance-send")
-                }
             }
         }
     }

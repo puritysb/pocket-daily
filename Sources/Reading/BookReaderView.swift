@@ -141,7 +141,7 @@ struct BookReaderView: View {
 
     private var chrome: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 18) {
+            HStack(spacing: 8) {
                 Button(action: finish) {
                     Label("Library", systemImage: "chevron.backward").font(.body.weight(.semibold))
                 }
@@ -153,11 +153,11 @@ struct BookReaderView: View {
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Button { showingContents = true } label: { Image(systemName: "list.bullet") }
+                Button { showingContents = true } label: { PocketActionGlyph(name: "list.bullet") }
                     .accessibilityLabel("Contents")
                     .disabled(session.phase != .ready || session.toc.isEmpty)
-                Button { showingAppearance = true } label: { Image(systemName: "textformat.size") }
-                    .accessibilityLabel("Text and page")
+                Button { showingAppearance = true } label: { PocketActionGlyph(name: "textformat.size") }
+                    .accessibilityLabel("Text and Page")
                     .accessibilityIdentifier("reader-appearance")
                     .disabled(session.phase != .ready)
             }
@@ -238,10 +238,18 @@ struct BookReaderView: View {
                     showingContents = false
                     session.chromeVisible = false
                 } label: {
-                    Text(item.label)
-                        .padding(.leading, CGFloat(item.depth) * 16)
-                        .foregroundStyle(item.label == session.position?.chapter ? Color.accentColor : .primary)
+                    // The current chapter is marked by a checkmark, not color alone.
+                    HStack {
+                        Text(item.label)
+                            .padding(.leading, CGFloat(item.depth) * 16)
+                            .foregroundStyle(item.label == session.position?.chapter ? Color.accentColor : .primary)
+                        Spacer(minLength: 8)
+                        if item.label == session.position?.chapter {
+                            Image(systemName: "checkmark").foregroundStyle(Color.accentColor).accessibilityHidden(true)
+                        }
+                    }
                 }
+                .accessibilityAddTraits(item.label == session.position?.chapter ? .isSelected : [])
             }
             .navigationTitle("Contents")
             .toolbar {
@@ -265,7 +273,7 @@ struct BookReaderView: View {
                     .font(.caption)
             }
             Spacer()
-            Button("Go") {
+            Button("Go to \(percent(suggestion.position.fraction))") {
                 session.go(to: suggestion.position)
                 self.suggestion = nil
             }
@@ -274,12 +282,12 @@ struct BookReaderView: View {
             Button {
                 sync.dismiss(suggestion)
                 self.suggestion = nil
-            } label: { Image(systemName: "xmark") }
+            } label: { PocketActionGlyph(name: "xmark") }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Stay here")
+                .accessibilityLabel("Stay Here")
         }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .padding(PocketDesign.cardInset)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
         .foregroundStyle(.primary)
     }
 
@@ -334,13 +342,13 @@ struct ReaderAppearancePanel: View {
                             Button { store.appearance.stepFont(-1) } label: {
                                 Image(systemName: "textformat.size.smaller").frame(minWidth: 36)
                             }
-                            .accessibilityLabel("Smaller text")
+                            .accessibilityLabel("Smaller Text")
                             .disabled(store.appearance.fontScale == scales.first)
                             Text("\(store.appearance.fontScale)%").monospacedDigit().frame(minWidth: 52)
                             Button { store.appearance.stepFont(1) } label: {
                                 Image(systemName: "textformat.size.larger").frame(minWidth: 36)
                             }
-                            .accessibilityLabel("Larger text")
+                            .accessibilityLabel("Larger Text")
                             .disabled(store.appearance.fontScale == scales.last)
                         }
                         .buttonStyle(.bordered)

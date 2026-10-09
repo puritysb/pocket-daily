@@ -11,21 +11,21 @@ struct ContentImportReview: View {
         NavigationStack {
             Form {
                 Text(proposal.sourceName).font(.headline)
-                Text("Replace swaps every card in this editor for the set below. The reader does not change until you choose Send.")
+                Text("Replace swaps every card in this editor for the set below. The reader does not change until you choose Apply to Reader.")
                     .font(.caption)
                 if proposal.draft.cards.isEmpty {
-                    Text("The imported draft is empty. Confirming will remove all cards from this editor.")
-                        .foregroundStyle(.orange)
+                    PocketStatusLabel("The imported draft is empty. Confirming will remove all cards from this editor.",
+                                      tone: .pending, symbol: "exclamationmark.triangle")
                 }
                 cards("Current cards", draft: proposal.before)
                 cards("Imported cards", draft: proposal.draft)
-                if let error { Text(error).foregroundStyle(.red) }
+                if let error { PocketStatusLabel(error, tone: .failure) }
             }
             .navigationTitle("Replace cards?")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: cancel) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Replace draft", action: confirm).accessibilityIdentifier("content-confirm-import")
+                    Button("Replace Draft", role: .destructive, action: confirm).accessibilityIdentifier("content-confirm-import")
                 }
             }
         }
@@ -70,7 +70,7 @@ struct ContentImagePreview: View {
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             } else if failed {
-                Text("Image cannot be previewed. Replace or remove it.").font(.caption).foregroundStyle(.red)
+                Text("Image cannot be previewed. Replace or remove it.").font(.caption).foregroundStyle(PocketPalette.critical)
             } else { ProgressView() }
         }
         .task(id: data) {
@@ -93,12 +93,12 @@ struct ContentJournalRecovery: View {
 
     var body: some View {
         if let error = model.activationRecordError, !model.isDemoMode {
-            Text("Saved activation record could not be read: \(error)")
-                .font(.caption).foregroundStyle(.red)
-            Button("Preserve unreadable record and recover…") { confirming = true }
+            PocketStatusLabel("Saved activation record could not be read · \(error)", tone: .failure)
+                .font(.caption)
+            Button("Preserve Unreadable Record and Recover…") { confirming = true }
                 .disabled(model.isWorking)
                 .confirmationDialog("Recover local activation tracking?", isPresented: $confirming, titleVisibility: .visible) {
-                    Button("Preserve record and reset tracking", role: .destructive) {
+                    Button("Preserve Record and Reset Tracking", role: .destructive) {
                         Task { await model.recoverContentActivationRecord() }
                     }
                 } message: {
@@ -106,7 +106,7 @@ struct ContentJournalRecovery: View {
                 }
         }
         if let backup = model.activationRecordBackup, !model.isDemoMode {
-            ShareLink("Export preserved activation record", item: backup)
+            ShareLink("Export Preserved Activation Record", item: backup)
         }
     }
 }
@@ -116,16 +116,19 @@ struct ContentDeploymentStatus: View {
     @ObservedObject var model: PocketModel
     @State private var confirmingArchive = false
     var body: some View {
-        Text(label).font(.caption).accessibilityIdentifier("content-deployment-state")
+        PocketStatusLabel(label, tone: tone).font(.caption).accessibilityIdentifier("content-deployment-state")
         if deployment.phase == .needsConfirmation {
-            Button("Check activation outcome") { model.confirmContentActivation() }
+            Button("Check Activation Outcome") { model.confirmContentActivation() }
                 .disabled(model.isWorking || model.isDemoMode || model.readerStatus == nil)
                 .accessibilityIdentifier("content-confirm-activation")
-            Button("Archive pending check…") { confirmingArchive = true }
+            if model.readerStatus == nil && !model.isDemoMode {
+                Text("Connect the reader to check.").font(.caption).foregroundStyle(.secondary)
+            }
+            Button("Archive Pending Check…") { confirmingArchive = true }
                 .disabled(model.isWorking || model.isDemoMode)
                 .confirmationDialog("Stop waiting for this activation result?", isPresented: $confirmingArchive,
                                     titleVisibility: .visible) {
-                    Button("Preserve record and stop checking", role: .destructive) {
+                    Button("Preserve Record and Stop Checking", role: .destructive) {
                         Task { await model.archivePendingContentActivation() }
                     }
                 } message: {
@@ -133,9 +136,19 @@ struct ContentDeploymentStatus: View {
                 }
         }
         if let archive = deployment.archivedRecord {
-            ShareLink("Export archived activation record", item: archive)
+            ShareLink("Export Archived Activation Record", item: archive)
         }
     }
+    private var tone: StatusTone {
+        switch deployment.phase {
+        case .idle: .neutral
+        case .checking, .preparing, .uploading, .activating, .confirming: .onReader
+        case let .complete(active): model.contentRedrawReceipt == active ? .success : .pending
+        case .failed: .failure
+        case .cancelled, .needsConfirmation, .archived: .pending
+        }
+    }
+
     private var label: String {
         switch deployment.phase {
         case .idle: "Ready"

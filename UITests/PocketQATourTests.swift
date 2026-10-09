@@ -76,7 +76,7 @@ final class PocketQATourTests: XCTestCase {
         app.open("My Reader")
         sleep(1)
         attach(app, "11-my-reader")
-        for (index, destination) in ["My Reader", "Reader settings", "Manage reader"].enumerated() {
+        for (index, destination) in ["My Reader", "Reader Settings", "Manage Reader"].enumerated() {
             app.open(destination)
             sleep(2)
             attach(app, "\(12 + index)-\(destination.replacingOccurrences(of: " ", with: "-").lowercased())")
@@ -87,7 +87,7 @@ final class PocketQATourTests: XCTestCase {
             connect.tap()
             sleep(1)
             attach(app, "16-connect")
-            let find = app.buttons["Find on same Wi-Fi"]
+            let find = app.buttons["Find on Same Wi-Fi"]
             if find.exists {
                 find.tap()
                 sleep(6)
@@ -134,7 +134,7 @@ final class PocketQATourTests: XCTestCase {
         app.openScreen("Reading")
         sleep(2)
         attach(app, "demo-06-reading")
-        app.open("Manage reader")
+        app.open("Manage Reader")
         sleep(1)
         attach(app, "demo-07-device")
     }

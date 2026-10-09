@@ -102,8 +102,8 @@ where Item.AllCases: RandomAccessCollection, Item.RawValue == String {
                 if item != rows.last { Divider().padding(.leading, 10) }
             }
         }
-        .background(framed ? PocketPalette.panel : .clear, in: RoundedRectangle(cornerRadius: 10))
-        .overlay { RoundedRectangle(cornerRadius: 10).stroke(framed ? PocketPalette.line : .clear) }
+        .background(framed ? PocketPalette.panel : .clear, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+        .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(framed ? PocketPalette.line : .clear) }
     }
 
     @ViewBuilder private func header(_ item: Item) -> some View {
@@ -125,13 +125,14 @@ where Item.AllCases: RandomAccessCollection, Item.RawValue == String {
                 .disabled(!canToggle(item, on: index != nil))
                 .accessibilityHint(detail(item) ?? "")
                 .accessibilityActions {
-                    if let index, index > 0 { Button("Move up") { selection.shift(at: index, by: -1) } }
-                    if let index, index + 1 < selection.count { Button("Move down") { selection.shift(at: index, by: 1) } }
+                    if let index, index > 0 { Button("Move Up") { selection.shift(at: index, by: -1) } }
+                    if let index, index + 1 < selection.count { Button("Move Down") { selection.shift(at: index, by: 1) } }
                 }
                 .accessibilityIdentifier("\(identifier)-\(item.rawValue)")
         }
         .padding(.vertical, 7)
         .padding(.horizontal, 10)
+        .frame(minHeight: PocketDesign.navigationTarget)
         .contentShape(Rectangle())
         .help(detail(item) ?? "")
         .contextMenu {

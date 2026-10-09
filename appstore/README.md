@@ -95,15 +95,15 @@ Extraction failures keep a link and preview; Get full text allows retry or paste
 Subscriptions and page requests go directly to publishers without browser cookies,
 credentials, scripts, images or an extraction service. Demo mode does not fetch feeds.
 
-Tap an offline article to read in the app; its menu offers Save for later, read/unread,
+Tap an offline article to read in the app; its menu offers Save for Later, read/unread,
 Edit article, Send to Reader… and Delete. Reading and saving are independent.
 Unsubscribing retains collected articles; refresh does not restore deleted feed articles.
 Content, subscriptions and these flags stay on this device. Reader preparation and
 sending remain explicit and use the existing EPUB format. The iOS/iPadOS Share →
 Pocket Daily extension and + → Add article remain available for manual captures.
 
-Library and My Reader are the two main destinations. My Reader combines device status, pending work and its inventory. Reader settings
-contains Home, Sleep and Reading preferences; Reader options (•••) opens Manage reader. Sending selected content uses a task sheet
+Library and My Reader are the two main destinations. My Reader combines device status, pending work and its inventory. Reader Settings
+contains Home, Sleep and Reading Preferences; Reader Options (•••) opens Manage Reader. Sending selected content uses a task sheet
 in the current window; its connection, send and result steps preserve the
 selection. On Mac, SD card is a destination in that same task; only the output
 folder is selected, and SD-copy results stay separate from wireless results.

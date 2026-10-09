@@ -10,7 +10,7 @@ struct ArticleShelf: View {
     @Binding var adding: Bool
     @Binding var managingFeeds: Bool
     var sendToReader: ((LibraryBook) -> Void)? = nil
-    var search: String = ""
+    @Binding var search: String
     var contentInset: CGFloat = PocketDesign.pageInset
     @State private var editing: ArticleRecord?
     @State private var deleting: ArticleSummary?
@@ -18,18 +18,24 @@ struct ArticleShelf: View {
     @State private var busy = false
     @State private var notice: String?
 
+    private var shownArticles: [ArticleSummary] {
+        inbox.visibleArticles.filter { search.isEmpty || $0.title.localizedStandardContains(search) || $0.preview.localizedStandardContains(search) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Menu {
-                    Button("New articles") { inbox.filter = .unread }
-                    Button("Saved articles") { inbox.filter = .saved }
-                    Button("All articles") { inbox.filter = .all }
+                    // A picker, so the current filter carries a checkmark.
+                    Picker("Show", selection: $inbox.filter) {
+                        ForEach([ArticleInboxModel.Filter.unread, .saved, .all], id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline).labelsHidden()
                     if !inbox.feeds.isEmpty {
-                        Divider()
-                        ForEach(inbox.feeds) { feed in
-                            Button(feed.title) { inbox.filter = .feed(feed.id) }
+                        Picker("Subscriptions", selection: $inbox.filter) {
+                            ForEach(inbox.feeds) { feed in Text(feed.title).tag(ArticleInboxModel.Filter.feed(feed.id)) }
                         }
+                        .pickerStyle(.inline).labelsHidden()
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -43,7 +49,7 @@ struct ArticleShelf: View {
                 if inbox.isRefreshing {
                     ProgressView().controlSize(.small)
                     Button { inbox.cancelRefresh() } label: { PocketActionGlyph(name: "stop.circle") }
-                        .accessibilityLabel("Stop refreshing")
+                        .accessibilityLabel("Stop Refreshing")
                 } else if !inbox.feeds.isEmpty {
                     Button { inbox.refresh() } label: { PocketActionGlyph(name: "arrow.clockwise") }
                         .accessibilityLabel("Refresh").disabled(model.isDemoMode)
@@ -56,19 +62,31 @@ struct ArticleShelf: View {
             List {
                 if busy { ProgressView("Preparing article…") }
                 if let notice { Text(notice).font(.callout).foregroundStyle(.secondary) }
-                if let error = error ?? inbox.error ?? library.error { Text(error).font(.callout).foregroundStyle(.red) }
+                if let message = error ?? inbox.error ?? library.error {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        PocketStatusLabel(message, tone: .failure).font(.callout)
+                        Spacer(minLength: 0)
+                        Button("Dismiss") { error = nil; inbox.error = nil; library.error = nil }
+                            .buttonStyle(.borderless).font(.callout)
+                    }
+                    .listRowBackground(Color.clear)
+                }
                 if inbox.failedFeeds > 0 {
                     Button { managingFeeds = true } label: {
                         Label("Some subscriptions could not refresh. Tap to review and retry.", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                             .font(.callout)
                     }.buttonStyle(.plain)
                 }
-                ForEach(inbox.visibleArticles.filter { search.isEmpty || $0.title.localizedStandardContains(search) || $0.preview.localizedStandardContains(search) }) { article in
+                ForEach(shownArticles) { article in
                     HStack(alignment: .top, spacing: 12) {
                         Button { article.hasText ? open(article) : review(article.id) } label: {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack(spacing: 6) {
-                                    if !article.isRead { Circle().fill(PocketPalette.ink).frame(width: 5, height: 5) }
+                                    if !article.isRead {
+                                        Circle().fill(PocketPalette.accent).frame(width: 6, height: 6).accessibilityHidden(true)
+                                        Text("New").fontWeight(.semibold).foregroundStyle(.primary)
+                                        Text("·")
+                                    }
                                     Text(article.feedTitle ?? URL(string: article.source)?.host ?? "Saved text")
                                         .lineLimit(1)
                                     Text("·")
@@ -115,17 +133,37 @@ struct ArticleShelf: View {
             }
             .listStyle(.plain).scrollContentBackground(.hidden)
             .overlay {
-                if inbox.visibleArticles.isEmpty && !busy && error == nil && inbox.error == nil && inbox.failedFeeds == 0 {
+                if shownArticles.isEmpty && !busy && error == nil && inbox.error == nil && inbox.failedFeeds == 0 {
+                    if !search.isEmpty {
+                        ContentUnavailableView {
+                            Label("No articles match “\(search)”", systemImage: "magnifyingglass")
+                        } actions: {
+                            Button("Clear Search") { search = "" }.buttonStyle(.bordered)
+                        }
+                        .accessibilityIdentifier("article-search-empty")
+                    } else {
                     ContentUnavailableView {
                         Label(inbox.filter == .saved ? "Keep something worth returning to" : "Room for a good read", systemImage: "doc.text")
                     } description: {
-                        Text(inbox.filter == .saved ? "Choose Save for later in an article’s menu. Reading and saving are separate, so your favourites stay here." :
-                            "Follow a publication or save a link with +. Read articles stay in All articles, ready whenever you need them.")
+                        Text(inbox.filter == .saved ? "Choose Save for Later in an article’s menu. Saved articles stay here." :
+                            "Follow a publication or save a link. Read articles stay in All Articles.")
                             .frame(maxWidth: 480)
+                    } actions: {
+                        // One next step: the empty filter leads back to the articles,
+                        // an empty collection to adding one.
+                        if inbox.filter == .saved {
+                            Button("Show All Articles") { inbox.filter = .all }
+                                .buttonStyle(.bordered)
+                        } else {
+                            Button("Add Article") { adding = true }
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityIdentifier("article-empty-add")
+                        }
                     }
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("article-empty-state")
+                    }
                 }
             }
         }
@@ -161,13 +199,13 @@ struct ArticleShelf: View {
     }
 
     @ViewBuilder private func actions(for article: ArticleSummary) -> some View {
-        Button(article.isArchived ? "Remove from saved" : "Save for later", systemImage: article.isArchived ? "bookmark.slash" : "bookmark") {
+        Button(article.isArchived ? "Remove from Saved" : "Save for Later", systemImage: article.isArchived ? "bookmark.slash" : "bookmark") {
             Task { await inbox.setArchived(article, !article.isArchived) }
         }
-        Button(article.isRead ? "Mark as unread" : "Mark as read", systemImage: "checkmark") {
+        Button(article.isRead ? "Mark as Unread" : "Mark as Read", systemImage: "checkmark") {
             Task { await inbox.setRead(article, !article.isRead) }
         }
-        Button(article.hasText ? "Edit article" : "Get full text", systemImage: "pencil") { review(article.id) }
+        Button(article.hasText ? "Edit Article" : "Get Full Text", systemImage: "pencil") { review(article.id) }
         Button("Send to Reader…", systemImage: "arrow.up.doc") { prepare(article) }
             .disabled(!article.hasText || sendToReader == nil)
         Divider()

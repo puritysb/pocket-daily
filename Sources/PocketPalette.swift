@@ -23,8 +23,14 @@ enum PocketPalette {
     static let line = adaptive(light: (0, 0, 0, 0.11), dark: (1, 1, 1, 0.12))
     /// The brand's amber: selection, progress, primary actions.
     static let accent = adaptive(light: (0.78, 0.46, 0.12), dark: (0.89, 0.6, 0.27))
-    /// A connected reader.
-    static let signal = adaptive(light: (0.22, 0.58, 0.38), dark: (0.38, 0.73, 0.52))
+    /// A connected reader and confirmed results. Dark enough in light mode
+    /// to stay legible as caption text on the paper workspace.
+    static let signal = adaptive(light: (0.13, 0.47, 0.28), dark: (0.38, 0.73, 0.52))
+    /// Stopped, unconfirmed, or needs a check before it continues. The
+    /// system orange is about 2:1 on the paper workspace, too faint for text.
+    static let caution = adaptive(light: (0.66, 0.33, 0.0), dark: (0.96, 0.62, 0.3))
+    /// Failed or blocked; the message names the recovery step.
+    static let critical = adaptive(light: (0.72, 0.15, 0.13), dark: (1, 0.48, 0.42))
     static let selection = accent.opacity(0.15)
 
     /// Placeholder book covers, when the EPUB brings none.
@@ -56,6 +62,55 @@ enum PocketPalette {
             return NSColor(srgbRed: value.0, green: value.1, blue: value.2, alpha: value.3)
         })
 #endif
+    }
+}
+
+/// Status color and symbol travel together, so a state is never told by
+/// color alone and each meaning has one look across the app.
+extension StatusTone {
+    var color: Color {
+        switch self {
+        case .success: PocketPalette.signal
+        case .pending: PocketPalette.caution
+        case .onReader: PocketPalette.accent
+        case .failure: PocketPalette.critical
+        case .neutral: .secondary
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .success: "checkmark.circle.fill"
+        case .pending: "pause.circle.fill"
+        case .onReader: "hand.tap.fill"
+        case .failure: "exclamationmark.triangle.fill"
+        case .neutral: "info.circle"
+        }
+    }
+}
+
+/// One status line: the tone colors the symbol and the words keep text
+/// contrast. Callers set the font; `symbol` overrides the tone's default
+/// where a more specific glyph says more (for example a progress arrow).
+struct PocketStatusLabel: View {
+    let text: String
+    let tone: StatusTone
+    var symbol: String?
+
+    init(_ text: String, tone: StatusTone, symbol: String? = nil) {
+        self.text = text
+        self.tone = tone
+        self.symbol = symbol
+    }
+
+    var body: some View {
+        Label {
+            Text(text)
+                .foregroundStyle(tone == .neutral ? .secondary : .primary)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: symbol ?? tone.symbol).foregroundStyle(tone.color)
+        }
     }
 }
 
@@ -116,12 +171,12 @@ struct AppAppearancePicker: View {
                         Text(option.title).font(.callout)
                     }
                     .frame(maxWidth: .infinity, minHeight: 64)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
                     .contentShape(Rectangle())
                     .background(appearance == option ? PocketPalette.selection : PocketPalette.panel,
-                                in: RoundedRectangle(cornerRadius: 12))
+                                in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: PocketDesign.cardRadius)
                             .strokeBorder(appearance == option ? PocketPalette.accent : PocketPalette.line,
                                           lineWidth: appearance == option ? 2 : 1)
                     }

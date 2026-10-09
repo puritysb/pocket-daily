@@ -133,7 +133,7 @@
 - 상단 `Home & Sleep` 문구 제거. 화면 설정을 먼저 표시하고, 아래 Reading에는 책/아티클 글자 크기만 유지.
   버튼 매핑 UI는 제거했으며 기기의 기존 값은 보존한다. 크기 변경 시 왼쪽에 읽기 예시를 표시
   (실제 EPUB 폰트/페이지와 구분), Back to layout으로 화면 편집에 복귀.
-  연결 전에도 편집하고 `Apply to reader`로만 전송. `Discard edits…`는 확인 후
+  연결 전에도 편집하고 `Apply to reader`로만 전송. `Discard Edits…`는 확인 후
   마지막 읽어온 설정으로 되돌리며 카드 편집은 유지한다. 연결 해제 때 편집 기준을 보존한다.
 - Reader의 반복 메모리 경고를 RAM/SD 사용량 막대로 대체. 상세 오류는 Troubleshooting에 유지.
   콘텐츠 준비 목록에 실제 SD 저장 경로 표시. Sync에서 SD 폴더 탐색·읽기 파일 삭제 추가.

@@ -29,7 +29,7 @@ names one platform. Record Pass, Fail, or Blocked with a short evidence referenc
    - Confirm the app reports version `1.0.0 (1)` and shows its local-first and
      independent-project notices.
 2. **Demo isolation**
-   - Choose **Try demo** under Reader and inspect Home & Sleep, including My
+   - Choose **Try Demo** under Reader and inspect Home & Sleep, including My
      cards and a QR code: previews are captioned as sample content and Apply
      stays disabled.
    - Confirm transfer and settings mutation remain disabled in demo mode.

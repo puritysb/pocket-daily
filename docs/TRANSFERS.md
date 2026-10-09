@@ -21,17 +21,17 @@ Implemented locally 2026-09-27; physical acceptance remains required.
   keeps the earlier result; "nothing published yet" is shown as such, not as a
   connection problem. The card shows the latest version
   and publication date. Update is offered against the connected reader; its
-  acknowledgement starts download and transfer. **Download update for later**
+  acknowledgement starts download and transfer. **Download Update for Later**
   downloads and validates an official image while internet is available, without
   connecting or sending. The prepared image can later be sent explicitly over
   Same Wi-Fi or Direct connection. Cancel stops and cleans up.
-  Local firmware import is not offered in store builds. Prepared/interrupted updates show Send update/Cancel,
+  Local firmware import is not offered in store builds. Prepared/interrupted updates show Send Update/Cancel,
   with a local-only recovery action only after cleanup fails. The image
   is validated before preparation. Transfer publishes `/update.bin` on SD; it
   does not install it. The reader still requires its own confirmation before
   writing internal flash. Cancelling an app download sends nothing to the reader.
 - **Development builds only** (`#if DEBUG`, added 2026-10-03): the Firmware card
-  adds **Send a local build…** while a reader is connected, and a chosen or
+  adds **Send a Local Build…** while a reader is connected, and a chosen or
   dropped `.bin` takes the same route. The image is checked first, the
   acknowledgement names its file, version and size, and it then uses the same
   preparation, transfer, cancellation and on-reader confirmation as an official
@@ -49,7 +49,7 @@ Implemented locally 2026-09-27; physical acceptance remains required.
   reader until that reader reports its version again.
 - Content **Pause** closes the upload and retains its local copy and possible reader
   staging prefix. Send in that category retries/resumes it explicitly.
-- Content **Stop and remove** waits for the cancelled request to drain, then removes
+- Content **Stop and Remove** waits for the cancelled request to drain, then removes
   prepared copies in that category and their tracked hidden staging files.
   Published books and `/update.bin` are untouched. An acknowledgement lost
   during publication cannot be treated as proof that publication did not happen.

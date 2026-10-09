@@ -32,7 +32,7 @@ struct ReaderSymbolFontOffer: View {
                 Text("Books often use emoji, arrows or math symbols the reading font lacks. Send this free symbol font once (400 KB) and the reader draws them instead of blank marks, after it restarts.")
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
-                    Button(isPrepared ? "Ready to send" : "Prepare symbol font") { prepare() }
+                    Button(isPrepared ? "Ready to Send" : "Prepare Symbol Font") { prepare() }
                         .disabled(isPrepared || !model.canPrepareFiles)
                         .accessibilityIdentifier("prepare-symbol-font")
                     Spacer()
@@ -42,7 +42,7 @@ struct ReaderSymbolFontOffer: View {
                 }
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 10).fill(PocketPalette.selection.opacity(0.5)))
+            .background(RoundedRectangle(cornerRadius: PocketDesign.cardRadius).fill(PocketPalette.selection.opacity(0.5)))
         }
     }
 

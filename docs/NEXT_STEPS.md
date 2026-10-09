@@ -36,8 +36,8 @@
   이미 sideButtonLayout, frontButtonFollowOrientation 등 설정이 있다
   (SettingsList.h). 노출 범위와 preferences 계약을 확인한다.
 - 순서 변경은 드래그로. 정리하면서 불필요한 군더더기는 제거한다.
-- 스크린샷 기준 후보: Reader 패널의 동작 과다(Reconnect, Connect directly,
-  End session, Update reader, How to connect), Files 패널의 입구 혼재
+- 스크린샷 기준 후보: Reader 패널의 동작 과다(Reconnect, Connect Directly,
+  End Session, Update reader, How to connect), Files 패널의 입구 혼재
   (Choose, Write text, Copy to SD), 긴 한 줄 편집기.
 - 현재 상태: 앱 6ebf228, 펌웨어 af70853c(1.7.0) 커밋, 푸시 전. 사용자 UI
   변경 후 ./scripts/capture_screenshots.sh로 스크린샷 갱신.
@@ -56,9 +56,9 @@
   구현은 X3를 준비한 별도 세션에서(16KiB/4KiB 기준 유지, 표지 제외).
 - 버튼: 펌웨어 preferences에 `sideButtonLayout`, `frontButtonFollowOrientation`
   추가(펌웨어 3de13206, 추가형, 호스트 시험 406개·default 빌드 통과). 앱은 GET에 키가
-  있을 때만 Reader settings에 노출하고 보낸다. 실기기 미검증.
-- 정리: Reader 패널은 상태별 동작만(연결 전: Find/Connect directly/Try demo/
-  How to connect, 연결 후: ⋯ 메뉴에 Reconnect·Update reader·End session).
+  있을 때만 Reader Settings에 노출하고 보낸다. 실기기 미검증.
+- 정리: Reader 패널은 상태별 동작만(연결 전: Find/Connect Directly/Try Demo/
+  How to connect, 연결 후: ⋯ 메뉴에 Reconnect·Update reader·End Session).
   Files는 Add 메뉴 하나(파일 선택, 텍스트 작성, Mac SD 복사). 날씨의
   "Send now"는 실패 시 Retry로만 남김. 카드 본문 편집기는 3~8줄.
 

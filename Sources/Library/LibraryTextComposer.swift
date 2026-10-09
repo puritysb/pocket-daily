@@ -19,10 +19,10 @@ struct LibraryTextComposer: View {
                 TextField("Title", text: $title).accessibilityIdentifier("compose-title")
                 TextEditor(text: $text).frame(minHeight: 220).accessibilityIdentifier("compose-text")
                 if working { ProgressView(added ? "Finishing…" : "Adding to Library…") }
-                if let error { Text(error).font(.callout).foregroundStyle(.red).accessibilityIdentifier("compose-error") }
+                if let error { Text(error).font(.callout).foregroundStyle(PocketPalette.critical).accessibilityIdentifier("compose-error") }
             }
             .formStyle(.grouped)
-            .navigationTitle("Write to read")
+            .navigationTitle("Write to Read")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }.disabled(working || export != nil)

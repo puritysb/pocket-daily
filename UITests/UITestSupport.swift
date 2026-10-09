@@ -50,12 +50,12 @@ extension XCUIApplication {
                 if back.exists { back.tap() }
             }
         }
-        if destination == "Reader settings" {
+        if destination == "Reader Settings" {
             let entry = buttons["reader-settings"]
             revealInReader(entry, upward: true)
             XCTAssertTrue(entry.waitForExistence(timeout: 5))
             entry.tap()
-        } else if destination == "Manage reader" {
+        } else if destination == "Manage Reader" {
             let menu = buttons["reader-management-menu"]
             revealInReader(menu, upward: true)
             XCTAssertTrue(menu.waitForExistence(timeout: 5))
@@ -145,11 +145,11 @@ extension XCUIApplication {
 
     /// All three scopes live in Reader settings, including reading preferences.
     func openScreen(_ screen: String) {
-        if !buttons["reader-setting-scope"].exists { open("Reader settings") }
+        if !buttons["reader-setting-scope"].exists { open("Reader Settings") }
         let selector = buttons["reader-setting-scope"]
         XCTAssertTrue(selector.waitForExistence(timeout: 5))
         selector.tap()
-        let option = buttons[screen == "Reading" ? "Reading preferences" : screen + " screen"].firstMatch
+        let option = buttons[screen == "Reading" ? "Reading Preferences" : screen + " Screen"].firstMatch
         XCTAssertTrue(option.waitForExistence(timeout: 5))
         option.tap()
     }

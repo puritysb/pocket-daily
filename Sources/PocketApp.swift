@@ -35,6 +35,9 @@ struct PocketApp: App {
     private var mainView: some View {
         ContentView()
             .environmentObject(model)
+            // Selection is amber on every platform; iOS switches otherwise
+            // stay system green while macOS follows the accent color.
+            .tint(PocketPalette.accent)
 #if os(macOS)
             .frame(minWidth: 1080, minHeight: 720)
 #endif

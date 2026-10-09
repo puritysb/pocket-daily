@@ -117,7 +117,7 @@ struct StudioContentSheet: View {
 
     private var cardWorkspace: some View {
         GeometryReader { geometry in
-            let wide = geometry.size.width >= 650
+            let wide = geometry.size.width >= PocketDesign.splitLayoutWidth
             if wide {
                 HStack(alignment: .top, spacing: 20) {
                     cardPreview(height: min(400, geometry.size.height - 30))
@@ -125,7 +125,7 @@ struct StudioContentSheet: View {
                     cardFields
                 }.padding(20)
             } else {
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
                     cardPreview(height: min(160, max(65, geometry.size.height * 0.26)))
                     Divider()
                     cardFields
@@ -156,7 +156,7 @@ struct StudioContentSheet: View {
 
     private var cardFields: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 if let cards {
                     MyCardsEditor(editor: cards, model: model, selectedID: $selectedCardID, drag: $drag) {}
                     if let deployment = model.contentDeployment {
@@ -164,8 +164,8 @@ struct StudioContentSheet: View {
                     }
                     ContentJournalRecovery(model: model)
                 } else if let loadError {
-                    Text(loadError).font(.callout).foregroundStyle(.red)
-                    Button("Retry loading cards") { Task { await reloadCards() } }
+                    PocketStatusLabel(loadError, tone: .failure).font(.callout)
+                    Button("Retry Loading Cards") { Task { await reloadCards() } }
                 } else { ProgressView("Loading cards…") }
             }.padding(.bottom, 20)
         }
@@ -206,15 +206,19 @@ struct StudioContentSheet: View {
             draftRevision: revision?.revision, phase: model.contentDeployment?.phase,
             redrawConfirmed: model.contentRedrawReceipt, busy: model.isWorking))
     }
-    private var status: String {
-        if task == .cards { return cardStatus.label }
-        if model.isDemoMode { return "Demo · nothing is sent" }
-        if model.readerStatus != nil && !model.canSendGlance { return "This reader needs compatible weather & calendar firmware." }
-        if model.activeReaderTask == .weatherCalendar { return "Applying to reader…" }
-        if let error = model.glanceError { return "Not applied · " + error }
-        if settings.hasUnappliedSourceChanges { return "Saved locally · not applied" }
-        if let sent = model.glanceSentAt { return "Saved on reader at " + sent.formatted(date: .omitted, time: .shortened) }
-        return model.readerStatus == nil ? "Saved locally" : "Current sources"
+    private var status: (text: String, tone: StatusTone, symbol: String) {
+        if task == .cards { return (cardStatus.label, cardStatus.tone, cardStatus.symbol) }
+        if model.isDemoMode { return ("Demo · nothing is sent", .neutral, "info.circle") }
+        if model.readerStatus != nil && !model.canSendGlance {
+            return ("This reader needs compatible weather & calendar firmware.", .pending, "exclamationmark.triangle")
+        }
+        if model.activeReaderTask == .weatherCalendar { return ("Applying to reader…", .onReader, "arrow.triangle.2.circlepath") }
+        if let error = model.glanceError { return ("Not applied · " + error, .failure, StatusTone.failure.symbol) }
+        if settings.hasUnappliedSourceChanges { return ("Saved locally · not applied", .onReader, "circle.dashed") }
+        if let sent = model.glanceSentAt {
+            return ("Saved on reader at " + sent.formatted(date: .omitted, time: .shortened), .success, "checkmark.circle.fill")
+        }
+        return (model.readerStatus == nil ? "Saved locally" : "Current sources", .neutral, "info.circle")
     }
     private var canApply: Bool {
         guard !model.isDemoMode, !model.isWorking else { return false }
@@ -247,11 +251,11 @@ struct StudioContentSheet: View {
                 HStack { Spacer(); applyAction }
             }
         }
-        .padding(.horizontal, 20).padding(.vertical, 12)
+        .padding(.horizontal, PocketDesign.pageInset).padding(.vertical, 12)
     }
 
     private var statusLabel: some View {
-        Text(status).font(.caption).foregroundStyle(.secondary)
+        PocketStatusLabel(status.text, tone: status.tone, symbol: status.symbol).font(.caption)
             .accessibilityIdentifier("content-editor-status")
     }
 

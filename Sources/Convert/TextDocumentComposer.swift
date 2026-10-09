@@ -39,10 +39,10 @@ struct TextDocumentComposer: View {
                 if phase != .idle {
                     ProgressView(phase == .creating ? "Creating your document…" : "Preparing an offline copy…")
                 }
-                if let error { Text(error).foregroundStyle(.red).font(.caption).accessibilityIdentifier("compose-error") }
+                if let error { Text(error).foregroundStyle(PocketPalette.critical).font(.caption).accessibilityIdentifier("compose-error") }
             }
             .formStyle(.grouped)
-            .navigationTitle("Text to read")
+            .navigationTitle("Text to Read")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

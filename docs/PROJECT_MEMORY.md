@@ -8,9 +8,9 @@ with a dated note below.
 
 - My Reader combines identity, retained work and observed files. Library and
   My Reader are peers; Overview/On Reader/Screens/Reading/Device no longer
-  occupy separate navigation entries. Reader settings opens from the reader
-  card; Reader options → Manage reader owns connection, firmware and diagnostics.
-- Reader settings has Home screen, Sleep screen and Reading preferences scopes.
+  occupy separate navigation entries. Reader Settings opens from the reader
+  card; Reader Options → Manage Reader owns connection, firmware and diagnostics.
+- Reader Settings has Home Screen, Sleep Screen and Reading Preferences scopes.
   Returning within the window retains the selection and drafts; Continue
   editing prefers the last scope with pending edits, including Sleep. Apply
   and Discard still affect only the chosen scope. App reading starts in Library.
@@ -42,6 +42,27 @@ with a dated note below.
   iPhone and iPad. Nineteen store screenshots and source validation pass.
   Result paths are in `docs/IA_IMPLEMENTATION_REPORT.md`. The signed Mac app
   was updated and its native titlebar/actions and saved edit entry were checked.
+- Status and layout rules (2026-10-09): `StatusTone.color`/`.symbol` with
+  `PocketPalette.caution`/`critical`/`signal` replace system red/orange/green,
+  whose light-mode text contrast on paper was 1.95–3.15:1 (now 4.7:1 or more).
+  Status lines tint only the symbol. `wideLayoutWidth` 920 and
+  `splitLayoutWidth` 680 are the only width breakpoints; card-like containers
+  use `cardRadius`. The share extension keeps system red because it is built
+  without the palette. Usability principles, five screen archetypes and a
+  review checklist are in `docs/DESIGN_SYSTEM.md` with `docs/design/*.svg`.
+- Applied across the app (2026-10-09):
+  - **Labels:** buttons, menu items, screen titles and icon-button names use
+    Apple title case (`Manage Reader`, `Send 2 Books`). Prose that names a
+    button uses the same text, and UI tests and review notes were updated
+    with it.
+  - **Status lines:** `PocketStatusLabel` draws status lines.
+  - **Selection:** scope and filter menus use pickers, so the current choice
+    shows a checkmark. The app root tints iOS switches amber.
+  - **Send to Reader sheet:** its actions are pinned to the bottom edge.
+  - **Repeated actions:** each now appears once on its screen (inventory
+    connect, task reopen).
+  - **Confirmations:** they name the books, the reader, or the firmware
+    version.
 
 ## UX handoff verification — 2026-10-09 (local, not released)
 
@@ -229,7 +250,7 @@ with a dated note below.
   and Bluetooth pairing to capabilities; `PocketModel.device` is the shared state.
 - Same Wi-Fi reconnect: `PocketModel.reconnectRememberedReader()` every 8 s from
   ContentView (skipped under XCTest), probe outside the reader lane, same
-  device ID only, held after End session until the reader stops answering.
+  device ID only, held after End Session until the reader stops answering.
   Setting key `Pocket.reconnectSameWiFi`.
 - Phase 2 (app only) is implemented: `ReaderInventory`/`ReaderShelf`
   (`Sources/Library/ReaderShelf.swift`), "On reader" badges, "Only on your
@@ -457,7 +478,7 @@ with a dated note below.
   Home controls come first, then compact book/article text size with an
   illustrative reading preview. Button mapping is not exposed; loaded values
   are preserved. Offline drafts survive disconnect and merge untouched fields
-  on connection. Apply to reader sends explicitly; Discard edits confirms local
+  on connection. Apply to reader sends explicitly; Discard Edits confirms local
   layout/reading reset while retaining card edits. The logo header has no
   redundant Home & Sleep label. Connection/files remain in Reader; Prepare
   content replaces Add. Current screenshots cover iPhone/iPad/Mac. Related
@@ -518,7 +539,7 @@ with a dated note below.
   Screenshot sets: iPhone 01-home-x3/02-sleep-x3/03-cards/04-reader, iPad
   01-home-x3/02-sleep-x3/03-cards/04-home-x4, Mac 01-home-x3/02-cards/
   03-home-x4. Store copy (en-US, ko-KR), review notes and TestFlight plan
-  describe the Home & Sleep editor and "Try demo".
+  describe the Home & Sleep editor and "Try Demo".
 
 - 2026-09-25 P1-3 (firmware 8e6e75a4; no reader): the Home & Sleep canvas shows
   the firmware Home/Daily Brief painter output via new host ABI calls
@@ -2132,7 +2153,7 @@ machine.
 
 ## Explicit direct sessions — 2026-09-09
 
-- Find & Connect is LAN-only. Connect directly explicitly authorizes BLE/AP
+- Find & Connect is LAN-only. Connect Directly explicitly authorizes BLE/AP
   handoff; the app no longer changes Wi-Fi as a side effect of LAN discovery.
 - Prepared copies and UUID metadata live in Application Support/Pocket/Transfers
   until sent or removed. Same-reader retries keep the UUID, including app relaunch;

@@ -67,7 +67,7 @@ Mac QA 렌더(`testRendersUserFlowStates`, `testRendersReaderTasksAndButtonMappi
 | --- | --- |
 | Mac/iPad 개요의 미연결 상태가 카드 하나와 따로 떨어진 'Edit Home offline' 버튼뿐이었다 | 처음 연결하는 경우 호환 범위와 리더 쪽 절차(Sync → Same Wi-Fi)를 카드에 표시하고, 오프라인 편집을 Connect 옆 보조 행동으로 옮겼다 |
 | Device의 'Continue Reading settings'가 제목처럼 보여 눌러지는 행동인지 알기 어려웠다 | 톱니 아이콘과 말줄임표를 붙인 버튼으로 바꿨다 |
-| 책 보내기 시트와 화면 편집의 연결 절차 안에 'Try demo'가 있어 진행 중인 작업을 버리고 데모로 갈 수 있었다 | 작업 안의 연결에서는 데모를 숨긴다. Device와 일반 연결 화면에는 남긴다 |
+| 책 보내기 시트와 화면 편집의 연결 절차 안에 'Try Demo'가 있어 진행 중인 작업을 버리고 데모로 갈 수 있었다 | 작업 안의 연결에서는 데모를 숨긴다. Device와 일반 연결 화면에는 남긴다 |
 | 보내기 시트의 연결 단계에서 아무것도 진행되지 않을 때도 'Cancel connection'이라고 표시됐다 | 'Back to transfer'로 바꿨다. 진행 중인 시도는 기존처럼 먼저 중단한다 |
 | 데모 보내기 시트에 '고유 ID 없음' 경고가 나타났다 | 데모에서는 표시하지 않는다 |
 | iPhone 서재 헤더의 부제와 연결 상태가 +/Settings에 밀려 두 줄로 깨졌다 | 제목 줄에 행동 버튼을 두고 부제·상태가 전체 폭을 쓰게 했다 |
@@ -119,11 +119,11 @@ UI 검사는 최종적으로 순차 실행했다. 병행 실행에서 테스트 
 
 ## 2026-10-09 My Reader 내비게이션 단순화
 
-Library와 My Reader를 주 목적지로 두고, My Reader 첫 화면에 기기 상태·저장된 편집·전송 작업·관측한 파일을 합쳤다. Reader settings는 기기 카드에서, Manage reader는 Reader options 메뉴에서 연다. Reader settings 안에서 Home screen, Sleep screen, Reading preferences를 선택한다. 독립적인 Reading 메뉴를 제거해 Library의 앱 독서와 기기 설정을 구분했다.
+Library와 My Reader를 주 목적지로 두고, My Reader 첫 화면에 기기 상태·저장된 편집·전송 작업·관측한 파일을 합쳤다. Reader Settings는 기기 카드에서, Manage Reader는 Reader Options 메뉴에서 연다. Reader Settings 안에서 Home Screen, Sleep Screen, Reading Preferences를 선택한다. 독립적인 Reading 메뉴를 제거해 Library의 앱 독서와 기기 설정을 구분했다.
 
 연결되지 않아도 같은 경로로 설정을 편집하며 연결은 적용 단계에서 연다. 같은 창에서 돌아오면 선택과 초안을 유지한다. Continue editing은 미적용 변경이 있는 마지막 범위를 우선하며, 그 범위가 깨끗하면 실제 변경이 남은 범위를 연다. 원본 편집기·선택한 책 작업의 복귀와 명시적 적용 경계는 유지한다.
 
-첫 접근성 캡처에서 보관함 추가 버튼의 글자가 잘게 줄바꿈되고 고정 미리보기/적용 바가 편집 영역을 가렸다. 보관함 제목/버튼은 폭에 따라 세로로 배치하고, 접근성 크기의 설정은 전체 스크롤과 Show preview를 사용하도록 보완했다. 방향 선택도 글자가 커지는 메뉴로 전환했다. 데모에서 큰 글자로 설정 변경·미리보기·취소를 실제로 수행하는 검사를 추가했다.
+첫 접근성 캡처에서 보관함 추가 버튼의 글자가 잘게 줄바꿈되고 고정 미리보기/적용 바가 편집 영역을 가렸다. 보관함 제목/버튼은 폭에 따라 세로로 배치하고, 접근성 크기의 설정은 전체 스크롤과 Show Preview를 사용하도록 보완했다. 방향 선택도 글자가 커지는 메뉴로 전환했다. 데모에서 큰 글자로 설정 변경·미리보기·취소를 실제로 수행하는 검사를 추가했다.
 
 검증 근거는 `.build/reader-ia/`에 보관한다.
 

@@ -93,7 +93,7 @@ struct MyCardsEditor: View {
             })
         }
         .confirmationDialog("Recover using these edits?", isPresented: $confirmingRecovery, titleVisibility: .visible) {
-            Button("Preserve file and save these edits") {
+            Button("Preserve File and Save These Edits") {
                 Task {
                     do { try await editor.recoverKeepingEdits(); operationError = nil }
                     catch { operationError = error.localizedDescription }
@@ -114,10 +114,11 @@ struct MyCardsEditor: View {
                 Divider().padding(.leading, 10)
             }
             Button(action: addCard) {
-                Label(cards.count >= 3 ? "Up to three cards" : "Add card", systemImage: "plus")
+                Label(cards.count >= 3 ? "Up to three cards" : "Add Card", systemImage: "plus")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 7)
                     .padding(.horizontal, 10)
+                    .frame(minHeight: PocketDesign.navigationTarget)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -125,8 +126,8 @@ struct MyCardsEditor: View {
             .disabled(cards.count >= 3 || editor.isBusy)
             .accessibilityIdentifier("cards-add")
         }
-        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 8))
-        .overlay { RoundedRectangle(cornerRadius: 8).stroke(PocketPalette.line) }
+        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+        .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(PocketPalette.line) }
     }
 
     private func cardRow(_ index: Int, _ card: ContentCard) -> some View {
@@ -146,14 +147,15 @@ struct MyCardsEditor: View {
             }
             .padding(.vertical, 7)
             .padding(.horizontal, 10)
+            .frame(minHeight: PocketDesign.navigationTarget)
             .background(selected ? PocketPalette.selection : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityActions {
-            if index > 0 { Button("Move up") { move(index, by: -1) } }
-            if index + 1 < cards.count { Button("Move down") { move(index, by: 1) } }
+            if index > 0 { Button("Move Up") { move(index, by: -1) } }
+            if index + 1 < cards.count { Button("Move Down") { move(index, by: 1) } }
         }
         .contextMenu {
             Button("Move Up") { move(index, by: -1) }.disabled(index == 0)
@@ -188,7 +190,7 @@ struct MyCardsEditor: View {
         HStack {
             Text("Title \(cards[index].title.utf8.count)/24 · Text \(cards[index].question.utf8.count)/160 bytes")
             Spacer()
-            Button("Remove card", role: .destructive) { remove(index) }
+            Button("Remove Card", role: .destructive) { remove(index) }
                 .buttonStyle(.borderless)
                 .accessibilityIdentifier("cards-remove")
         }
@@ -205,15 +207,15 @@ struct MyCardsEditor: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Menu {
-                    Button("QR code from text or link…", systemImage: "qrcode") {
+                    Button("QR Code from Text or Link…", systemImage: "qrcode") {
                         qrRequest = .init(kind: .qrCode, cardID: card.id)
                     }
-                    Button("Image from a link…", systemImage: "link") {
+                    Button("Image from a Link…", systemImage: "link") {
                         qrRequest = .init(kind: .link, cardID: card.id)
                     }
-                    Button("Choose an image file…", systemImage: "photo") { choosingImage = true }
+                    Button("Choose an Image File…", systemImage: "photo") { choosingImage = true }
                 } label: {
-                    Label(card.imagePath.isEmpty ? "Add image or QR code" : "Replace image", systemImage: "qrcode")
+                    Label(card.imagePath.isEmpty ? "Add Image or QR Code" : "Replace Image", systemImage: "qrcode")
                 }
                 .fixedSize()
                 .accessibilityIdentifier("cards-image-menu")
@@ -223,7 +225,7 @@ struct MyCardsEditor: View {
                     }
                     .fixedSize()
                     .help("Where the image sits when the card is opened on the reader")
-                    Button("Remove image", role: .destructive) {
+                    Button("Remove Image", role: .destructive) {
                         do { try editor.removeImage(cardID: card.id); operationError = nil; onEdit() }
                         catch { operationError = error.localizedDescription }
                     }
@@ -238,9 +240,9 @@ struct MyCardsEditor: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let error = operationError ?? editor.lastError {
-                Text(error).font(.caption).foregroundStyle(.red)
+                PocketStatusLabel(error, tone: .failure).font(.caption)
                 if editor.lastError != nil && !locked {
-                    Button("Preserve saved file and recover…") { confirmingRecovery = true }
+                    Button("Preserve Saved File and Recover…") { confirmingRecovery = true }
                         .font(.caption).disabled(editor.isBusy)
                 }
             }
@@ -434,7 +436,7 @@ private struct CardImageSheet: View {
                     } else if loading {
                         ProgressView().frame(maxWidth: .infinity)
                     } else if let error {
-                        Text(error).foregroundStyle(.red).font(.callout)
+                        Text(error).foregroundStyle(PocketPalette.critical).font(.callout)
                     }
                 }
             }
@@ -443,7 +445,7 @@ private struct CardImageSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add to card") {
+                    Button("Add to Card") {
                         guard let result else { return }
                         attach(result)
                         dismiss()

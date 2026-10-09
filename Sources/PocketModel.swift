@@ -1107,7 +1107,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 _ = await bonjourTask.value
                 await discoverReader(attempt: attempt, retryIfMissing: false)
             } else {
-                post("No Pocket reader was visible. Open Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware). Without a router, choose Direct connection on the reader and Connect directly here.", tone: .failure)
+                post("No Pocket reader was visible. Open Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware). Without a router, choose Direct connection on the reader and Connect Directly here.", tone: .failure)
             }
         }
     }
@@ -1298,7 +1298,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         manualHotspotFallback = true
         stopLiveSync()
         mirror.apply(.connection(.disconnected))
-        post("Private link not ready. Join \(lease.ssid), then tap Verify connection.", tone: .failure)
+        post("Private link not ready. Join \(lease.ssid), then tap Verify Connection.", tone: .failure)
     }
 
     func verify(host: String, port: Int) async {
@@ -1894,7 +1894,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             await withTaskCancellationHandler { await preparation.value } onCancel: { preparation.cancel() }
             try Task.checkCancellation()
             if preparedTransfers.contains(where: { $0.kind == .firmware }) {
-                post("Update downloaded and prepared. Connect the reader using Same Wi-Fi or Direct connection, then choose Send update. Installation still requires confirmation on the reader.", tone: .pending)
+                post("Update downloaded and prepared. Connect the reader using Same Wi-Fi or Direct connection, then choose Send Update. Installation still requires confirmation on the reader.", tone: .pending)
             }
         } catch { post(error) }
     }

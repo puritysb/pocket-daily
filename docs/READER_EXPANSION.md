@@ -117,7 +117,7 @@ reading-progress v1로 구현했다([READING_PROGRESS.md](READING_PROGRESS.md), 
 - 연결 상태는 앱 전체가 공유한다: 사이드바 Connection 행, iPhone Library 머리의 상태 표시, Reader 탭 머리.
 - 같은 Wi-Fi 자동 재연결: 마지막 리더가 마지막 주소에서 같은 기기 ID로 응답하면(리더에서 Sync → Same
   Wi-Fi가 열려 있으면) 앱이 세션을 연다. 그 주소 하나만 묻고, 네트워크를 바꾸거나 훑지 않는다. 사용자가
-  End session하면 리더가 한 번 응답하지 않을 때까지 다시 붙지 않는다. Direct connection은 계속 명시적이다.
+  End Session하면 리더가 한 번 응답하지 않을 때까지 다시 붙지 않는다. Direct connection은 계속 명시적이다.
   Settings에서 끌 수 있다.
 
 단계:

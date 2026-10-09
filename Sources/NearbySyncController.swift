@@ -16,7 +16,7 @@ final class NearbySyncController: NSObject, ObservableObject {
             switch self {
             case let .failed(message): message
             case .bluetoothUnavailable:
-                "Bluetooth is unavailable. Enable it to connect directly, or use Find on same Wi-Fi."
+                "Bluetooth is unavailable. Enable it to connect directly, or use Find on Same Wi-Fi."
             default: nil
             }
         }

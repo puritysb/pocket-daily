@@ -64,13 +64,13 @@ final class PocketReaderTests: XCTestCase {
         middle.tap()
         XCTAssertTrue(app.buttons["reader-appearance"].waitForExistence(timeout: 5), "A middle tap shows the controls")
         app.buttons["reader-appearance"].tap()
-        let larger = app.buttons["Larger text"]
+        let larger = app.buttons["Larger Text"]
         XCTAssertTrue(larger.waitForExistence(timeout: 5))
         larger.tap()
         app.buttons["Night"].tap()
         attach(app, "reader-appearance")
         app.buttons["Paper"].tap()
-        app.buttons["Smaller text"].tap()
+        app.buttons["Smaller Text"].tap()
         app.swipeDown(velocity: .fast)
 
         app.buttons["reader-close"].tap()

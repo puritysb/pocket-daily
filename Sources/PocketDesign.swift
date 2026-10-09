@@ -12,6 +12,15 @@ enum PocketDesign {
     static let controlRadius: CGFloat = 8
     static let sidebarWidth: CGFloat = 208
 
+    /// Width from which the sidebar replaces tabs (never at accessibility
+    /// text sizes).
+    static let wideLayoutWidth: CGFloat = 920
+    /// Width from which an editor places its preview beside the controls.
+    static let splitLayoutWidth: CGFloat = 680
+    /// Below this height a one-column editor shrinks its preview and keeps
+    /// only the status line and actions in its apply bar.
+    static let condensedEditorHeight: CGFloat = 430
+
     static var pageTitle: Font {
 #if os(macOS)
         .system(size: 22, weight: .semibold)

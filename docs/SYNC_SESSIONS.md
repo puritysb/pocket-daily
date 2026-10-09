@@ -7,8 +7,8 @@ PROJECT_MEMORY.md; physical X3/X4 acceptance is not implied.
 
 | Situation | Reader entry | App action | Network effect |
 | --- | --- | --- | --- |
-| Shared Wi-Fi | Pocket Daily → Sync → Same Wi-Fi | Find on same Wi-Fi | Apple device stays on its current network |
-| No router or internet | Pocket Daily → Sync → Direct connection | Connect directly, confirm, pair | BLE supplies a temporary reader Wi-Fi lease; Apple device joins it |
+| Shared Wi-Fi | Pocket Daily → Sync → Same Wi-Fi | Find on Same Wi-Fi | Apple device stays on its current network |
+| No router or internet | Pocket Daily → Sync → Direct connection | Connect Directly, confirm, pair | BLE supplies a temporary reader Wi-Fi lease; Apple device joins it |
 
 These names are Pocket Daily-specific. Older builds call them Join a Network
 and Nearby Sync, respectively; the app retains a short compatibility note.
@@ -20,7 +20,7 @@ automatic fallback from shared Wi-Fi to direct connection is permitted.
 Once a reader has connected over Same Wi-Fi, the app reconnects on its own
 when that reader answers again at its last address with the same device ID
 (Sync → Same Wi-Fi open on the reader). Only that one address is asked; the
-app never scans, joins or changes a network for this. After End session it
+app never scans, joins or changes a network for this. After End Session it
 waits until the reader stops answering once. The setting "Reconnect on the
 same Wi-Fi" turns it off; legacy readers without a device ID are never
 reconnected automatically.

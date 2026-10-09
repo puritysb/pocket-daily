@@ -8,9 +8,9 @@ Pocket Daily is an account-free, distraction-free e-book reader for iPhone, iPad
 2. Add DRM-free EPUB, TXT or Markdown files with **+**, or save an article from Safari's share sheet and read it under **Articles**. **+ → Subscriptions** accepts a direct HTTPS RSS or Atom feed URL; feeds are fetched directly from the publisher when subscribing, when the app becomes active (at most once every five minutes) and on manual refresh. Demo mode never fetches feeds.
 3. **Settings → Continue Reading** shows iCloud key-value storage between the user's own Apple devices and exchange with a connected reader over the local connection. No Pocket Daily account is needed. Settings opens from the sidebar, the Library header on iPhone, or ⌘, on Mac, in the current app window.
 
-**Background Bluetooth (`bluetooth-central`, iOS/iPadOS):** the app uses this background mode only to keep reading places in step with the one reader the user paired with **Connect directly**. It keeps a single pending connection to that bonded reader (no scanning, no other accessories, no pairing in the background). When the reader closes a book, wakes or goes to sleep, it may advertise if memory allows. Background delivery is OS controlled; when connected, the app exchanges reading places over the encrypted link (book fingerprint, position, percentage and device name; no file names or book contents), then disconnects. No page moves until the user accepts an offered place. Turning off **Continue Reading → Your X3/X4 reader** cancels it, and demo mode never connects. Observing it requires a physical reader.
-4. For the companion without a reader, open **My Reader → Reader options (•••) → Manage reader** and choose **Try demo**. My Reader shows device status, pending work and the inventory together; demo files are labelled as examples. **Reader settings** shows Home and Sleep previews drawn locally with sample content; nothing is captured from a reader. Choose Home screen, Sleep screen or Reading preferences above the preview and adjust the layout. My cards is available from Home/Sleep settings. Reading preferences uses an illustrative book with model-specific page-button actions. Weather and calendar controls are optional: outside demo, a named city uses Apple Weather and calendars can be selected with permission. Source edits stay local until explicitly applied; event contents are not stored by the app or sent anywhere except the user's reader.
-5. Reader settings are populated in demo mode. Apply, applying settings and sending files are intentionally disabled because no physical reader is connected. Choose **Exit demo** under Manage reader to return to normal discovery.
+**Background Bluetooth (`bluetooth-central`, iOS/iPadOS):** the app uses this background mode only to keep reading places in step with the one reader the user paired with **Connect Directly**. It keeps a single pending connection to that bonded reader (no scanning, no other accessories, no pairing in the background). When the reader closes a book, wakes or goes to sleep, it may advertise if memory allows. Background delivery is OS controlled; when connected, the app exchanges reading places over the encrypted link (book fingerprint, position, percentage and device name; no file names or book contents), then disconnects. No page moves until the user accepts an offered place. Turning off **Continue Reading → Your X3/X4 reader** cancels it, and demo mode never connects. Observing it requires a physical reader.
+4. For the companion without a reader, open **My Reader → Reader Options (•••) → Manage Reader** and choose **Try Demo**. My Reader shows device status, pending work and the inventory together; demo files are labelled as examples. **Reader Settings** shows Home and Sleep previews drawn locally with sample content; nothing is captured from a reader. Choose Home Screen, Sleep Screen or Reading Preferences above the preview and adjust the layout. My cards is available from Home/Sleep settings. Reading Preferences uses an illustrative book with model-specific page-button actions. Weather and calendar controls are optional: outside demo, a named city uses Apple Weather and calendars can be selected with permission. Source edits stay local until explicitly applied; event contents are not stored by the app or sent anywhere except the user's reader.
+5. Reader Settings are populated in demo mode. Apply, applying settings and sending files are intentionally disabled because no physical reader is connected. Choose **Exit Demo** under Manage Reader to return to normal discovery.
 
 The submitted screenshot build can also be launched with `--demo` by the development team; reviewers do not need launch arguments because the same mode is visible in the interface.
 
@@ -20,10 +20,10 @@ The submitted screenshot build can also be launched with `--demo` by the develop
    keeps the selected content while connecting and never includes unrelated
    prepared books or firmware. Firmware has its own validated update flow.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
-   choose Find on same Wi-Fi. This requests local-network access without BLE or
+   choose Find on Same Wi-Fi. This requests local-network access without BLE or
    automatic Wi-Fi switching.
 3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
-   expand the other connection methods, choose Connect directly in the app,
+   expand the other connection methods, choose Connect Directly in the app,
    and confirm the Wi-Fi transition. BLE
    pairing supplies the temporary credentials. No router or internet is required.
 4. Choose Send in the task sheet and keep the iPhone app open. Close and reopen
@@ -37,11 +37,11 @@ The submitted screenshot build can also be launched with `--demo` by the develop
 5. Successful direct batches release the temporary connection. New firmware also
    exits the private session. Firmware still requires reader-side confirmation;
    reconnect to verify the version for an identified reader.
-6. Firmware in **My Reader → Reader options (•••) → Manage reader** checks official release availability
+6. Firmware in **My Reader → Reader Options (•••) → Manage Reader** checks official release availability
    outside demo mode. On a connected reader, the acknowledged **Update** action
    downloads, validates and sends the image to that connection. **Download update
    for later** prepares it locally instead; the user later connects and confirms
-   **Send update**. The reader asks separately before installing. A delivered
+   **Send Update**. The reader asks separately before installing. A delivered
    image is not reported as installed until the identified reader reconnects
    with the expected version. Firmware runs only on the reader; nothing
    downloaded executes in the app.

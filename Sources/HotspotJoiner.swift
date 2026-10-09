@@ -77,7 +77,7 @@ enum HotspotJoinError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case let .userCancelled(ssid):
-            "The Wi-Fi join was cancelled. Tap Retry automatic join to see the system prompt again, or join \(ssid) manually."
+            "The Wi-Fi join was cancelled. Tap Retry Automatic Join to see the system prompt again, or join \(ssid) manually."
         }
     }
 }
@@ -246,7 +246,7 @@ enum HotspotJoinError: LocalizedError, Equatable {
         case let .networkNotFound(ssid):
             "Pocket Daily could not find \(ssid). You can still join it manually below."
         case let .associationFailed(ssid, reason):
-            "Pocket Daily found \(ssid) but could not join it (\(reason)). Retry automatic join or use the manual fallback."
+            "Pocket Daily found \(ssid) but could not join it (\(reason)). Choose Retry Automatic Join or use the manual fallback."
         }
     }
 }

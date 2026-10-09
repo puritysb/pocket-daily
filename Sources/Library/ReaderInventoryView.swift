@@ -5,7 +5,6 @@ import SwiftUI
 struct ReaderInventoryView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var library: LibraryModel
-    var showsInitialConnectionAction = true
     let open: (LibraryBook) -> Void
     let connect: () -> Void
     let manage: () -> Void
@@ -36,7 +35,7 @@ struct ReaderInventoryView: View {
                         HStack {
                             Text("Last seen files").font(.caption).foregroundStyle(.secondary)
                             Spacer()
-                            Button("Connect to refresh", action: connect).buttonStyle(.bordered)
+                            Button("Connect to Refresh", action: connect).buttonStyle(.bordered)
                         }
                     }
                     if shelf.items.isEmpty { Text("No books or articles were found in this reader’s inventory.").foregroundStyle(.secondary) }
@@ -54,23 +53,24 @@ struct ReaderInventoryView: View {
                                     Text(isVerifiedMatch(item) ? "Same content in Library" : "Library match by name and size")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
-                                else if item.canAddToLibrary, !model.device.capabilities.contains(.fileDownload) {
-                                    Text(model.device.isConnected ? "Reader firmware does not support copying into the Library." : "Connect to copy into the Library.")
+                                else if item.canAddToLibrary, !model.device.isConnected {
+                                    // One connect action sits in the header above, not on every row.
+                                    Text("Connect to copy into the Library.")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                } else if item.canAddToLibrary, !model.device.capabilities.contains(.fileDownload) {
+                                    Text("Reader firmware does not support copying into the Library.")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer(minLength: 0)
                             if let id = item.bookID, let book = library.books.first(where: { $0.id == id }) {
-                                Button("Read in app") { open(book) }.buttonStyle(.bordered)
+                                Button("Read in App") { open(book) }.buttonStyle(.bordered)
                             } else if model.readerDownload?.path == item.path {
                                 Button("Cancel") { model.cancelReaderDownload() }
-                            } else if item.canAddToLibrary {
-                                if !model.device.isConnected {
-                                    Button("Connect to add", action: connect).buttonStyle(.bordered)
-                                } else {
-                                    Button("Add to Library") { add(item) }.buttonStyle(.bordered)
-                                        .disabled(!model.canDownloadFromReader || !model.device.capabilities.contains(.fileDownload))
-                                }
+                            } else if item.canAddToLibrary, model.device.isConnected,
+                                      model.device.capabilities.contains(.fileDownload) {
+                                Button("Add to Library") { add(item) }.buttonStyle(.bordered)
+                                    .disabled(!model.canDownloadFromReader)
                             }
                         }
                         .accessibilityIdentifier("inventory-book-\(item.name)")
@@ -85,14 +85,14 @@ struct ReaderInventoryView: View {
                         if model.isWorking {
                             ProgressView("Reader task in progress").font(.caption)
                         }
-                        Button("Refresh inventory") { model.requestReaderInventoryRefresh() }
-                            .buttonStyle(.borderedProminent).disabled(model.isWorking)
+                        Button("Refresh Inventory") { model.requestReaderInventoryRefresh() }
+                            .buttonStyle(.bordered).disabled(model.isWorking)
                             .accessibilityIdentifier("inventory-refresh")
                     } else {
                         Text("Book inventory is not available with this firmware.")
                             .font(.callout).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Button("Manage reader", action: manage).buttonStyle(.bordered)
+                        Button("Manage Reader", action: manage).buttonStyle(.bordered)
                             .accessibilityIdentifier("inventory-open-device")
                     }
                 } else if model.isDemoMode {
@@ -114,16 +114,12 @@ struct ReaderInventoryView: View {
                 } else {
                     Text("Connect a reader to see its books and articles.")
                         .font(.callout).foregroundStyle(.secondary)
-                    if showsInitialConnectionAction {
-                        Button("Connect reader…", action: connect).buttonStyle(.borderedProminent)
-                            .accessibilityIdentifier("inventory-connect")
-                    }
                 }
                 if let error = library.error {
-                    Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red)
+                    PocketStatusLabel(error, tone: .failure).font(.caption)
                 }
                 if let error = model.readerInventoryError {
-                    Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                    PocketStatusLabel(error, tone: .failure).font(.caption)
                 }
             }
             if model.readerStatus != nil && (model.isDemoMode || canObserveInventory) {

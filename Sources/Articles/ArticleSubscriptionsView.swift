@@ -21,13 +21,13 @@ struct ArticleSubscriptionsView: View {
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
 #endif
-                    Button(adding ? "Adding subscription…" : "Subscribe") { subscribe() }
+                    Button(adding ? "Adding Subscription…" : "Subscribe") { subscribe() }
                         .disabled(isDemo || inbox.isRefreshing || url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityIdentifier("feed-subscribe")
                     Text(isDemo ? "Leave demo mode to subscribe. Your saved articles are still available offline." :
                             "Use the RSS or Atom link from a blog, publication or newsletter. We start with its latest 20 articles and save readable text on this device. Email-only newsletters can be saved by sharing their web link or text.")
                         .font(.caption).foregroundStyle(.secondary)
-                    if let error { Text(error).foregroundStyle(.red).accessibilityIdentifier("feed-error") }
+                    if let error { Text(error).foregroundStyle(PocketPalette.critical).accessibilityIdentifier("feed-error") }
                 }
                 Section("Subscriptions") {
                     if inbox.feeds.isEmpty { Text("Your favourite publications will appear here.").foregroundStyle(.secondary) }
@@ -37,7 +37,7 @@ struct ArticleSubscriptionsView: View {
                                 Text(feed.title).font(.headline)
                                 Text(URL(string: feed.url)?.host ?? "Subscription").font(.caption).foregroundStyle(.secondary)
                                 if let error = feed.lastError {
-                                    Text(error).font(.caption).foregroundStyle(.red)
+                                    PocketStatusLabel(error, tone: .failure).font(.caption)
                                 } else if let date = feed.lastRefreshedAt {
                                     Text("Updated \(date.formatted(date: .abbreviated, time: .shortened))")
                                         .font(.caption).foregroundStyle(.secondary)
@@ -46,12 +46,14 @@ struct ArticleSubscriptionsView: View {
                             Spacer()
                             Button("Unsubscribe", systemImage: "minus.circle") { removing = feed }
                                 .labelStyle(.iconOnly).buttonStyle(.borderless)
+                                .frame(minWidth: PocketDesign.actionTarget, minHeight: PocketDesign.actionTarget)
+                                .contentShape(Rectangle())
                                 .accessibilityIdentifier("unsubscribe-\(feed.title)")
                         }.padding(.vertical, 4)
                     }
                 }
                 Section {
-                    Text("New articles refresh when you open the app, or when you choose Refresh. Read articles remain in All articles. Saved articles stay here even after you unsubscribe. Nothing is sent to your reader automatically.")
+                    Text("New articles refresh when you open the app, or when you choose Refresh. Read articles remain in All Articles. Saved Articles stay here even after you unsubscribe. Nothing is sent to your reader automatically.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

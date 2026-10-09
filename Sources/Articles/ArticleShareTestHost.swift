@@ -6,7 +6,7 @@ import UIKit
 struct ArticleShareTestHost: View {
     @State private var sharing = false
     var body: some View {
-        Button("Share selected article text") { sharing = true }
+        Button("Share Selected Article Text") { sharing = true }
             .sheet(isPresented: $sharing) { ShareController() }
     }
     private struct ShareController: UIViewControllerRepresentable {

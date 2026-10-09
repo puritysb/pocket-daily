@@ -166,7 +166,7 @@ Use an actual iPhone and X3; simulator builds cannot verify radios, SD, or flash
 - Prepare several files while internet is available, including a cloud-provider
   file and at most one firmware image. Disconnect internet and relaunch the app;
   all files must still be present in Ready offline.
-- Reader: Pocket Sync → Nearby Sync. App: Connect directly, then approve pairing
+- Reader: Pocket Sync → Nearby Sync. App: Connect Directly, then approve pairing
   and Wi-Fi switching. Cancelling the app confirmation must start neither action.
 - Send the batch. Content is published before firmware. Optional preview/crash
   requests must not start automatically. Record X3 free heap, largest block,
@@ -187,7 +187,7 @@ Use an actual iPhone and X3; simulator builds cannot verify radios, SD, or flash
 
 - Wrong passkey, denied hotspot join, expired AP lease, SD write failure, and a
   user-initiated Wi-Fi change must leave an actionable status and prepared files.
-- End session after a failed connection must stop background discovery/retries.
+- End Session after a failed connection must stop background discovery/retries.
 - A different HTTP deviceID than the paired reader must prevent transfer. A
   prepared item already bound to a different reader must also be refused.
 - Legacy readers lacking deviceID remain usable with fresh staging IDs; do not

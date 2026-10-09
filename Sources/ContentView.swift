@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// not separate app destinations. Task ownership uses the same detail routes.
 enum StudioSection: String, CaseIterable, Hashable {
     case library = "Library", reader = "My Reader"
-    case customize = "Reader settings", device = "Manage reader"
+    case customize = "Reader Settings", device = "Manage Reader"
 
     var symbol: String {
         switch self {
@@ -34,7 +34,7 @@ struct ContentView: View {
     }
 
     /// Wide layouts use a sidebar; compact layouts use tabs.
-    private static let wideWidth: CGFloat = 920
+    private static let wideWidth = PocketDesign.wideLayoutWidth
 
     @AppStorage("appAppearance") private var appearance = AppAppearance.system
     @ObservedObject private var readerAppearance = ReaderAppearanceStore.shared
@@ -95,7 +95,7 @@ struct ContentView: View {
             GeometryReader { proxy in
                 if proxy.size.width >= Self.wideWidth && !dynamicTypeSize.isAccessibilitySize {
                     wideLayout(titlebarInset: proxy.safeAreaInsets.top)
-                        .safeAreaInset(edge: .bottom, spacing: 0) { transferTaskEntry }
+                        .safeAreaInset(edge: .bottom, spacing: 0) { transferTaskEntry(on: section) }
 #if os(macOS)
                         .ignoresSafeArea(.container, edges: .top)
 #endif
@@ -206,8 +206,8 @@ struct ContentView: View {
             }
 #endif
         }
-        .alert("Update reader firmware?", isPresented: $confirmingFirmwareUpdate) {
-            Button("Update") { startFirmwareUpdate() }
+        .alert(firmwareConfirmationTitle, isPresented: $confirmingFirmwareUpdate) {
+            Button("Send Update") { startFirmwareUpdate() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Sends the official Pocket Daily update for a compatible X3/X4 reader. Factory firmware is not supported. Keep a recovery method available; custom firmware may affect device support. Installation starts only after you confirm on the reader.")
@@ -234,7 +234,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingConnection) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Text("Connect your reader").font(.title2.weight(.semibold))
+                    Text("Connect your reader").font(PocketDesign.pageTitle)
                     Spacer()
                     Button("Done") { showingConnection = false }
                         .accessibilityIdentifier("connection-done")
@@ -378,7 +378,7 @@ struct ContentView: View {
                     showsShelfMenu: showsShelfMenu, openSettings: showsShelfMenu ? showSettings : nil,
                     openDevice: showsShelfMenu ? { section = .reader } : nil,
                     sendToReader: beginBookTransfer,
-                    taskFooter: showsShelfMenu ? AnyView(transferTaskEntry) : nil, open: open)
+                    taskFooter: showsShelfMenu ? AnyView(transferTaskEntry(on: .library)) : nil, open: open)
     }
 
     private func beginBookTransfer(_ book: LibraryBook) {
@@ -390,33 +390,38 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder private var transferTaskEntry: some View {
+    /// One way back to open work: a single job reopens directly, several
+    /// are listed in one menu. My Reader lists the same jobs in its body, so
+    /// the bar stays out of the way there.
+    @ViewBuilder private func transferTaskEntry(on destination: StudioSection) -> some View {
         let jobs = model.bookTransferJobs.filter { $0.requiresAttention }
-        if !jobs.isEmpty || auxiliaryTask != nil {
+        if destination != .reader, !jobs.isEmpty || auxiliaryTask != nil {
             HStack {
-                if !jobs.isEmpty {
-                    Image(systemName: "arrow.up.doc").accessibilityHidden(true)
+                if let job = jobs.first, jobs.count == 1 {
+                    Button { transferTask = ReadingTarget(id: job.id) } label: {
+                        Label("\(job.items.first?.title ?? "Books") · \(job.presentationStatus)", systemImage: "arrow.up.doc")
+                            .lineLimit(1)
+                    }
+                    .accessibilityIdentifier("book-transfer-reopen")
+                } else if !jobs.isEmpty {
                     Menu {
-                    ForEach(jobs) { job in
-                        Button("\(job.items.first?.title ?? "Books") · \(job.presentationStatus)") {
-                            transferTask = ReadingTarget(id: job.id)
+                        ForEach(jobs) { job in
+                            Button("\(job.items.first?.title ?? "Books") · \(job.presentationStatus)") {
+                                transferTask = ReadingTarget(id: job.id)
+                            }
                         }
-                    }
                     } label: {
-                        Text("Book transfers · \(jobs.count)")
+                        Label("Book Transfers · \(jobs.count)", systemImage: "arrow.up.doc")
                     }
+                    .accessibilityIdentifier("book-transfer-reopen")
                 }
                 Spacer()
-                if let job = jobs.first {
-                    Button(job.presentationStatus) { transferTask = ReadingTarget(id: job.id) }
-                        .accessibilityIdentifier("book-transfer-reopen")
-                }
                 if let task = auxiliaryTask {
                     Button(task.title, action: openCurrentReaderTask)
                         .accessibilityIdentifier("reader-task-reopen")
                 }
             }
-            .font(.callout).padding(.horizontal, 20).padding(.vertical, 10)
+            .font(.callout).padding(.horizontal, PocketDesign.pageInset).padding(.vertical, 12)
             .background(PocketPalette.panel)
             .overlay(alignment: .top) { Divider() }
             .accessibilityElement(children: .contain)
@@ -620,7 +625,7 @@ struct ContentView: View {
                 .navigationBarTitleDisplayMode(.inline)
 #endif
                 .navigationDestination(for: StudioSection.self) { destination in
-                    compactReaderContent(destination, padding: 12)
+                    compactReaderContent(destination, padding: PocketDesign.compactInset)
                         .navigationTitle(destination.rawValue)
 #if os(iOS)
                         .navigationBarTitleDisplayMode(.inline)
@@ -635,7 +640,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             readerDestination(destination, padding: padding)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            transferTaskEntry
+            transferTaskEntry(on: destination)
         }
     }
 
@@ -685,24 +690,24 @@ struct ContentView: View {
                     DeviceStatusLabel(device: model.device, showsReader: false)
                     Spacer()
                     Menu {
-                        Button("Manage reader…", systemImage: "antenna.radiowaves.left.and.right") { section = .device }
+                        Button("Manage Reader…", systemImage: "antenna.radiowaves.left.and.right") { section = .device }
                             .accessibilityIdentifier("reader-manage")
                     } label: {
                         PocketActionGlyph(name: "ellipsis")
                     }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden)
                     .fixedSize()
-                    .accessibilityLabel("Reader options")
+                    .accessibilityLabel("Reader Options")
                     .accessibilityIdentifier("reader-management-menu")
                 }
                 if let paired = readerLink.rememberedReader, !model.isDemoMode {
-                    Text("Bluetooth · \(paired.model) · \(paired.supportsReadingSync == true ? readerLink.statusText : "Paired · position sharing not confirmed")")
+                    // One Bluetooth line: what it is, and when it last worked.
+                    let state = paired.supportsReadingSync == true ? readerLink.statusText : "Paired · position sharing not confirmed"
+                    let last = readerLink.lastCompletedAt.map { " · exchanged \($0.formatted(.relative(presentation: .named)))" } ?? ""
+                    Text("Bluetooth · \(paired.model) · \(state)\(last)")
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("overview-bluetooth-status")
-                }
-                if let completed = readerLink.lastCompletedAt, !model.isDemoMode {
-                    Text("Last Bluetooth position exchange \(completed.formatted(.relative(presentation: .named)))")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if model.device.capabilities.contains(.bluetoothSync), !model.device.isConnected {
                     Text("Bluetooth can share reading positions. Connect over Wi-Fi to send files or settings.")
@@ -725,13 +730,13 @@ struct ContentView: View {
             if profileEditor.isDirty || profileEditor.readingDirty {
                 InspectorCard(title: model.isDemoMode ? "Preview changes" : profileEditor.localSaveError == nil ? "Saved edits" : "Unsaved edits", symbol: "pencil") {
                     if let error = profileEditor.localSaveError {
-                        Text("Draft could not be saved: " + error).font(.callout).foregroundStyle(.red)
+                        PocketStatusLabel("Draft could not be saved · " + error, tone: .failure).font(.callout)
                     } else {
                         Text(model.isDemoMode ? "These changes stay in this demo. Nothing is sent."
                              : "Your reader settings are saved in this app and have not been applied.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
-                    Button("Continue editing") {
+                    Button("Continue Editing") {
                         resumeReaderEdits()
                     }.buttonStyle(.bordered).accessibilityIdentifier("reader-resume-edits")
                 }
@@ -770,10 +775,10 @@ struct ContentView: View {
 
     @ViewBuilder private var readerActions: some View {
         if !model.device.isConnected {
-            Button(model.isDemoMode ? "Explore connection" : "Connect reader…") { showingConnection = true }
+            Button(model.isDemoMode ? "Explore Connection" : "Connect Reader…") { showingConnection = true }
                 .buttonStyle(.borderedProminent).accessibilityIdentifier("overview-connect")
         }
-        Button("Reader settings", systemImage: "slider.horizontal.3") { section = .customize }
+        Button("Reader Settings", systemImage: "slider.horizontal.3") { section = .customize }
             .buttonStyle(.bordered).accessibilityIdentifier("reader-settings")
     }
 
@@ -795,8 +800,15 @@ struct ContentView: View {
                     model.firmwareAwaitingInstallation != nil || model.firmwareLeftForInstallation != nil {
                     firmwareCard
                 } else {
-                    DisclosureGroup("Firmware updates") { firmwareCard.padding(.top, 10) }
-                        .font(.callout)
+                    DisclosureGroup {
+                        firmwareCard.padding(.top, 10).tint(PocketPalette.accent)
+                    } label: {
+                        Text("Firmware Updates")
+                    }
+                    // iOS draws the title as a tinted button; these are rows, not
+                    // links. The content keeps the accent for its own actions.
+                    .tint(.primary)
+                    .font(.callout)
                 }
 
             }
@@ -804,13 +816,13 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 if !model.isDemoMode {
                     ReaderBluetoothPairingCard(sync: sync)
-                    Button("Continue Reading settings…", systemImage: "gearshape", action: showSettings)
+                    Button("Continue Reading Settings…", systemImage: "gearshape", action: showSettings)
                         .buttonStyle(.borderless).font(.callout)
                         .accessibilityIdentifier("device-continue-reading-settings")
                     TroubleshootingInspector(model: model, nearby: nearby)
                 }
-                DisclosureGroup("Device details", isExpanded: $deviceDetailsExpanded) {
-                    VStack(alignment: .leading, spacing: 14) {
+                DisclosureGroup(isExpanded: $deviceDetailsExpanded) {
+                    VStack(alignment: .leading, spacing: 12) {
                         if let status = model.readerStatus {
                             LabeledContent("Reader", value: status.device)
                             LabeledContent("Firmware", value: status.version)
@@ -821,8 +833,11 @@ struct ContentView: View {
                             PreparedTransferQueue(model: model, kind: .content,
                                                   included: { $0.filename == ReaderSymbolFont.fileName })
                         }
-                    }.padding(.top, 12)
+                    }.padding(.top, 12).tint(PocketPalette.accent)
+                } label: {
+                    Text("Device Details")
                 }
+                .tint(.primary)
                 .font(.callout)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("device-details")
@@ -866,13 +881,13 @@ struct ContentView: View {
                     addFromLibrary
                 }
             }
-            ReaderInventoryView(model: model, library: library, showsInitialConnectionAction: false, open: open,
+            ReaderInventoryView(model: model, library: library, open: open,
                                 connect: { showingConnection = true }, manage: { section = .device })
             VStack(alignment: .leading, spacing: 10) {
                 Button {
                     readerOnlyExpanded.toggle()
                 } label: {
-                    Label("Reader-only files", systemImage: readerOnlyExpanded ? "chevron.up" : "chevron.down")
+                    Label("Reader-Only Files", systemImage: readerOnlyExpanded ? "chevron.up" : "chevron.down")
                 }
                 .buttonStyle(.plain).font(.callout)
                 .accessibilityIdentifier("reader-only-files")
@@ -886,7 +901,7 @@ struct ContentView: View {
                     .disabled(!model.canPrepareFiles)
                     .accessibilityIdentifier("reader-only-files-add")
 #if os(macOS)
-                    Button("Copy XTC or PDL to SD card…", systemImage: "sdcard") {
+                    Button("Copy XTC or PDL to SD Card…", systemImage: "sdcard") {
                         importAction = .sdSource
                         importing = true
                     }.disabled(!model.canPrepareFiles)
@@ -917,6 +932,13 @@ struct ContentView: View {
         model.exitDemoMode()
         model.startConnectionSearch()
         nearby.disconnect()
+    }
+
+    /// Names the reader and the version, so the confirmation says what changes.
+    private var firmwareConfirmationTitle: String {
+        let reader = model.readerStatus?.device ?? "the reader"
+        guard let version = model.latestFirmwareRelease?.version else { return "Update \(reader)?" }
+        return "Update \(reader) to \(version)?"
     }
 
     private func startFirmwareUpdate() {
@@ -990,7 +1012,7 @@ struct DeviceStatusLabel: View {
     private var tint: Color {
         switch device.link {
         case .sameWiFi, .direct: PocketPalette.signal
-        case .connecting: .orange
+        case .connecting: PocketPalette.accent
         case .demo, .offline: .secondary
         }
     }
@@ -1021,7 +1043,8 @@ struct ReaderChip: View {
             if let status = model.readerStatus, !model.isDemoMode {
                 Circle().fill(PocketPalette.signal).frame(width: 8, height: 8)
                 Text(status.device).font(.callout.weight(.semibold))
-                Text(model.hasDirectSession ? "Direct" : "Same Wi-Fi")
+                // Words with the dot: the state is not told by color alone.
+                Text(model.hasDirectSession ? "Connected · Direct" : "Connected · Same Wi-Fi")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text("Preview")
@@ -1060,7 +1083,7 @@ private struct CompactReaderMenu: View {
                 Picker("Preview size", selection: $model.preferredHardware) {
                     ForEach(PocketHardware.allCases) { Text($0.rawValue).tag($0) }
                 }
-                Button("Connect a reader", systemImage: "antenna.radiowaves.left.and.right", action: openReader)
+                Button("Connect a Reader", systemImage: "antenna.radiowaves.left.and.right", action: openReader)
             } label: {
                 HStack(spacing: 5) {
                     Text("Preview").font(.caption).foregroundStyle(.secondary)
@@ -1102,7 +1125,7 @@ struct ProjectInformationSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    HStack(spacing: 14) {
+                    HStack(spacing: 12) {
                         PocketMark()
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Pocket Daily").font(.title2.weight(.semibold))
@@ -1128,7 +1151,7 @@ struct ProjectInformationSheet: View {
                     }
 
                     ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 18) { projectLinks }
+                        HStack(spacing: 16) { projectLinks }
                         VStack(alignment: .leading, spacing: 10) { projectLinks }
                     }
                     .font(.callout.weight(.medium))
@@ -1147,10 +1170,10 @@ struct ProjectInformationSheet: View {
 
     @ViewBuilder
     private var projectLinks: some View {
-        Link("Privacy policy", destination: PocketLinks.privacy)
-        Link("Open-source notices", destination: PocketLinks.notices)
-        NavigationLink("Preview font notices") { PreviewFontNotices() }
-        NavigationLink("Reader engine and font notices") { ReaderEngineNotices() }
+        Link("Privacy Policy", destination: PocketLinks.privacy)
+        Link("Open-Source Notices", destination: PocketLinks.notices)
+        NavigationLink("Preview Font Notices") { PreviewFontNotices() }
+        NavigationLink("Reader Engine and Font Notices") { ReaderEngineNotices() }
         Link("Support", destination: PocketLinks.support)
     }
 }
@@ -1164,7 +1187,7 @@ private struct PreviewFontNotices: View {
             Text(notices).font(.caption).textSelection(.enabled).padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .navigationTitle("Preview font notices")
+        .navigationTitle("Preview Font Notices")
         .task {
             do { notices = try await PreviewFontStore.shared.notices() }
             catch { notices = "Font notices are unavailable: \(error.localizedDescription)" }
@@ -1195,7 +1218,7 @@ private struct ReaderEngineNotices: View {
             Text(notices).font(.caption).textSelection(.enabled).padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .navigationTitle("Reader engine notices")
+        .navigationTitle("Reader Engine Notices")
     }
 }
 
@@ -1211,8 +1234,8 @@ private struct InfoSection<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: 14))
-        .overlay { RoundedRectangle(cornerRadius: 14).stroke(PocketPalette.line) }
+        .background(PocketPalette.card, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+        .overlay { RoundedRectangle(cornerRadius: PocketDesign.cardRadius).stroke(PocketPalette.line) }
     }
 }
 
@@ -1224,25 +1247,8 @@ private struct StatusCallout: View {
     let message: String
     let tone: StatusTone
 
-    private var symbol: String {
-        switch tone {
-        case .success: "checkmark.circle.fill"
-        case .pending: "pause.circle.fill"
-        case .onReader: "hand.tap.fill"
-        case .failure: "exclamationmark.triangle.fill"
-        case .neutral: "info.circle"
-        }
-    }
-
-    private var color: Color {
-        switch tone {
-        case .success: .green
-        case .pending: .orange
-        case .onReader: .accentColor
-        case .failure: .red
-        case .neutral: .secondary
-        }
-    }
+    private var symbol: String { tone.symbol }
+    private var color: Color { tone.color }
 
     private var title: String? {
         switch tone {
@@ -1269,14 +1275,14 @@ private struct StatusCallout: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(tone == .neutral ? 0 : 12)
+        .padding(tone == .neutral ? 0 : PocketDesign.cardInset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: PocketDesign.cardRadius)
                 .fill(tone == .neutral ? Color.clear : color.opacity(0.10))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: PocketDesign.cardRadius)
                 .strokeBorder(tone == .neutral ? Color.clear : color.opacity(0.45), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
@@ -1318,7 +1324,7 @@ struct ConnectionInspector: View {
                 if isConnected { sessionMenu }
             }
             if model.canCancelConnection {
-                Button(model.isSearchingForReader ? "Cancel search" : "Cancel connection", systemImage: "xmark.circle") {
+                Button(model.isSearchingForReader ? "Cancel Search" : "Cancel Connection", systemImage: "xmark.circle") {
                     nearby.disconnect()
                     model.cancelConnectionAttempt()
                 }
@@ -1336,22 +1342,23 @@ struct ConnectionInspector: View {
                         Button("Open Location Settings") { model.openLocationSettings() }
                             .buttonStyle(.bordered)
                     }
-                    Button("Retry automatic join") { model.useNearbyLease(lease) }
+                    Button("Retry Automatic Join") { model.useNearbyLease(lease) }
                         .buttonStyle(.borderedProminent).disabled(model.isWorking)
-                    Text(lease.ssid)
-                    Text(lease.passphrase).textSelection(.enabled)
-                    Button("Verify connection") {
+                    // Only the network name and passphrase are code-like.
+                    Text(lease.ssid).font(.caption.monospaced())
+                    Text(lease.passphrase).font(.caption.monospaced()).textSelection(.enabled)
+                    Button("Verify Connection") {
                         Task { await model.verifyNearbyLease(lease) }
                     }.disabled(model.isWorking)
                 }
-                .font(.caption.monospaced())
-                .padding(9)
-                .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: 8))
+                .font(.caption)
+                .padding(8)
+                .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: PocketDesign.controlRadius))
             }
         }
         .alert("Connect to the reader’s temporary Wi-Fi?", isPresented: $confirmingDirectConnection) {
             Button("Cancel", role: .cancel) {}
-            Button("Connect directly") {
+            Button("Connect Directly") {
                 model.beginDirectConnection()
                 if !model.resumeDirectConnection() {
                     nearby.scan()
@@ -1375,19 +1382,19 @@ struct ConnectionInspector: View {
         if model.canCancelConnection || model.isCancellingConnection {
             EmptyView()
         } else if model.isDemoMode {
-            Button("Exit demo") { model.exitDemoMode() }
-                .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity)
+            Button("Exit Demo") { model.exitDemoMode() }
+                .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity, alignment: .leading)
                 .disabled(model.isWorking)
         } else if model.hasDirectSession, model.readerStatus == nil {
-            Button("Reconnect directly") { confirmingDirectConnection = true }
-                .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity)
+            Button("Reconnect Directly") { confirmingDirectConnection = true }
+                .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity, alignment: .leading)
                 .disabled(model.isWorking)
-            Button("End session") { nearby.disconnect(); model.endConnection() }
+            Button("End Session") { nearby.disconnect(); model.endConnection() }
                 .buttonStyle(.borderless).font(.callout)
                 .disabled(model.isWorking)
         } else if model.readerStatus == nil {
             VStack(alignment: .leading, spacing: 8) {
-                Button("Find on same Wi-Fi", systemImage: "wifi", action: onConnect)
+                Button("Find on Same Wi-Fi", systemImage: "wifi", action: onConnect)
                     .buttonStyle(.borderedProminent).tint(PocketPalette.accent)
                     .disabled(model.isWorking)
                 Text("On the reader: Pocket Daily → Sync → Same Wi-Fi.")
@@ -1396,21 +1403,21 @@ struct ConnectionInspector: View {
             Button {
                 otherMethods.toggle()
             } label: {
-                Label("Other connection methods", systemImage: otherMethods ? "chevron.up" : "chevron.down")
+                Label("Other Connection Methods", systemImage: otherMethods ? "chevron.up" : "chevron.down")
             }
             .buttonStyle(.borderless).font(.callout)
             .accessibilityIdentifier("connection-other-methods")
             .accessibilityValue(otherMethods ? "Expanded" : "Collapsed")
             if otherMethods {
                 VStack(alignment: .leading, spacing: 8) {
-                    Button("Connect directly", systemImage: "antenna.radiowaves.left.and.right") { confirmingDirectConnection = true }
+                    Button("Connect Directly", systemImage: "antenna.radiowaves.left.and.right") { confirmingDirectConnection = true }
                         .buttonStyle(.bordered).disabled(model.isWorking)
                     Text("On the reader: Pocket Daily → Sync → Direct connection.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
             if offersDemo {
-                Button("Try demo") { nearby.disconnect(); model.enterDemoMode() }
+                Button("Try Demo") { nearby.disconnect(); model.enterDemoMode() }
                     .buttonStyle(.borderless).font(.caption)
                     .accessibilityIdentifier("try-demo").disabled(model.isWorking)
             }
@@ -1422,24 +1429,23 @@ struct ConnectionInspector: View {
     private var sessionMenu: some View {
         Menu {
             if model.hasDirectSession {
-                Button("Reconnect directly", systemImage: "arrow.clockwise") { confirmingDirectConnection = true }
+                Button("Reconnect Directly", systemImage: "arrow.clockwise") { confirmingDirectConnection = true }
             } else {
                 Button("Reconnect", systemImage: "arrow.clockwise", action: onConnect)
 
             }
             Divider()
-            Button("End session", systemImage: "xmark.circle", role: .destructive) {
+            Button("End Session", systemImage: "xmark.circle", role: .destructive) {
                 nearby.disconnect()
                 model.endConnection()
             }
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.title3)
+            PocketActionGlyph(name: "ellipsis")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(model.isWorking)
-        .accessibilityLabel("Reader actions")
+        .accessibilityLabel("Reader Actions")
         .accessibilityIdentifier("reader-actions")
     }
 
@@ -1447,7 +1453,7 @@ struct ConnectionInspector: View {
         if model.isDemoMode { return "Demo · nothing is sent" }
         if model.isCancellingConnection { return "Stopping connection…" }
         if model.isSearchingForReader { return "Searching on this Wi-Fi…" }
-        if model.readerStatus != nil { return model.hasDirectSession ? "Direct connection" : "Same Wi-Fi" }
+        if model.readerStatus != nil { return model.hasDirectSession ? "Connected · Direct" : "Connected · Same Wi-Fi" }
         if model.manualHotspotFallback { return "Private Wi-Fi needs a manual join" }
         switch nearby.state {
         case .idle: return "Not connected"
@@ -1507,9 +1513,9 @@ struct FirmwareUpdateCard: View {
                     Text("Update ready to send or resume").font(.callout)
                     HStack {
                         if model.readerStatus == nil, let onConnect {
-                            Button("Connect to send update…", action: onConnect)
+                            Button("Connect to Send Update…", action: onConnect)
                         } else {
-                            Button("Send update") { confirmingPreparedUpdate = true }
+                            Button("Send Update") { confirmingPreparedUpdate = true }
                                 .disabled(model.readerStatus == nil || model.isWorking)
                         }
                         Button("Cancel", action: cancel).disabled(model.isWorking)
@@ -1517,7 +1523,7 @@ struct FirmwareUpdateCard: View {
                     if model.messageTone == .failure {
                         Text("Reconnect to the same reader to finish cleanup, or forget this update on this device.")
                             .font(.caption).foregroundStyle(.secondary)
-                        Button("Forget update…") { confirmingLocalRemoval = true }
+                        Button("Forget Update…") { confirmingLocalRemoval = true }
                             .font(.caption).disabled(model.isWorking)
                     }
                 } else if let version = model.firmwareAwaitingInstallation {
@@ -1529,20 +1535,27 @@ struct FirmwareUpdateCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 } else if model.isCheckingFirmware {
                     ProgressView("Checking for updates…").font(.caption)
-                    Button("Cancel check") { model.cancelFirmwareCheck() }
+                    Button("Cancel Check") { model.cancelFirmwareCheck() }
                         .accessibilityIdentifier("cancel-firmware-check")
                 } else if model.firmwareCheckError != nil, model.readerStatus == nil {
                     Text("Firmware updates appear when you connect a reader.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if let error = model.firmwareCheckError {
-                    Text(error).font(.caption).foregroundStyle(.secondary)
-                    Button("Check again") { Task { await model.checkFirmwareRelease() } }
+                    PocketStatusLabel(error, tone: .failure).font(.caption)
+                    Button("Check Again") { Task { await model.checkFirmwareRelease() } }
                         .disabled(model.hasDirectSession)
+                    if model.hasDirectSession {
+                        Text("Checking needs an internet connection; the direct link has none.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 } else if model.firmwareUpdateAvailable {
-                    Button("Update available", action: update)
+                    // The label says the result; a disabled button says why.
+                    Button(model.latestFirmwareRelease.map { "Update to \($0.version)" } ?? "Update Reader", action: update)
                         .buttonStyle(.borderedProminent).disabled(!model.canUpdateReader)
                         .accessibilityIdentifier("update-reader")
-                    Text(model.hasDirectSession ? "Use an internet connection to download the update." : "Confirm installation on the reader after sending.")
+                    Text(model.hasDirectSession ? "Use an internet connection to download the update."
+                         : model.canUpdateReader ? "Confirm installation on the reader after sending."
+                         : "Available after the current reader task.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else if model.latestFirmwareRelease != nil, let status = model.readerStatus {
                     Text(FirmwareGuidance.parse(status.version) == nil ? "Reader version could not be compared." : "No newer update available")
@@ -1551,12 +1564,12 @@ struct FirmwareUpdateCard: View {
                     Text(model.readerStatus == nil ? "Connect a reader to check its version." : "Connect to the internet to check for updates.")
                         .font(.caption).foregroundStyle(.secondary)
                     if model.latestFirmwareRelease == nil {
-                        Button("Check for updates") { Task { await model.checkFirmwareRelease() } }
+                        Button("Check for Updates") { Task { await model.checkFirmwareRelease() } }
                             .disabled(model.hasDirectSession)
                     }
                 }
                 if !pending, !isUpdating, !sending, preparationTask == nil, !model.hasDirectSession {
-                    Button("Download update for later") {
+                    Button("Download Update for Later") {
                         preparationTask = Task { @MainActor in
                             await model.prepareOfficialFirmware()
                             preparationTask = nil
@@ -1571,7 +1584,7 @@ struct FirmwareUpdateCard: View {
 #if DEBUG
                 if let sendLocalBuild, model.readerStatus != nil, !isUpdating, !sending, !pending {
                     Divider()
-                    Button("Send a local build…", action: sendLocalBuild)
+                    Button("Send a Local Build…", action: sendLocalBuild)
                         .disabled(!model.canSendLocalFirmware)
                         .accessibilityIdentifier("send-local-firmware")
                     Text("Development builds only. Checks a firmware image from this device and sends it like an update; the reader still asks before installing.")
@@ -1583,14 +1596,14 @@ struct FirmwareUpdateCard: View {
         }
         .accessibilityIdentifier("firmware-update-card")
         .alert("Send prepared firmware?", isPresented: $confirmingPreparedUpdate) {
-            Button("Send update") { model.sendPreparedFiles(kind: .firmware) }
+            Button("Send Update") { model.sendPreparedFiles(kind: .firmware) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Sends the prepared Pocket Daily firmware for a compatible X3/X4 reader. Factory firmware is not supported. Keep a recovery method available; custom firmware may affect device support. Installation starts only after you confirm on the reader.")
         }
         .alert("Forget this update?", isPresented: $confirmingLocalRemoval) {
-            Button("Forget update", role: .destructive) { model.removePreparedFiles(kind: .firmware, localOnly: true) }
-            Button("Keep update", role: .cancel) {}
+            Button("Forget Update", role: .destructive) { model.removePreparedFiles(kind: .firmware, localOnly: true) }
+            Button("Keep Update", role: .cancel) {}
         } message: {
             Text("Removes the local copy only. Temporary data on the reader may remain. Already saved firmware is unchanged.")
         }
@@ -1619,7 +1632,7 @@ private struct PreparedTransferQueue: View {
     private var displayedItems: [PreparedTransfer] { isActive ? activeBatch : items }
     private var sendTitle: String {
         let verb = items.contains { $0.stagingID != nil } ? "Resume" : "Send"
-        return "\(verb) \(items.count) \(items.count == 1 ? "file" : "files")"
+        return "\(verb) \(items.count) \(items.count == 1 ? "File" : "Files")"
     }
 
     var body: some View {
@@ -1641,38 +1654,49 @@ private struct PreparedTransferQueue: View {
                         .font(.caption)
                     HStack {
                         Button("Pause") { model.pausePreparedFiles(ids: controlIDs) }
-                        Button("Stop and remove…", role: .destructive) { confirmingStop = true }
+                        Button("Stop and Remove…", role: .destructive) { confirmingStop = true }
                     }
                 } else {
                     HStack {
-                        Button(sendTitle) { model.sendPreparedFiles(ids: itemIDs, kind: kind) }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(model.readerStatus == nil || model.isWorking)
-                        Button("Remove these files…") { confirmingRemoval = true }
+                        // Without a reader the device card holds the one primary
+                        // action (Connect); this waits as a secondary button.
+                        if model.readerStatus == nil {
+                            Button(sendTitle) {}.buttonStyle(.bordered).disabled(true)
+                        } else {
+                            Button(sendTitle) { model.sendPreparedFiles(ids: itemIDs, kind: kind) }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(model.isWorking)
+                        }
+                        Button("Remove These Files…") { confirmingRemoval = true }
                             .disabled(model.isWorking)
+                    }
+                    if model.readerStatus == nil {
+                        Text("Connect the reader to send.").font(.caption).foregroundStyle(.secondary)
+                    } else if model.isWorking {
+                        Text("Sends after the current reader task.").font(.caption).foregroundStyle(.secondary)
                     }
                     if items.contains(where: { $0.stagingID != nil }) {
                         Text("Paused or interrupted copies are kept for retry. Remove cleans their temporary files on the connected reader.")
                             .font(.caption).foregroundStyle(.secondary)
-                        Button("Remove only local copies…") { confirmingLocalRemoval = true }
+                        Button("Remove Only Local Copies…") { confirmingLocalRemoval = true }
                             .font(.caption).disabled(model.isWorking)
                     }
                 }
             }
             .alert("Remove prepared \(kind.rawValue)?", isPresented: $confirmingRemoval) {
-                Button("Remove prepared copies", role: .destructive) { model.removePreparedFiles(ids: itemIDs, kind: kind) }
+                Button("Remove Prepared Copies", role: .destructive) { model.removePreparedFiles(ids: itemIDs, kind: kind) }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Removes these prepared copies and their tracked temporary files on the reader. Original sources and completed reader files stay.")
             }
             .alert("Stop and remove this transfer?", isPresented: $confirmingStop) {
-                Button("Stop and remove", role: .destructive) { model.stopAndRemovePreparedFiles(ids: controlIDs) }
+                Button("Stop and Remove", role: .destructive) { model.stopAndRemovePreparedFiles(ids: controlIDs) }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Stops these files and cleans its temporary files. If the connection is lost, the queue stays so you can retry cleanup. Already saved files stay.")
             }
             .alert("Remove only local copies?", isPresented: $confirmingLocalRemoval) {
-                Button("Remove local copies", role: .destructive) { model.removePreparedFiles(ids: itemIDs, kind: kind, localOnly: true) }
+                Button("Remove Local Copies", role: .destructive) { model.removePreparedFiles(ids: itemIDs, kind: kind, localOnly: true) }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("The reader is not cleaned up. Its temporary files may remain on SD. Already saved content and firmware are unchanged.")
@@ -1690,7 +1714,7 @@ private struct TroubleshootingInspector: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 if let diagnostic = model.crashDiagnostic {
                     DiagnosticsInspector(diagnostic: diagnostic)
                 }
@@ -1722,9 +1746,9 @@ private struct DiagnosticsInspector: View {
             Text("Last event: \(diagnostic.lastEvent)")
                 .font(.caption2.monospaced()).textSelection(.enabled)
             HStack {
-                Button(expanded ? "Hide raw report" : "Show raw report") { expanded.toggle() }
+                Button(expanded ? "Hide Raw Report" : "Show Raw Report") { expanded.toggle() }
                     .buttonStyle(.bordered)
-                ShareLink("Export report", item: diagnostic.report)
+                ShareLink("Export Report", item: diagnostic.report)
             }
             if expanded {
                 ScrollView([.horizontal, .vertical]) {
@@ -1749,8 +1773,8 @@ private struct ConnectionTraceInspector: View {
         InspectorCard(title: "Connection log", symbol: "point.3.connected.trianglepath.dotted") {
             Text(nearby.traceAnalysis).font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button(expanded ? "Hide log" : "Show log") { expanded.toggle() }.buttonStyle(.bordered)
-                ShareLink("Export log", item: nearby.traceReport)
+                Button(expanded ? "Hide Log" : "Show Log") { expanded.toggle() }.buttonStyle(.bordered)
+                ShareLink("Export Log", item: nearby.traceReport)
             }
             if expanded {
                 ScrollView([.horizontal, .vertical]) {

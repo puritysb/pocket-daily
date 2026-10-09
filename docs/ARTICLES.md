@@ -73,8 +73,8 @@ The extension saves through the same local store, not through a network relay.
   a changed publisher ID. Unsubscribe removes only the subscription; all collected
   articles remain. Resubscribing to the same URL restores the same source filter identity.
 - New articles shows unread, unsaved items. Opening an offline article marks it read;
-  Mark as unread is reversible. Save for later is independent of reading and moves it
-  into Saved articles. All articles includes read and saved items. There is no automatic
+  Mark as unread is reversible. Save for Later is independent of reading and moves it
+  into Saved articles. All Articles includes read and saved items. There is no automatic
   content deletion, unread badge pressure, or destructive mark-all-read action.
 - Each row opens the in-app reader, or the capture editor for link-only items. Its menu
   contains save/unsave, read/unread, editing, explicit Prepare for reader and deletion.

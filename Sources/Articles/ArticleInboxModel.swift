@@ -6,9 +6,9 @@ final class ArticleInboxModel: ObservableObject {
         case unread, saved, all, feed(UUID)
         var title: String {
             switch self {
-            case .unread: "New articles"
-            case .saved: "Saved articles"
-            case .all: "All articles"
+            case .unread: "New Articles"
+            case .saved: "Saved Articles"
+            case .all: "All Articles"
             case .feed: "Subscription"
             }
         }

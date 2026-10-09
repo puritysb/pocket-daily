@@ -53,9 +53,10 @@ struct BookTransferSheet<Connection: View>: View {
                         if isSDDestination {
                             LabeledContent("Folder", value: sdFolder?.lastPathComponent ?? job.latestSDCopy?.folderName ?? "Not selected")
                             if job.needsConfirmation {
-                                Text("The earlier Wi-Fi transfer still needs its saved result checked. Copying to SD does not resolve that result.")
-                                    .font(.caption).foregroundStyle(.orange)
-                                Button("Review Wi-Fi result") {
+                                PocketStatusLabel("The earlier Wi-Fi transfer still needs its saved result checked. Copying to SD does not resolve that result.",
+                                                  tone: .pending, symbol: "exclamationmark.triangle")
+                                    .font(.caption)
+                                Button("Review Wi-Fi Result") {
                                     Task { _ = await model.selectBookTransferDestination(jobID, destination: .readerWiFi) }
                                 }.disabled(model.isWorking)
                             }
@@ -66,21 +67,21 @@ struct BookTransferSheet<Connection: View>: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
-                        VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 12) {
                             ForEach(job.items) { item in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: (isSDDestination ? job.latestSDCopy?.items.first { $0.bookID == item.bookID }?.result == .copied : item.result == .saved) ? "checkmark.circle" : "book.closed")
-                                    VStack(alignment: .leading, spacing: 3) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    itemSymbol(job, item)
+                                    VStack(alignment: .leading, spacing: 4) {
                                         Text(item.title).font(.headline)
                                         if isSDDestination {
                                             let copied = job.latestSDCopy?.items.first { $0.bookID == item.bookID }
                                             Text(sdItemTitle(copied?.result)).font(.caption).foregroundStyle(.secondary)
                                             if let path = copied?.path { Text(path).font(.caption2).foregroundStyle(.secondary) }
-                                            if let failure = copied?.failure { Text(failure).font(.caption).foregroundStyle(.orange) }
+                                            if let failure = copied?.failure { Text(failure).font(.caption) }
                                         } else {
                                             Text(itemTitle(item.result)).font(.caption).foregroundStyle(.secondary)
                                             if let path = item.publishedPath { Text(path).font(.caption2).foregroundStyle(.secondary) }
-                                            if let failure = item.failure { Text(failure).font(.caption).foregroundStyle(.orange) }
+                                            if let failure = item.failure { Text(failure).font(.caption) }
                                         }
                                     }
                                     Spacer(minLength: 0)
@@ -92,28 +93,21 @@ struct BookTransferSheet<Connection: View>: View {
                             Text("\(job.savedCount) of \(job.items.count) saved")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
-                        if let failure = isSDDestination ? job.latestSDCopy?.failure : job.failure { Text(failure).font(.callout).foregroundStyle(.orange) }
-                        if let error = model.bookTransferError { Text(error).font(.callout).foregroundStyle(.red) }
-                        if model.isDemoMode {
-                            Text("Demo does not connect or send files.").font(.callout).foregroundStyle(.secondary)
-                        } else if isSDDestination {
-                            sdActions(job)
-                        } else if connecting || job.stage == .connecting {
+                        if let failure = isSDDestination ? job.latestSDCopy?.failure : job.failure {
+                            PocketStatusLabel(failure, tone: .pending, symbol: "exclamationmark.triangle").font(.callout)
+                        }
+                        if let error = model.bookTransferError { PocketStatusLabel(error, tone: .failure).font(.callout) }
+                        if !model.isDemoMode, !isSDDestination, connecting || job.stage == .connecting {
                             connection()
-                            // Returns to this transfer; an attempt still running is stopped first.
-                            Button("Back to transfer", systemImage: "chevron.left") { cancelConnection(); connecting = false }
-                                .accessibilityIdentifier("book-transfer-connection-back")
-                        } else {
-                            actions(job)
                         }
                         if !isSDDestination, !model.isDemoMode, job.stage != .sending && job.stage != .checking && job.stage != .preparing && !job.isFinished {
                             if !job.needsConfirmation {
-                                Button("Discard this transfer…", role: .destructive) { discarding = true }
+                                Button("Discard This Transfer…", role: .destructive) { discarding = true }
                                     .font(.callout).disabled(model.isWorking)
                             }
                             if needsLocalRecovery(job) {
                                 DisclosureGroup("Recovery options") {
-                                    Button("Forget local prepared copies…", role: .destructive) { forgettingLocally = true }
+                                    Button("Forget Local Prepared Copies…", role: .destructive) { forgettingLocally = true }
                                         .font(.callout).disabled(model.isWorking)
                                         .accessibilityIdentifier("book-transfer-forget-local")
                                 }
@@ -125,6 +119,29 @@ struct BookTransferSheet<Connection: View>: View {
                     }
                 }
                 .padding(24)
+            }
+            // The task's actions keep one place at the bottom through every
+            // step, above however many books the list holds.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let job {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if model.isDemoMode {
+                            Text("Demo does not connect or send files.").font(.callout).foregroundStyle(.secondary)
+                        } else if isSDDestination {
+                            sdActions(job)
+                        } else if connecting || job.stage == .connecting {
+                            // Returns to this transfer; an attempt still running is stopped first.
+                            Button("Back to Transfer", systemImage: "chevron.left") { cancelConnection(); connecting = false }
+                                .accessibilityIdentifier("book-transfer-connection-back")
+                        } else {
+                            actions(job)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24).padding(.vertical, 12)
+                    .background(PocketPalette.panel)
+                    .overlay(alignment: .top) { Divider() }
+                }
             }
             .navigationTitle("Send to Reader")
 #if os(iOS)
@@ -148,14 +165,14 @@ struct BookTransferSheet<Connection: View>: View {
             } message: {
                 Text("The selected books stay the same. Sending starts only when you choose Send.")
             }
-            .confirmationDialog("Forget local copies and tracking?", isPresented: $forgettingLocally, titleVisibility: .visible) {
-                Button("Forget local copies", role: .destructive) { model.discardBookTransferJob(jobID, localOnly: true) }
-                Button("Keep transfer", role: .cancel) {}
+            .confirmationDialog("Forget local copies of \(jobName)?", isPresented: $forgettingLocally, titleVisibility: .visible) {
+                Button("Forget Local Copies", role: .destructive) { model.discardBookTransferJob(jobID, localOnly: true) }
+                Button("Keep Transfer", role: .cancel) {}
             } message: {
                 Text("The reader may already have saved these books. This removes only local prepared copies and tracking; it cannot confirm or remove files on the reader. Your Library stays. No automatic retry follows.")
             }
-            .confirmationDialog("Discard this transfer?", isPresented: $discarding, titleVisibility: .visible) {
-                Button("Discard transfer", role: .destructive) { model.discardBookTransferJob(jobID) }
+            .confirmationDialog("Discard sending \(jobName)?", isPresented: $discarding, titleVisibility: .visible) {
+                Button("Discard Transfer", role: .destructive) { model.discardBookTransferJob(jobID) }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Removes this task’s prepared copies and tracked temporary reader files. Your Library and books already saved on the reader stay.")
@@ -176,60 +193,83 @@ struct BookTransferSheet<Connection: View>: View {
         switch job.stage {
         case .preparing:
             ProgressView(job.stage.displayTitle)
-            Button("Stop preparation") { model.pauseBookTransferJob(jobID) }
+            Button("Stop Preparation") { model.pauseBookTransferJob(jobID) }
         case .waitingForOtherWork:
             Text("Finish the current reader task, then retry these selected books.").font(.caption).foregroundStyle(.secondary)
-            Button("Retry preparation") { Task { await model.retryBookTransferJob(jobID, library: library) } }
+            Button("Retry Preparation") { Task { await model.retryBookTransferJob(jobID, library: library) } }
                 .disabled(model.isWorking).buttonStyle(.bordered)
-            if model.isWorking { Button("View current task", action: onCurrentTask) }
+            if model.isWorking { Button("View Current Task", action: onCurrentTask) }
         case .sending, .checking:
             Button("Stop") { model.pauseBookTransferJob(jobID) }.buttonStyle(.bordered)
                 .accessibilityIdentifier("book-transfer-stop")
         case .completed:
             Text("Reading positions are exchanged separately.").font(.caption).foregroundStyle(.secondary)
-            Button("View reader library", action: onInventory).buttonStyle(.bordered)
+            Button("View Reader Library", action: onInventory).buttonStyle(.bordered)
         case .discarded:
             EmptyView()
         default:
             if !model.device.isConnected {
-                Button("Connect reader…") { connecting = true }.buttonStyle(.borderedProminent)
+                Button("Connect Reader…") { connecting = true }.buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("book-transfer-connect")
             } else if job.needsConfirmation {
                 if job.target?.readerID != nil, job.target?.readerID != model.readerStatus?.deviceID {
                     Text("Connect the original reader to check whether it saved these books.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Button("Reconnect selected reader…") { reconnectSelectedReader() }
+                    Button("Reconnect Selected Reader…") { reconnectSelectedReader() }
                         .buttonStyle(.borderedProminent).disabled(model.isWorking)
                         .accessibilityIdentifier("book-transfer-reconnect-original")
                 } else {
-                    Button("Check saved results") { model.checkBookTransferJob(jobID) }.buttonStyle(.borderedProminent)
+                    Button("Check Saved Results") { model.checkBookTransferJob(jobID) }.buttonStyle(.borderedProminent)
                         .disabled(model.isWorking).accessibilityIdentifier("book-transfer-check")
                 }
             } else if model.readerStatus?.supportsAtomicUpload != true {
-                Text("This reader’s firmware does not support safe book transfers. Update compatible firmware in Device, then return to this task.")
+                Text("This reader’s firmware does not support safe book transfers. Update compatible firmware in Manage Reader, then return to this task.")
                     .font(.callout).foregroundStyle(.secondary)
-                Button("Manage reader", action: onDevice).buttonStyle(.bordered)
+                Button("Manage Reader", action: onDevice).buttonStyle(.bordered)
             } else if model.canSendBookTransferJob(jobID) {
                 let remaining = job.items.filter { $0.transferID != nil && $0.result != .saved && $0.result != .discarded }.count
-                Button("Send \(remaining) \(remaining == 1 ? "book" : "books")") { model.sendBookTransferJob(jobID) }
+                Button("Send \(remaining) \(remaining == 1 ? "Book" : "Books")") { model.sendBookTransferJob(jobID) }
                     .buttonStyle(.borderedProminent).accessibilityIdentifier("book-transfer-send")
             } else if !model.isWorking, job.target?.readerID != nil, job.target?.readerID != model.readerStatus?.deviceID {
                 Text("The connected reader differs from this transfer’s target.").font(.caption).foregroundStyle(.secondary)
                 if requiresOriginalTarget(job) {
                     Text("Reconnect the original reader to continue this transfer.").font(.caption).foregroundStyle(.secondary)
-                    Button("Reconnect selected reader…") { reconnectSelectedReader() }.buttonStyle(.bordered)
+                    Button("Reconnect Selected Reader…") { reconnectSelectedReader() }.buttonStyle(.bordered)
                 } else {
-                    Button("Choose connected reader…") { changingTarget = true }.buttonStyle(.bordered)
+                    Button("Choose Connected Reader…") { changingTarget = true }.buttonStyle(.bordered)
                 }
             } else if job.items.contains(where: { $0.result == .unprepared || $0.result == .failed }) {
-                Button("Retry preparation") { Task { await model.retryBookTransferJob(jobID, library: library) } }
+                Button("Retry Preparation") { Task { await model.retryBookTransferJob(jobID, library: library) } }
                     .buttonStyle(.borderedProminent).disabled(model.isWorking)
             } else if !model.isWorking {
-                Button("Choose connected reader…") { changingTarget = true }.buttonStyle(.borderedProminent)
+                Button("Choose Connected Reader…") { changingTarget = true }.buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("book-transfer-select-target")
-            } else {
-                Button("View current task", action: onCurrentTask).buttonStyle(.bordered)
             }
+            // A disabled action above says why and where the blocking work is.
+            if model.device.isConnected, model.isWorking {
+                Text("Available after the current reader task.").font(.caption).foregroundStyle(.secondary)
+                Button("View Current Task", action: onCurrentTask).buttonStyle(.bordered)
+            }
+        }
+    }
+
+    /// The books by name, for confirmations: “Dune” or “Dune” and 2 more.
+    private var jobName: String {
+        guard let job, let first = job.items.first?.title else { return "these books" }
+        return job.items.count > 1 ? "“\(first)” and \(job.items.count - 1) more" : "“\(first)”"
+    }
+
+    /// Each book says its own result: saved, failed or not yet sent.
+    @ViewBuilder private func itemSymbol(_ job: BookTransferJob, _ item: BookTransferJob.Item) -> some View {
+        let copied = job.latestSDCopy?.items.first { $0.bookID == item.bookID }
+        let done = isSDDestination ? copied?.result == .copied : item.result == .saved
+        let failed = isSDDestination ? copied?.failure != nil || copied?.result == .failed : item.failure != nil || item.result == .failed
+        if done {
+            Image(systemName: StatusTone.success.symbol).foregroundStyle(StatusTone.success.color).accessibilityLabel("Saved")
+        } else if failed {
+            Image(systemName: StatusTone.failure.symbol).foregroundStyle(StatusTone.failure.color).accessibilityLabel("Not sent")
+        } else {
+            Image(systemName: "book.closed").foregroundStyle(.secondary).accessibilityHidden(true)
         }
     }
 
@@ -242,7 +282,7 @@ struct BookTransferSheet<Connection: View>: View {
     @ViewBuilder private func sdActions(_ job: BookTransferJob) -> some View {
         if model.isBookSDCopyActive(jobID) {
             ProgressView("Copying selected books")
-            Button("Stop copying") { model.pauseBookTransferJob(jobID) }.buttonStyle(.bordered)
+            Button("Stop Copying") { model.pauseBookTransferJob(jobID) }.buttonStyle(.bordered)
         } else {
             if job.latestSDCopy?.stage == .completed {
                 Text("Copied to SD card. Insert the card in the reader to use these books.")
@@ -254,17 +294,17 @@ struct BookTransferSheet<Connection: View>: View {
                 Text("\(job.latestSDCopy?.copiedCount ?? 0) of \(job.items.count) copied. Check the folder before starting another copy.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if let error = sdFolderError { Text(error).font(.callout).foregroundStyle(.orange) }
-            Button(sdFolder == nil ? "Choose SD card folder…" : "Choose another folder…") { choosingSD = true }
+            if let error = sdFolderError { PocketStatusLabel(error, tone: .failure).font(.callout) }
+            Button(sdFolder == nil ? "Choose SD Card Folder…" : "Choose Another Folder…") { choosingSD = true }
                 .disabled(model.isWorking || model.isDemoMode)
                 .accessibilityIdentifier("book-transfer-sd-folder")
             if let sdFolder {
-                Button("Copy \(job.items.count) \(job.items.count == 1 ? "book" : "books") to SD card") {
+                Button("Copy \(job.items.count) \(job.items.count == 1 ? "Book" : "Books") to SD Card") {
                     model.copyBookTransferJobToSD(jobID, root: sdFolder, library: library)
                 }.buttonStyle(.borderedProminent).disabled(!model.canPrepareFiles)
                     .accessibilityIdentifier("book-transfer-sd-copy")
             }
-            if model.isWorking { Button("View current task", action: onCurrentTask) }
+            if model.isWorking { Button("View Current Task", action: onCurrentTask) }
         }
     }
 

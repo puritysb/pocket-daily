@@ -56,7 +56,7 @@ final class PocketScreenshotTests: XCTestCase {
         app.revealInReader(settings, upward: true)
         settings.tap()
         app.openScreen("Reading")
-        XCTAssertEqual(app.buttons["reader-setting-scope"].value as? String, "Reading preferences")
+        XCTAssertEqual(app.buttons["reader-setting-scope"].value as? String, "Reading Preferences")
         XCTAssertTrue(app.buttons["reader-setting-scope"].isHittable)
         let editor = XCTAttachment(screenshot: app.screenshot())
         editor.name = "qa-accessibility-reader-settings"
@@ -79,7 +79,7 @@ final class PocketScreenshotTests: XCTestCase {
         actions.lifetime = .keepAlways
         add(actions)
         discard.tap()
-        app.alerts.buttons["Discard edits"].tap()
+        app.alerts.buttons["Discard Edits"].tap()
     }
 
     func testCaptureDemoScreens() throws {
@@ -115,8 +115,8 @@ final class PocketScreenshotTests: XCTestCase {
         app.buttons["content-editor-close"].tap()
 
         if app.isCompact {
-            app.open("Manage reader")
-            XCTAssertTrue(app.buttons["Exit demo"].waitForExistence(timeout: 5))
+            app.open("Manage Reader")
+            XCTAssertTrue(app.buttons["Exit Demo"].waitForExistence(timeout: 5))
             try save(name: "05-device")
         } else {
             app.terminate()
@@ -124,7 +124,7 @@ final class PocketScreenshotTests: XCTestCase {
             x4.openScreen("Home")
             XCTAssertTrue(x4.waitForLayoutPreview(), "The X4 Home preview never rendered")
             try save(name: "05-home-x4")
-            x4.open("Manage reader")
+            x4.open("Manage Reader")
             try save(name: "07-device")
         }
     }
@@ -142,8 +142,8 @@ final class PocketScreenshotTests: XCTestCase {
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["Read The books we return to"].waitForExistence(timeout: 5))
         app.buttons["article-options-The books we return to"].tap()
-        app.buttons["Save for later"].tap()
-        app.filterArticles("All articles")
+        app.buttons["Save for Later"].tap()
+        app.filterArticles("All Articles")
         try save(name: "06-articles")
     }
 

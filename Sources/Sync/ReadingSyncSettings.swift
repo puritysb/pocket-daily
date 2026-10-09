@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Where your place in a book is kept in step, without a Pocket Daily
 /// account or any server to set up. A section of Settings; pairing the reader
-/// over Bluetooth lives with the other reader connections in My Reader → Reader options → Manage reader.
+/// over Bluetooth lives with the other reader connections in My Reader → Reader Options → Manage Reader.
 struct ReadingSyncSettingsSection: View {
     @ObservedObject var sync: ReadingSync
     @ObservedObject var model: PocketModel
@@ -43,11 +43,11 @@ struct ReadingSyncSettingsSection: View {
                     .accessibilityIdentifier("sync-last-exchange")
             }
             if let error = sync.readerExchangeError {
-                Label("The last exchange with the reader failed: \(error)", systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
+                PocketStatusLabel("Last exchange failed · \(error)", tone: .failure)
+                    .font(.caption)
             }
             if sync.readerExchangeEnabled && model.canExchangeReadingPositions {
-                Button("Exchange positions now") {
+                Button("Exchange Positions Now") {
                     sync.exchangeWithReader(model: model, library: library, force: true)
                 }
                 .disabled(model.isWorking)
@@ -62,11 +62,12 @@ struct ReadingSyncSettingsSection: View {
 }
 
 /// Pairs the reader once so it can exchange reading places over Bluetooth
-/// when it closes a book, wakes or goes to sleep. It sits in My Reader → Reader options → Manage reader with the
+/// when it closes a book, wakes or goes to sleep. It sits in My Reader → Reader Options → Manage Reader with the
 /// other ways of reaching the reader.
 struct ReaderBluetoothPairingCard: View {
     @ObservedObject var sync: ReadingSync
     @ObservedObject private var link = ReaderBluetoothLink.shared
+    @State private var confirmingForget = false
 
     var body: some View {
         InspectorCard(title: "Continue reading across devices", symbol: "arrow.triangle.2.circlepath") {
@@ -76,12 +77,17 @@ struct ReaderBluetoothPairingCard: View {
                 .accessibilityIdentifier("sync-reader-bluetooth")
             if let reader = link.rememberedReader {
                 HStack {
-                    Label("\(reader.model) paired", systemImage: "checkmark.circle")
+                    PocketStatusLabel("\(reader.model) paired", tone: .success, symbol: "checkmark.circle")
                         .font(.callout.weight(.medium))
                         .accessibilityIdentifier("sync-bluetooth-paired")
                     Spacer()
-                    Button("Forget", role: .destructive) { link.forget() }
+                    Button("Forget…", role: .destructive) { confirmingForget = true }
                         .buttonStyle(.borderless).font(.callout)
+                }
+                .confirmationDialog("Forget \(reader.model)?", isPresented: $confirmingForget, titleVisibility: .visible) {
+                    Button("Forget \(reader.model)", role: .destructive) { link.forget() }
+                } message: {
+                    Text("Positions stop moving over Bluetooth until you pair again on the reader. Books and settings are not changed.")
                 }
             } else {
                 switch link.setup {
@@ -95,16 +101,15 @@ struct ReaderBluetoothPairingCard: View {
                     Button("Cancel") { link.cancelSetup() }
                         .buttonStyle(.bordered)
                 case let .failed(message):
-                    Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.caption).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Try again") { link.beginSetup() }
+                    PocketStatusLabel(message, tone: .failure)
+                        .font(.caption)
+                    Button("Try Again") { link.beginSetup() }
                         .buttonStyle(.bordered)
                 case .idle, .paired:
-                    Button("Pair reader") { link.beginSetup() }
+                    Button("Pair Reader") { link.beginSetup() }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("sync-bluetooth-setup")
-                    Text("On the reader: Pocket Daily → Sync → Direct connection. Then choose Pair reader and confirm its code. A direct Wi-Fi connection pairs it too.")
+                    Text("On the reader: Pocket Daily → Sync → Direct connection. Then choose Pair Reader and confirm its code. A direct Wi-Fi connection pairs it too.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -118,9 +123,11 @@ struct ReaderBluetoothPairingCard: View {
                 }
             }
             if !sync.readerExchangeEnabled {
-                Text("Reader sync is off in Settings, so a paired reader does not exchange places.")
-                    .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                PocketStatusLabel("Reader sync is off, so a paired reader does not exchange places.", tone: .pending,
+                                  symbol: "exclamationmark.triangle")
+                    .font(.caption)
+                Button("Turn On Reader Sync") { sync.readerExchangeEnabled = true }
+                    .buttonStyle(.bordered)
             }
         }
     }

@@ -28,18 +28,18 @@ iPhone, or ⌘, on Mac) holds Appearance and **Continue Reading**: iCloud
 key-value storage between the user's own Apple devices (on by default, no
 setup) and exchange with a connected X3/X4 reader over the local connection.
 Neither needs a Pocket Daily account. Pairing a reader for Bluetooth reading sync is in
-**My Reader → Reader options (•••) → Manage reader** and is hidden in demo mode. Settings opens in the current
+**My Reader → Reader Options (•••) → Manage Reader** and is hidden in demo mode. Settings opens in the current
 app window, including on Mac.
 
 The companion has an explicit, local demo mode for review without a reader:
-open **My Reader → Reader options (•••) → Manage reader** and choose **Try demo**. My Reader combines device status, saved work and its book inventory on one screen.
-In demo, the inventory lists example files labelled as examples. **Reader settings**
+open **My Reader → Reader Options (•••) → Manage Reader** and choose **Try Demo**. My Reader combines device status, saved work and its book inventory on one screen.
+In demo, the inventory lists example files labelled as examples. **Reader Settings**
 shows previews drawn by the reader's own layout code with a sample card and
 built-in sample content, captioned as sample content; nothing in them is read
-from a device. Choose Home screen, Sleep screen or Reading preferences above the preview;
+from a device. Choose Home Screen, Sleep Screen or Reading Preferences above the preview;
 My cards and Weather & calendar open dedicated source editors from Home/Sleep settings,
 each with one apply action; closing returns to the same Home/Sleep layout.
-My cards makes QR codes locally. **Reading preferences** shows an
+My cards makes QR codes locally. **Reading Preferences** shows an
 illustrative book and model-specific page-button actions. Demo
 settings are populated, but Apply, file transfer and applying settings are
 disabled so review data can never be mistaken for a connected device. Cards a
@@ -51,12 +51,12 @@ Live hardware actions require a compatible reader:
    current-window task sheet keeps that content selected through connection.
    Other prepared books and firmware are not included in this task.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
-   choose Find on same Wi-Fi. This requests local-network access without BLE or
+   choose Find on Same Wi-Fi. This requests local-network access without BLE or
    automatic Wi-Fi switching. Afterwards the app reconnects by itself whenever
    that reader answers again at its last address on the same Wi-Fi (Settings →
    Reconnect on the same Wi-Fi); it asks only that address and never changes networks.
 3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
-   expand the other connection methods, choose Connect directly in the app,
+   expand the other connection methods, choose Connect Directly in the app,
    and confirm the Wi-Fi transition. BLE
    pairing supplies the temporary credentials. No router or internet is required.
 4. Choose Send in the task sheet and keep the iPhone app open. Closing the sheet
@@ -89,9 +89,9 @@ availability against the connected reader. When nothing has been published it
 says so rather than reporting a connection problem.
 Local firmware file import is not offered. The user chooses Update and confirms
 the compatibility/recovery notice before download and local transfer begin.
-Download update for later instead downloads and validates a local copy without
+Download Update for Later instead downloads and validates a local copy without
 transferring; compatibility/recovery acknowledgement is required before the
-later Send update action.
+later Send Update action.
 Cancel stops the operation and cleans tracked temporary files when the reader
 is reachable; failed cleanup retains a retryable copy. Already published files
 are unchanged.
@@ -165,7 +165,7 @@ Extraction failures keep a link and preview; Get full text allows retry or paste
 Subscriptions and page requests go directly to publishers without browser cookies,
 credentials, scripts, images or an extraction service. Demo mode does not fetch feeds.
 
-Tap an offline article to read in the app; its menu offers Save for later, read/unread,
+Tap an offline article to read in the app; its menu offers Save for Later, read/unread,
 Edit article, Send to Reader… and Delete. Reading and saving are independent.
 Unsubscribing retains collected articles; refresh does not restore deleted feed articles.
 Content, subscriptions and these flags stay on this device. Reader preparation and

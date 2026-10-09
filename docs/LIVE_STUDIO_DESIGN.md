@@ -166,8 +166,8 @@ unchanged. Physical pixels and host/device parity remain unverified.
 
 ## Studio UX
 
-Reader customization (2026-10-09) uses one Reader settings entry point. A
-local scope menu selects Home screen, Sleep screen or Reading preferences;
+Reader customization (2026-10-09) uses one Reader Settings entry point. A
+local scope menu selects Home Screen, Sleep Screen or Reading Preferences;
 every scope shares persistent preview, independently scrolling
 controls and **Apply to Reader**. Payloads copy only that area's fields onto the
 last loaded reader baseline. Discard and successful saves preserve unrelated

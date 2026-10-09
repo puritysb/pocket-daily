@@ -12,8 +12,8 @@ reader-navigation updates.
 | Mac | `en-US/mac-16x10` | 2880 × 1800 | `01-library`, `02-home-x3`, `03-card-x3`, `04-sleep-x4`, `05-articles`, `06-device` |
 
 Reading and the Library lead the sets. My Reader combines status and inventory;
-Reader settings holds Home/Sleep and Reading preferences, with a local scope menu.
-Manage reader, opened from Reader options, holds connection and firmware.
+Reader Settings holds Home/Sleep and Reading Preferences, with a local scope menu.
+Manage Reader, opened from Reader Options, holds connection and firmware.
 Articles shows subscriptions populated from local publisher fixtures.
 The iPhone set has six images, iPad seven, and Mac six. Mac is rendered
 off-screen from the same shipping views. `validate_app_store.sh` enforces the counts and
