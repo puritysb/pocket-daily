@@ -32,6 +32,44 @@ Prepare cloud-hosted files before switching networks. The Mac's usual Wi-Fi
 internet may be unavailable during a direct session; concurrent internet is
 not promised. No automatic LAN-to-hotspot fallback is permitted.
 
+## Multiple registered readers (2026-10-09)
+
+`ReaderFleet` keeps independent `PocketModel` instances. My Reader → My Readers
+selects the visible workspace, adds a reader on the current network, renames it,
+or removes an idle disconnected registration. Each instance owns its HTTP client,
+heartbeat, discovery, `ReaderWorkLane`, inventory and transfer state. Selecting a
+reader does not cancel another reader's task. Explicit Connect may run concurrently
+for readers on the same LAN; automatic reconnect only probes each saved endpoint.
+
+Registrations pin the status device ID before optional settings or file work.
+Discovery skips identities belonging to other registrations; accepting a late
+response rechecks the registry and network admission. A known identity cannot
+be replaced by a missing or different ID. Legacy unidentified readers retain
+the first registration's compatibility path, bound to its observed address;
+additional readers must report an ID. IDs remain identification, not LAN
+cryptographic authentication.
+
+The first registration retains legacy storage and the existing Bluetooth
+restoration identifier. Additional registrations have UUID-named storage,
+preferences, paired peripheral records and distinct restoration identifiers.
+Profile/card drafts, activation journals, weather/calendar preferences, prepared
+copies and book-transfer jobs are isolated. Removing a registration cancels its
+Bluetooth link and retains local drafts/copies for recovery. Corrupt/unsupported
+registry data is preserved and connections are refused; the app Library still works.
+
+A direct Wi-Fi request is refused while another reader is connected, using the
+network, or holding a direct lease. The app explains which reader to disconnect;
+it does not silently cancel work or switch Wi-Fi. Once a direct lease is reserved,
+other LAN connection/reconnect/quiet exchange paths cannot enter. This does not
+promise concurrent access to several private hotspots.
+
+Wire contracts are unchanged: the sibling's `docs/nearby-sync-v1.md` status
+`deviceID`, lease and session-end rules, `docs/reading-sync-ble-v1.md` authenticated
+ID/READ1 exchange, and existing HTTP/stream publication remain in use. Several
+reader instances do not add clients to any individual reader. iOS Bluetooth
+restoration is still OS-controlled; neither physical concurrent radio behavior
+nor background delivery is established by simulator tests.
+
 ## Resource ownership
 
 The firmware's existing COMPANION (shared network) and POCKET_SYNC (private

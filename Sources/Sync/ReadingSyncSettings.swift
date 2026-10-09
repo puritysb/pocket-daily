@@ -7,7 +7,7 @@ struct ReadingSyncSettingsSection: View {
     @ObservedObject var sync: ReadingSync
     @ObservedObject var model: PocketModel
     @ObservedObject var library: LibraryModel
-    @ObservedObject private var link = ReaderBluetoothLink.shared
+    private var link: ReaderBluetoothLink { model.bluetoothLink }
 
     var body: some View {
         Section {
@@ -66,7 +66,7 @@ struct ReadingSyncSettingsSection: View {
 /// other ways of reaching the reader.
 struct ReaderBluetoothPairingCard: View {
     @ObservedObject var sync: ReadingSync
-    @ObservedObject private var link = ReaderBluetoothLink.shared
+    @ObservedObject var link: ReaderBluetoothLink = .shared
     @State private var confirmingForget = false
 
     var body: some View {

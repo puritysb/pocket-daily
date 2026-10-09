@@ -62,6 +62,7 @@ final class NearbySyncController: NSObject, ObservableObject {
         record("Pocket BLE controller initialized")
     }
 
+    var acceptsPeripheral: (UUID) -> Bool = { _ in true }
     var traceReport: String { traceEntries.joined(separator: "\n") }
 
     var traceAnalysis: String {
@@ -230,7 +231,11 @@ final class NearbySyncController: NSObject, ObservableObject {
         guard eventNotificationsReady, let pendingStatus else { return }
         // Before the state change: the shell may request the hotspot on `.connected`,
         // which moves the state on at once.
-        if let identifier = peripheral?.identifier { onAuthenticated?(identifier, pendingStatus) }
+        if let identifier = peripheral?.identifier {
+            onAuthenticated?(identifier, pendingStatus)
+            // A registration may reject this identity and disconnect synchronously.
+            guard peripheral?.identifier == identifier else { return }
+        }
         state = .connected(pendingStatus)
     }
 }
@@ -265,7 +270,7 @@ extension NearbySyncController: CBCentralManagerDelegate {
         rssi RSSI: NSNumber
     ) {
         Task { @MainActor in
-            guard state == .scanning, self.peripheral == nil else { return }
+            guard state == .scanning, self.peripheral == nil, acceptsPeripheral(peripheral.identifier) else { return }
             let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
             let serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
             let name = advertisedName ?? peripheral.name

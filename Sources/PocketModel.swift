@@ -165,13 +165,35 @@ enum TransferPreparation {
         }
     }
 
-    static func file(_ item: PreparedTransfer) -> URL {
+    static func file(_ item: PreparedTransfer, directory: URL = directory) -> URL {
         directory.appendingPathComponent(item.id.uuidString).appendingPathComponent(item.filename)
     }
 }
 
 @MainActor
 final class PocketModel: ObservableObject, DeviceSession {
+    let sessionStorage: ReaderSessionStorage
+    let bluetoothLink: ReaderBluetoothLink
+    @Published var registrationName: String?
+    var profileEditStore: ProfileEditStore { sessionStorage.profileEdits }
+    /// Fleet policy runs on the main actor before any reader is admitted.
+    var acceptsReader: (CrossPointStatus, String, Int) -> Bool = { _, _, _ in true }
+    var registerReader: (CrossPointStatus, String, Int) throws -> Void = { _, _, _ in }
+    var networkAdmission: (_ direct: Bool) -> String? = { _ in nil }
+    var acceptsBluetoothReader: (String, UUID) throws -> Void = { _, _ in }
+    var acceptsPeripheral: (UUID) -> Bool = { _ in true }
+    var hasNetworkActivity: Bool { readerWork.isActive || autoReconnectProbe != nil }
+    var canRemoveRegistration: Bool {
+        readerStatus == nil && !isWorking && !readerWork.isActive && !hasDirectSession && autoReconnectProbe == nil
+            && bluetoothLink.setup != .searching && !bluetoothLink.nearbySessionActive
+    }
+    var rememberedPort: Int { min(65535, max(1, sessionStorage.defaults.object(forKey: "Pocket.lastReaderPort") as? Int ?? 80)) }
+
+    private func admitNetwork(direct: Bool) -> Bool {
+        if let message = networkAdmission(direct) { post(message, tone: .pending); return false }
+        return true
+    }
+
     struct LocalFileOperations: Sendable {
         var prepare: @Sendable (URL) async throws -> PreparedTransfer = { url in
             try await Task.detached(priority: .userInitiated) { try TransferPreparation.prepare(url) }.value
@@ -429,25 +451,25 @@ final class PocketModel: ObservableObject, DeviceSession {
     func quietReadingExchange(minimumInterval: TimeInterval = 30,
                               prepare: @escaping @MainActor (ReaderReadingList, String) -> [PositionRecord],
                               finish: @escaping @MainActor (String, Int, Error?) -> Void) {
-        guard !isDemoMode, !isInBackground, readerStatus == nil, !hasReaderWork, !isWorking,
+        guard networkAdmission(false) == nil, !isDemoMode, !isInBackground, readerStatus == nil, !hasReaderWork, !isWorking,
               !hasDirectSession, readerWorkTask == nil,
               Date().timeIntervalSince(lastQuietExchange) >= minimumInterval,
               let host = discoveryIO.rememberedHost, !host.isEmpty,
-              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return }
+              let identity = sessionStorage.defaults.string(forKey: Self.lastReaderDeviceIDKey) else { return }
         lastQuietExchange = Date()
         let attempt = connectionAttempt
         startReaderWork(attempt: attempt, kind: .quietReading) { [self] owner in
             // A reader that is reading, asleep or elsewhere simply does not answer.
-            guard let status = try? await discoveryIO.status(host: host, port: 80, timeout: 1.5),
+            guard let status = try? await discoveryIO.status(host: host, port: rememberedPort, timeout: 1.5),
                   status.readingProgress == 1, status.deviceID == identity,
                   ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
             var sent = 0
             do {
-                let list = try await client.readingProgress(identity: identity, host: host, port: 80)
+                let list = try await client.readingProgress(identity: identity, host: host, port: rememberedPort)
                 guard ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
                 for record in prepare(list, status.device).prefix(10) {
                     guard ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
-                    try await client.offerReadingProgress(record, identity: identity, host: host, port: 80)
+                    try await client.offerReadingProgress(record, identity: identity, host: host, port: rememberedPort)
                     guard ownsReaderWork(owner, attempt: attempt), !isDemoMode else { return }
                     sent += 1
                 }
@@ -466,15 +488,15 @@ final class PocketModel: ObservableObject, DeviceSession {
             status: readerStatus, isDemo: isDemoMode,
             isConnecting: readerStatus == nil && (isSearchingForReader || canCancelConnection),
             isDirect: hasDirectSession,
-            bluetoothPaired: ReaderBluetoothLink.shared.rememberedReader != nil,
-            bluetoothSupported: ReaderBluetoothLink.shared.rememberedReader?.supportsReadingSync == true)
+            bluetoothPaired: bluetoothLink.rememberedReader != nil,
+            bluetoothSupported: bluetoothLink.rememberedReader?.supportsReadingSync == true)
     }
 
     /// A reader connected before, over Wi-Fi or Bluetooth: worth showing its
     /// state outside the device pages even while it is away.
     var hasKnownReader: Bool {
-        UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) != nil
-            || ReaderBluetoothLink.shared.rememberedReader != nil
+        sessionStorage.defaults.string(forKey: Self.lastReaderDeviceIDKey) != nil
+            || bluetoothLink.rememberedReader != nil
     }
 
     static let autoReconnectKey = "Pocket.reconnectSameWiFi"
@@ -482,6 +504,11 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// session holds until the reader leaves Sync.
     private var autoReconnectHeld = false
     private var autoReconnectProbe: Task<Void, Never>?
+    // Explicit foreground Connect can wake a bonded reader before LAN discovery.
+    // Quiet reconnect probes never raise a sleeping reader's Wi-Fi radio.
+    var wakeSleepingReader: @MainActor (RememberedBluetoothReader) async throws -> Void = { reader in
+        try await ReaderWakeConnector().wake(reader)
+    }
 
     /// Reopens the session with the last reader when it answers at its last
     /// address on the current Wi-Fi with the same device ID, which it does while
@@ -489,15 +516,16 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// lane so the Bluetooth link keeps its pending connection; no network is
     /// joined or scanned. Direct connection stays explicit.
     func reconnectRememberedReader() {
+        guard networkAdmission(false) == nil else { return }
         guard UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true,
               autoReconnectProbe == nil, !isDemoMode, !isInBackground, readerStatus == nil,
               readerWorkTask == nil, !isWorking, !hasDirectSession, !isCancellingConnection,
               let host = discoveryIO.rememberedHost, !host.isEmpty,
-              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return }
+              let identity = sessionStorage.defaults.string(forKey: Self.lastReaderDeviceIDKey) else { return }
         let attempt = connectionAttempt
         autoReconnectProbe = Task { [self] in
             defer { autoReconnectProbe = nil }
-            let status = try? await discoveryIO.status(host: host, port: 80, timeout: 1.5)
+            let status = try? await discoveryIO.status(host: host, port: rememberedPort, timeout: 1.5)
             guard let status, status.deviceID == identity else {
                 autoReconnectHeld = false
                 return
@@ -508,7 +536,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             let session = connectionAttempt
             startReaderWork(attempt: session, kind: .discovery) { [self] _ in
                 guard !Task.isCancelled, session == connectionAttempt else { return }
-                await accept(status: status, host: host, httpPort: 80)
+                await accept(status: status, host: host, httpPort: rememberedPort)
             }
         }
     }
@@ -769,14 +797,17 @@ final class PocketModel: ObservableObject, DeviceSession {
             return editor
         }
         #endif
-        let editor = ContentEditorModel(store: try ContentDraftStore.applicationStore(), isDemo: isDemoMode)
+        let store = try sessionStorage.root.map { ContentDraftStore(file: $0.appendingPathComponent("Studio/content-draft.json")) }
+            ?? ContentDraftStore.applicationStore()
+        let editor = ContentEditorModel(store: store, isDemo: isDemoMode)
         if !isDemoMode { savedContentEditor = editor }
         return editor
     }
 
     private func contentJournal() throws -> ContentActivationJournal {
         if let activationJournal { return activationJournal }
-        let journal = try ContentActivationJournal.applicationStore()
+        let journal = try sessionStorage.root.map { ContentActivationJournal(file: $0.appendingPathComponent("Studio/content-activation.json")) }
+            ?? ContentActivationJournal.applicationStore()
         activationJournal = journal
         return journal
     }
@@ -882,16 +913,20 @@ final class PocketModel: ObservableObject, DeviceSession {
     init(discoveryIO: (any ReaderDiscoveryIO)? = nil, client: CrossPointClient = CrossPointClient(),
          activationJournal: ContentActivationJournal? = nil,
          contentTransportFactory: ContentTransportFactory? = nil,
-         localFiles: LocalFileOperations = .init(),
+         localFiles: LocalFileOperations? = nil,
          associationIO: (any ReaderAssociationIO)? = nil,
          glanceSettings: GlanceSettings? = nil,
          releaseSource: ReleaseOperations = .init(),
-         bookTransferStore: BookTransferJobStore = BookTransferJobStore()) {
+         bookTransferStore: BookTransferJobStore? = nil,
+         sessionStorage: ReaderSessionStorage = .legacy,
+         bluetoothLink: ReaderBluetoothLink? = nil) {
+        self.sessionStorage = sessionStorage
+        self.bluetoothLink = bluetoothLink ?? .shared
         self.client = client
         self.releaseSource = releaseSource
-        self.glanceSettings = glanceSettings ?? GlanceSettings()
-        self.localFiles = localFiles
-        self.bookTransferStore = bookTransferStore
+        self.glanceSettings = glanceSettings ?? GlanceSettings(defaults: sessionStorage.defaults)
+        self.localFiles = localFiles ?? sessionStorage.localFiles()
+        self.bookTransferStore = bookTransferStore ?? sessionStorage.jobs
         self.contentTransportFactory = contentTransportFactory ?? { revision, identity, host, port in
             ReaderContentTransport(target: revision, deviceID: identity, host: host, port: port, client: client)
         }
@@ -899,6 +934,11 @@ final class PocketModel: ObservableObject, DeviceSession {
         self.activationJournal = activationJournal
         var selectedDiscovery = discoveryIO
         #if DEBUG
+        if selectedDiscovery == nil,
+           ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+           ProcessInfo.processInfo.environment["POCKET_HARDWARE_ENABLED"] != "1" {
+            selectedDiscovery = EmptyReaderDiscoveryIO()
+        }
         if selectedDiscovery == nil, ProcessInfo.processInfo.arguments.contains("--ui-test-empty-discovery") {
             selectedDiscovery = EmptyReaderDiscoveryIO()
         }
@@ -907,13 +947,13 @@ final class PocketModel: ObservableObject, DeviceSession {
         }
         #endif
         self.discoveryIO = selectedDiscovery ?? LiveReaderDiscoveryIO(client: client,
-                                                                       rememberedHostKey: Self.lastReaderHostKey)
-        if let folders = try? FileManager.default.contentsOfDirectory(at: TransferPreparation.directory,
+                                                                       rememberedHostKey: Self.lastReaderHostKey, defaults: sessionStorage.defaults)
+        if let folders = try? FileManager.default.contentsOfDirectory(at: sessionStorage.transfers,
                                                                        includingPropertiesForKeys: nil) {
             preparedTransfers = folders.compactMap { folder in
                 guard let data = try? Data(contentsOf: folder.appendingPathComponent("transfer.json")),
                       let item = try? JSONDecoder().decode(PreparedTransfer.self, from: data),
-                      FileManager.default.fileExists(atPath: TransferPreparation.file(item).path) else { return nil }
+                      FileManager.default.fileExists(atPath: TransferPreparation.file(item, directory: sessionStorage.transfers).path) else { return nil }
                 return item
             }.sorted {
                 let leftFirmware = $0.filename.lowercased().hasSuffix(".bin")
@@ -987,6 +1027,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func startConnectionSearch() {
+        guard admitNetwork(direct: false) else { return }
         guard !isWorking, !hasReaderWork, !hasDirectSession else { return }
         readerStatus = nil
         expectedDeviceID = nil
@@ -998,6 +1039,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func findOnLocalNetwork(retryIfMissing: Bool = true) {
+        guard admitNetwork(direct: hasDirectSession) else { return }
         guard !isWorking, !hasReaderWork, !isInBackground else { return }
         exitDemoMode()
         if let nearbyLease {
@@ -1012,18 +1054,19 @@ final class PocketModel: ObservableObject, DeviceSession {
         heartbeatTask?.cancel()
         let attempt = connectionAttempt
         startReaderWork(attempt: attempt, kind: .discovery) { [self] _ in
-            await discoverReader(attempt: attempt, retryIfMissing: retryIfMissing)
+            await discoverReader(attempt: attempt, retryIfMissing: retryIfMissing, wakeIfNeeded: true)
         }
     }
 
     /// Both bounded passes belong to one operation, including Bonjour cleanup
     /// and retry delay. Never release admission between passes or on cancellation
     /// before the discovery provider has actually returned.
-    private func discoverReader(attempt: Int, retryIfMissing: Bool) async {
+    private func discoverReader(attempt: Int, retryIfMissing: Bool, wakeIfNeeded: Bool = false) async {
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         let bonjourTask = Task { await discoveryIO.firstBonjour(timeout: .seconds(5)) }
         await withTaskCancellationHandler {
-            await discoverReaderPass(attempt: attempt, retryIfMissing: retryIfMissing, bonjourTask: bonjourTask)
+            await discoverReaderPass(attempt: attempt, retryIfMissing: retryIfMissing,
+                                     bonjourTask: bonjourTask, wakeIfNeeded: wakeIfNeeded)
         } onCancel: { bonjourTask.cancel() }
         bonjourTask.cancel()
         discoveryIO.stop()
@@ -1031,17 +1074,49 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     private func discoverReaderPass(attempt: Int, retryIfMissing: Bool,
-                                    bonjourTask: Task<(host: String, port: Int)?, Never>) async {
+                                    bonjourTask: Task<(host: String, port: Int)?, Never>, wakeIfNeeded: Bool) async {
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         post("Checking your current Wi-Fi without changing networks…")
         let lastHost = discoveryIO.rememberedHost
+        let bondedReader = wakeIfNeeded ? bluetoothLink.rememberedReader : nil
+        if let bondedReader { expectedDeviceID = bondedReader.readerID }
         if let lastHost, !lastHost.isEmpty,
-           let status = try? await discoveryIO.status(host: lastHost, port: 80, timeout: 3) {
+           let status = try? await discoveryIO.status(host: lastHost, port: rememberedPort, timeout: 3),
+           acceptsReader(status, lastHost, rememberedPort), expectedDeviceID.map({ $0 == status.deviceID }) ?? true {
             guard !Task.isCancelled, attempt == connectionAttempt else { return }
             discoveryIO.stop()
             bonjourTask.cancel()
-            await accept(status: status, host: lastHost, httpPort: 80)
+            await accept(status: status, host: lastHost, httpPort: rememberedPort)
             return
+        }
+
+        if let bondedReader {
+            post("Waking your reader over Bluetooth…")
+            // ReaderWorkLane has suspended quiet BLE exchange for this explicit
+            // operation. The wake connector uses no restoration identifier.
+            await Task.yield()
+            do {
+                try await wakeSleepingReader(bondedReader)
+                guard !Task.isCancelled, attempt == connectionAttempt else { return }
+                post("Reader is joining your Wi-Fi…")
+                if let lastHost, !lastHost.isEmpty {
+                    for _ in 0..<15 {
+                        try await Task.sleep(for: .seconds(1))
+                        guard !Task.isCancelled, attempt == connectionAttempt else { return }
+                        if let status = try? await discoveryIO.status(host: lastHost, port: 80, timeout: 1),
+                           status.deviceID == bondedReader.readerID {
+                            discoveryIO.stop()
+                            bonjourTask.cancel()
+                            await accept(status: status, host: lastHost, httpPort: rememberedPort)
+                            return
+                        }
+                    }
+                }
+            } catch is CancellationError { return }
+            catch {
+                // Older firmware and a lost BLE acknowledgement can still be
+                // reachable on LAN. Inspect it; never repeat the wake command.
+            }
         }
 
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
@@ -1077,7 +1152,8 @@ final class PocketModel: ObservableObject, DeviceSession {
         var foundPort = 80
         if found == nil, let endpoint = await bonjourTask.value {
             guard !Task.isCancelled, attempt == connectionAttempt else { return }
-            if let status = try? await discoveryIO.status(host: endpoint.host, port: endpoint.port, timeout: 3) {
+            if let status = try? await discoveryIO.status(host: endpoint.host, port: endpoint.port, timeout: 3),
+               acceptsReader(status, endpoint.host, endpoint.port), expectedDeviceID.map({ $0 == status.deviceID }) ?? true {
                 found = (endpoint.host, status)
                 foundPort = endpoint.port
             }
@@ -1197,7 +1273,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             }
 
             while let result = await group.next() {
-                if let result {
+                if let result, acceptsReader(result.1, result.0, 80), expectedDeviceID.map({ $0 == result.1.deviceID }) ?? true {
                     group.cancelAll()
                     return result
                 }
@@ -1220,6 +1296,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func useNearbyLease(_ lease: HotspotLease) {
+        guard admitNetwork(direct: true) else { return }
         guard canRequestConnection, directConnectionRequested else { return }
         connectionAttempt += 1
         heartbeatTask?.cancel()
@@ -1267,6 +1344,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     @discardableResult
     private func startLeaseVerification(_ lease: HotspotLease) -> Task<Void, Never>? {
+        guard admitNetwork(direct: true) else { return nil }
         guard canRequestConnection, directConnectionRequested else { return nil }
         connectionAttempt += 1
         heartbeatTask?.cancel()
@@ -1308,6 +1386,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     @discardableResult
     private func startVerification(host: String, port: Int) -> Task<Void, Never>? {
+        guard admitNetwork(direct: hasDirectSession) else { return nil }
         guard canRequestConnection else { return nil }
         connectionAttempt += 1
         let attempt = connectionAttempt
@@ -1328,7 +1407,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     private func accept(status: CrossPointStatus, host: String, httpPort: Int) async {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, admitNetwork(direct: hasDirectSession) else { return }
         guard PocketHardware(deviceName: status.device) != nil else {
             post("The discovered endpoint is not a supported reader.", tone: .failure)
             return
@@ -1337,6 +1416,12 @@ final class PocketModel: ObservableObject, DeviceSession {
             post("The Wi-Fi reader does not match the paired reader. End the session and reconnect.", tone: .failure)
             return
         }
+        guard acceptsReader(status, host, httpPort) else {
+            post("This reader belongs to another registration or does not match the selected reader. Select it in My Readers, or add a new reader.", tone: .failure)
+            return
+        }
+        do { try registerReader(status, host, httpPort) }
+        catch { post(error); return }
         // Accepting a session is not a heartbeat refresh. Clear both view
         // surfaces before awaiting the new reader's optional data, including
         // for legacy readers whose nil identities cannot distinguish devices.
@@ -1347,9 +1432,10 @@ final class PocketModel: ObservableObject, DeviceSession {
         if readerInventory?.deviceID != status.deviceID { readerInventory = nil }
         readerInventoryWanted = true
         mirror.apply(.sessionStarted(status))
-        UserDefaults.standard.set(host, forKey: Self.lastReaderHostKey)
+        sessionStorage.defaults.set(host, forKey: Self.lastReaderHostKey)
+        sessionStorage.defaults.set(httpPort, forKey: "Pocket.lastReaderPort")
         if let deviceID = status.deviceID {
-            UserDefaults.standard.set(deviceID, forKey: Self.lastReaderDeviceIDKey)
+            sessionStorage.defaults.set(deviceID, forKey: Self.lastReaderDeviceIDKey)
         }
         selectHardware(named: status.device)
         activeHost = host
@@ -1467,7 +1553,9 @@ final class PocketModel: ObservableObject, DeviceSession {
                         self.post(Self.installingFirmwareMessage(version: staged), tone: .onReader)
                     } else if !self.hasDirectSession, UserDefaults.standard.object(forKey: Self.autoReconnectKey) as? Bool ?? true {
                         // Leaving Sync on the reader ends the session; it comes back on its own.
-                        self.post("The reader left Sync. Pocket Daily reconnects when Sync → Same Wi-Fi is open on it again.", tone: .pending)
+                        self.post(bluetoothLink.rememberedReader == nil
+                            ? "The reader left Sync. Pocket Daily reconnects when Sync → Same Wi-Fi is open on it again."
+                            : "Reader disconnected. Choose Connect Reader when you’re ready to reconnect.", tone: .pending)
                     } else {
                         self.post("Pocket connection ended. Check the reader’s Sync screen, then reconnect using the same connection method.", tone: .failure)
                     }
@@ -1659,7 +1747,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func destinationLabel(for item: PreparedTransfer) -> String {
-        let folder = destination(for: TransferPreparation.file(item))
+        let folder = destination(for: TransferPreparation.file(item, directory: sessionStorage.transfers))
         return "SD card " + (folder == "/" ? "/" : folder + "/") + item.filename
     }
 
@@ -1768,7 +1856,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// reader this device last connected to until that reader reports back.
     var firmwareLeftForInstallation: String? {
         guard readerStatus == nil, !isDemoMode,
-              let identity = UserDefaults.standard.string(forKey: Self.lastReaderDeviceIDKey) else { return nil }
+              let identity = sessionStorage.defaults.string(forKey: Self.lastReaderDeviceIDKey) else { return nil }
         return UserDefaults.standard.string(forKey: Self.stagedFirmwareVersionKey + "." + identity)
     }
 
@@ -2184,7 +2272,10 @@ final class PocketModel: ObservableObject, DeviceSession {
         var seen = Set<UUID>()
         let selected = books.filter { seen.insert($0.id).inserted }
         guard !selected.isEmpty else { bookTransferError = BookTransferError.emptySelection.localizedDescription; return nil }
-        let chosen = target ?? readerStatus.map { BookTransferTarget(readerID: $0.deviceID, displayName: $0.device) }
+        let rememberedTarget = registrationName.flatMap { name in
+            sessionStorage.defaults.string(forKey: Self.lastReaderDeviceIDKey).map { BookTransferTarget(readerID: $0, displayName: name) }
+        }
+        let chosen = target ?? readerStatus.map { BookTransferTarget(readerID: $0.deviceID, displayName: registrationName ?? $0.device) } ?? rememberedTarget
         let selection = Set(selected.map(\.id))
         if let existing = bookTransferJobs.first(where: {
             !$0.isFinished && Set($0.items.map(\.bookID)) == selection
@@ -2277,7 +2368,7 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     private func persistPreparedTransfer(_ item: PreparedTransfer) async throws {
         let data = try JSONEncoder().encode(item)
-        let record = TransferPreparation.directory.appendingPathComponent(item.id.uuidString).appendingPathComponent("transfer.json")
+        let record = sessionStorage.transfers.appendingPathComponent(item.id.uuidString).appendingPathComponent("transfer.json")
         try await Task.detached(priority: .utility) { try data.write(to: record, options: .atomic) }.value
     }
 
@@ -2485,7 +2576,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     if let bound = item.readerID, bound != status.deviceID {
                         throw CrossPointClient.ClientError.unexpectedMessage("This pending file belongs to another reader. Remove it and prepare it again to change readers.")
                     }
-                    let url = TransferPreparation.file(item)
+                    let url = TransferPreparation.file(item, directory: sessionStorage.transfers)
                     if ArticleEPUB.isFilename(url.lastPathComponent), status.articleLibrary != 1 || status.uploadStreamPort == nil {
                         throw CrossPointClient.ClientError.unexpectedMessage("Update the reader firmware to use the Articles library. Your prepared article is kept.")
                     }
@@ -2602,7 +2693,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         var item = preparedTransfers[index]
         item.publicationPending = true
         let data = try JSONEncoder().encode(item)
-        let record = TransferPreparation.directory.appendingPathComponent(id.uuidString)
+        let record = sessionStorage.transfers.appendingPathComponent(id.uuidString)
             .appendingPathComponent("transfer.json")
         // Keep the in-memory queue conservative even if persistence fails.
         preparedTransfers[index] = item
@@ -2691,7 +2782,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                             throw CrossPointClient.ClientError.unexpectedMessage("The reader changed. Cleanup was not performed.")
                         }
                         try await client.controlTransfer(action: "discard", transferID: stagingID,
-                            destination: destination(for: TransferPreparation.file(item)), kind: item.kind,
+                            destination: destination(for: TransferPreparation.file(item, directory: sessionStorage.transfers)), kind: item.kind,
                             host: host, port: port)
                     }
                     if let jobID {
@@ -2703,7 +2794,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                         }
                         try await persistBookJobs()
                     }
-                    let folder = TransferPreparation.file(item).deletingLastPathComponent()
+                    let folder = TransferPreparation.file(item, directory: sessionStorage.transfers).deletingLastPathComponent()
                     try await Task.detached(priority: .utility) {
                         if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
                     }.value
@@ -2743,6 +2834,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     }
 
     func beginDirectConnection() {
+        guard admitNetwork(direct: true) else { return }
         guard !isWorking, !hasReaderWork, !isDemoMode, readerStatus == nil else { return }
         if readerWorkKind == .quietReading { readerWorkTask?.cancel() }
         connectionAttempt += 1

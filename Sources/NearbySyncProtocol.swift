@@ -21,6 +21,12 @@ enum NearbySyncProtocol {
         encode("PING \(requestID)")
     }
 
+    static func startWifi(requestID: String) -> Data? {
+        guard requestID.utf8.count == 8,
+              requestID.utf8.allSatisfy({ (48...57).contains($0) || (65...70).contains($0) }) else { return nil }
+        return encode("START_WIFI \(requestID)")
+    }
+
     private static func encode(_ value: String) -> Data? {
         guard let data = value.data(using: .utf8), data.count <= maximumRecordBytes else { return nil }
         return data

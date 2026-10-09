@@ -10,7 +10,7 @@ import UIKit
 /// Background execution/restoration is OS controlled, not guaranteed delivery.
 @MainActor
 final class CoreBluetoothReaderTransport: NSObject, ReaderLinkTransport {
-    static let restoreIdentifier = "PocketReaderReadingSync"
+    nonisolated static let restoreIdentifier = "PocketReaderReadingSync"
 
     var onEvent: ((ReaderLinkTransportEvent) -> Void)?
     private var central: CBCentralManager?
@@ -21,6 +21,14 @@ final class CoreBluetoothReaderTransport: NSObject, ReaderLinkTransport {
     private var status: Data?
     private var notifying = false
     private var preparing = false
+    private let restoresState: Bool
+    private let restorationIdentifier: String
+
+    init(restoresState: Bool = true, restorationIdentifier: String = CoreBluetoothReaderTransport.restoreIdentifier) {
+        self.restoresState = restoresState
+        self.restorationIdentifier = restorationIdentifier
+        super.init()
+    }
 
     var isAvailable: Bool { central?.state == .poweredOn }
 
@@ -28,7 +36,7 @@ final class CoreBluetoothReaderTransport: NSObject, ReaderLinkTransport {
         guard central == nil else { return }
         var options: [String: Any] = [CBCentralManagerOptionShowPowerAlertKey: false]
 #if os(iOS)
-        options[CBCentralManagerOptionRestoreIdentifierKey] = Self.restoreIdentifier
+        if restoresState { options[CBCentralManagerOptionRestoreIdentifierKey] = restorationIdentifier }
 #endif
         central = CBCentralManager(delegate: self, queue: .main, options: options)
     }

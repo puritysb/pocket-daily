@@ -40,6 +40,9 @@ Current, changeable state lives in `docs/PROJECT_MEMORY.md`.
    `docs/LIVE_STUDIO_DESIGN.md` and the firmware contract
    `docs/live-studio-v1.md` in the sibling repository.
 
+6. For reader connectivity, BLE wake, inventory, transfer or firmware iteration,
+   [docs/DEVELOPER_PIPELINE.md](docs/DEVELOPER_PIPELINE.md) before hardware work.
+
 ## Product identity
 
 Pocket Daily is one universal App Store product with iOS, iPadOS, and macOS
@@ -110,12 +113,18 @@ rather than treating the platforms as unrelated apps.
 Staging a firmware file is not installation. Validate supported firmware before
 publication, explain compatibility and recovery implications, require explicit
 acknowledgement, and preserve the reader's second confirmation before flashing.
-Never introduce automatic flashing after transport completion.
+Never introduce automatic flashing after transport completion in the shipping app.
+Explicitly user-authorized developer installation uses the sibling firmware
+runner with `--flash`, as documented in
+[docs/DEVELOPER_PIPELINE.md](docs/DEVELOPER_PIPELINE.md). Keep that development
+workflow separate from the shipping update flow.
 
 ## Repository map
 
 - `Sources/`: SwiftUI app and shared iOS/macOS implementation.
 - `Tests/`: deterministic protocol and parsing tests.
+- `HardwareTests/`: shared, explicitly opted-in macOS/iOS reader scenarios,
+  driven by the firmware repository's developer pipeline.
 - `UITests/`: simulator UI tests that drive demo mode for the iPhone and iPad
   App Store screenshots (`scripts/capture_screenshots.sh`).
 - `MacTests/`: renders the Mac App Store screenshots by hosting the shipping
@@ -211,11 +220,16 @@ Real Bluetooth pairing, temporary Wi-Fi association, local-network transfer,
 mounted SD-card access, and TestFlight behavior require physical hardware and
 must not be claimed as verified from simulator-only or local build results.
 
-For hardware iteration the user prefers the reader's File Transfer → Join a
-Network mode: the reader joins the home Wi-Fi, the firmware repository's
-`scripts/pocket_put.py` pushes files over the same port-82 stream the app uses,
-and `/api/status` verifies the installed version. Use that before asking for an
-SD-card swap. The X3 STA profile has no mDNS; probe the LAN for `/api/status`.
+For app–reader hardware iteration, use
+[docs/DEVELOPER_PIPELINE.md](docs/DEVELOPER_PIPELINE.md): the sibling firmware
+runner drives this checkout's real Debug app through connection, inventory and
+optional X3 BLE standby wake, and can install developer firmware within the
+user-authorized scope. Pass `--app "$PWD"` when starting from this checkout so
+another checkout is not tested accidentally. Inspect the existing local reader
+configuration before asking the user to repeat setup. Use Same Wi-Fi, close
+separate companion instances before the run, and inspect the saved report on
+failure before modifying and rerunning. Keep physical iPhone/X4 and current
+measurement evidence distinct from Mac hardware and simulator results.
 
 ## Swift conventions and quality bar
 

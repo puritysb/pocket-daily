@@ -41,13 +41,14 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var model: PocketModel
-    @StateObject private var nearby = NearbySyncController(ownershipChanged: {
-        ReaderBluetoothLink.shared.nearbySessionActive = $0
-    })
+    @Environment(\.readerFleet) private var fleet
+    private let isActive: Bool
+    private let workspace: ReaderWorkspace?
+    @StateObject private var nearby: NearbySyncController
     @StateObject private var profileEditor = ProfileEditorState()
     @ObservedObject private var library = LibraryModel.shared
     @ObservedObject private var sync = ReadingSync.shared
-    @ObservedObject private var readerLink = ReaderBluetoothLink.shared
+    @ObservedObject private var readerLink: ReaderBluetoothLink
     @ObservedObject private var inbox: ArticleInboxModel
     @State private var section: StudioSection
     @State private var reading: ReadingTarget?
@@ -82,7 +83,15 @@ struct ContentView: View {
     /// The store screenshots open a given tab and preview surface.
     @MainActor
     init(initialSection: StudioSection = .library, initialPreview: ProfileStudioView.PreviewSurface = .home,
-         initialBookID: UUID? = nil, initialShelf: LibraryView.Shelf = .books, inbox: ArticleInboxModel? = nil) {
+         initialBookID: UUID? = nil, initialShelf: LibraryView.Shelf = .books, inbox: ArticleInboxModel? = nil,
+         bluetoothLink: ReaderBluetoothLink? = nil, profileStore: ProfileEditStore = .live, isActive: Bool = true, workspace: ReaderWorkspace? = nil) {
+        let bluetoothLink = bluetoothLink ?? ReaderBluetoothLink.shared
+        self.isActive = isActive
+        self.workspace = workspace
+        if let workspace { _profileEditor = StateObject(wrappedValue: workspace.editor) }
+        _readerLink = ObservedObject(wrappedValue: bluetoothLink)
+        _nearby = StateObject(wrappedValue: workspace?.nearby ?? NearbySyncController(ownershipChanged: { bluetoothLink.nearbySessionActive = $0 }))
+        _draftPersistence = State(initialValue: ProfileDraftPersistence(store: profileStore))
         _inbox = ObservedObject(wrappedValue: inbox ?? .shared)
         _shelf = State(initialValue: initialShelf)
         _section = State(initialValue: initialSection)
@@ -90,7 +99,7 @@ struct ContentView: View {
         _readerSetting = State(initialValue: initialPreview)
     }
 
-    var body: some View {
+    private var presentedContent: some View {
         ZStack {
             GeometryReader { proxy in
                 if proxy.size.width >= Self.wideWidth && !dynamicTypeSize.isAccessibilitySize {
@@ -116,13 +125,14 @@ struct ContentView: View {
         .preferredColorScheme(reading == nil ? appearance.colorScheme : readerAppearance.appearance.theme.colorScheme)
         .background(PocketPalette.workspace)
 #if os(macOS)
-        .focusedSceneValue(\.settingsPresentation, $showingSettings)
+        .focusedSceneValue(\.settingsPresentation, isActive ? $showingSettings : nil)
 #endif
         .sheet(item: $transferTask) { task in
             BookTransferSheet(model: model, jobID: task.id, library: library,
                               connection: {
                                   VStack(alignment: .leading, spacing: 16) {
-                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect, offersDemo: false)
+                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect, offersDemo: false,
+                                                          connectsOnOpen: true)
                                       if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                                   }
                               },
@@ -132,6 +142,7 @@ struct ContentView: View {
                               onCurrentTask: openCurrentReaderTask)
         }
         .onOpenURL { url in
+            guard isActive else { return }
             Task {
                 let book = await library.importFiles([url])
                 // iOS copies documents opened from other apps into this app's
@@ -173,9 +184,11 @@ struct ContentView: View {
             }
         ))
         .onChange(of: nearby.hotspotLease) { _, lease in
+            guard workspace == nil else { return }
             if let lease, model.directConnectionRequested { model.useNearbyLease(lease) }
         }
         .onChange(of: nearby.state) { _, state in
+            guard workspace == nil else { return }
             if let message = state.failureMessage {
                 if readerLink.setup == .searching { readerLink.setup = .failed(message) }
                 else { model.directDiscoveryFailed(message) }
@@ -194,11 +207,11 @@ struct ContentView: View {
 #if os(iOS)
                 model.resumeForForeground()
 #endif
-                Task { await inbox.activate(allowNetwork: !model.isDemoMode) }
+                if isActive { Task { await inbox.activate(allowNetwork: !model.isDemoMode) } }
                 sync.nudgeReader()
                 readerLink.start()
             }
-            else if phase == .background { inbox.suspend() }
+            else if phase == .background && isActive { inbox.suspend() }
 #if os(iOS)
             if phase == .background {
                 nearby.disconnect()
@@ -242,7 +255,7 @@ struct ContentView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         ConnectionInspector(model: model, nearby: nearby, onConnect: connect,
-                                            offersDemo: section != .customize)
+                                            offersDemo: section != .customize, connectsOnOpen: true)
                         if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                     }
                 }
@@ -256,6 +269,14 @@ struct ContentView: View {
             .onChange(of: model.device.isConnected) { _, connected in
                 if connected { showingConnection = false }
             }
+        }
+    }
+
+    var body: some View {
+        presentedContent
+        .onChange(of: readerSetting) { _, value in workspace?.preview = value }
+        .onChange(of: isActive) { _, active in
+            if active { section = .reader }
         }
         .onChange(of: model.isWorking) { _, working in
             guard !working else { return }
@@ -279,13 +300,14 @@ struct ContentView: View {
         .task {
             // Same Wi-Fi reconnect asks one remembered address every few seconds.
             // Hosted tests (store renders) share the user's defaults; they must not reach a real reader.
-            guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+            guard workspace == nil, ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
             while !Task.isCancelled {
                 model.reconnectRememberedReader()
                 try? await Task.sleep(for: .seconds(8))
             }
         }
         .task(id: model.isDemoMode) {
+            guard workspace == nil else { return }
             draftGeneration += 1
             draftRevision += 1
             let generation = draftGeneration
@@ -311,7 +333,7 @@ struct ContentView: View {
             draftLoading = false
         }
         .onReceive(profileEditor.objectWillChange.debounce(for: .milliseconds(400), scheduler: RunLoop.main)) { _ in
-            guard !model.isDemoMode, !draftLoading else { return }
+            guard workspace == nil, !model.isDemoMode, !draftLoading else { return }
             let snapshot = profileEditor.snapshot
             let comparable = comparableSnapshot(snapshot)
             // Restore and status-only changes never overwrite a failed load.
@@ -334,15 +356,27 @@ struct ContentView: View {
         }
         .task(id: model.isDemoMode) {
             // Authenticated pairing: remember this reader for reading sync over Bluetooth.
+            if workspace == nil {
             nearby.onAuthenticated = { peripheral, status in
                 guard !model.isDemoMode else { return }
+                do { try model.acceptsBluetoothReader(status.deviceID, peripheral) }
+                catch {
+                    readerLink.setup = .failed(error.localizedDescription)
+                    model.directDiscoveryFailed(error.localizedDescription)
+                    nearby.disconnect()
+                    return
+                }
                 readerLink.remember(peripheral: peripheral, readerID: status.deviceID, model: status.model,
                                     supportsReadingSync: status.capabilities.contains(ReadingSyncBLE.capability))
             }
+            nearby.acceptsPeripheral = { model.acceptsPeripheral($0) }
             readerLink.requestSetupConnection = { nearby.scan() }
             readerLink.endSetupConnection = { nearby.disconnect() }
-            if model.isDemoMode { inbox.cancelRefresh() }
-            await inbox.activate(allowNetwork: !model.isDemoMode)
+            }
+            if isActive {
+                if model.isDemoMode { inbox.cancelRefresh() }
+                await inbox.activate(allowNetwork: !model.isDemoMode)
+            }
             if !model.isDemoMode { await model.checkFirmwareAtLaunch() }
         }
     }
@@ -654,7 +688,8 @@ struct ContentView: View {
                               onScreenTaskOpened: { screenTaskRequest = nil },
                               connectionContent: {
                                   AnyView(VStack(alignment: .leading, spacing: 16) {
-                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect, offersDemo: false)
+                                      ConnectionInspector(model: model, nearby: nearby, onConnect: connect, offersDemo: false,
+                                                          connectsOnOpen: true)
                                       if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                                   })
                               },
@@ -685,7 +720,8 @@ struct ContentView: View {
     /// Offline is a normal state; editors and last-observed files stay accessible.
     private func readerOverview() -> some View {
         VStack(alignment: .leading, spacing: PocketDesign.sectionSpacing) {
-            InspectorCard(title: model.readerStatus?.device ?? readerLink.rememberedReader?.model ?? (model.hasKnownReader ? "Remembered reader" : "Your reader"), symbol: "rectangle.portrait") {
+            if let fleet { ReaderPicker(fleet: fleet) }
+            InspectorCard(title: model.registrationName ?? model.readerStatus?.device ?? readerLink.rememberedReader?.model ?? (model.hasKnownReader ? "Remembered reader" : "Your reader"), symbol: "rectangle.portrait") {
                 HStack(alignment: .top) {
                     DeviceStatusLabel(device: model.device, showsReader: false)
                     Spacer()
@@ -815,7 +851,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
             VStack(alignment: .leading, spacing: 20) {
                 if !model.isDemoMode {
-                    ReaderBluetoothPairingCard(sync: sync)
+                    ReaderBluetoothPairingCard(sync: sync, link: readerLink)
                     Button("Continue Reading Settings…", systemImage: "gearshape", action: showSettings)
                         .buttonStyle(.borderless).font(.callout)
                         .accessibilityIdentifier("device-continue-reading-settings")
@@ -1296,11 +1332,16 @@ enum PocketLinks {
 }
 
 struct ConnectionInspector: View {
+    @Environment(\.readerFleet) private var fleet
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
     let onConnect: () -> Void
     /// Off inside a book or editor task: demo would abandon the work in progress.
     var offersDemo = true
+    /// Only explicit Connect sheets start work on presentation.
+    var connectsOnOpen = false
+    private var readerLink: ReaderBluetoothLink { model.bluetoothLink }
+    @State private var startedOnOpen = false
     @State private var confirmingDirectConnection = false
     @State private var otherMethods = false
 
@@ -1356,10 +1397,19 @@ struct ConnectionInspector: View {
                 .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: PocketDesign.controlRadius))
             }
         }
+        .onAppear {
+            guard connectsOnOpen, !startedOnOpen else { return }
+            startedOnOpen = true
+            guard readerLink.rememberedReader != nil, model.readerStatus == nil,
+                  !model.isDemoMode, !model.isWorking, !model.canCancelConnection,
+                  !model.isCancellingConnection, !model.hasDirectSession else { return }
+            onConnect()
+        }
         .alert("Connect to the reader’s temporary Wi-Fi?", isPresented: $confirmingDirectConnection) {
             Button("Cancel", role: .cancel) {}
             Button("Connect Directly") {
                 model.beginDirectConnection()
+                guard model.directConnectionRequested else { return }
                 if !model.resumeDirectConnection() {
                     nearby.scan()
                     // Permission/radio failures may be synchronous and
@@ -1394,10 +1444,12 @@ struct ConnectionInspector: View {
                 .disabled(model.isWorking)
         } else if model.readerStatus == nil {
             VStack(alignment: .leading, spacing: 8) {
-                Button("Find on Same Wi-Fi", systemImage: "wifi", action: onConnect)
+                Button(readerLink.rememberedReader == nil ? "Find on Same Wi-Fi" : "Connect Reader", systemImage: "wifi", action: onConnect)
                     .buttonStyle(.borderedProminent).tint(PocketPalette.accent)
                     .disabled(model.isWorking)
-                Text("On the reader: Pocket Daily → Sync → Same Wi-Fi.")
+                Text(readerLink.rememberedReader == nil
+                     ? "On the reader: Pocket Daily → Sync → Same Wi-Fi."
+                     : "Keep your reader nearby. Compatible firmware wakes over Bluetooth and joins your saved Wi-Fi.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Button {
@@ -1416,7 +1468,7 @@ struct ConnectionInspector: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if offersDemo {
+            if offersDemo, (fleet?.readers.count ?? 1) == 1 {
                 Button("Try Demo") { nearby.disconnect(); model.enterDemoMode() }
                     .buttonStyle(.borderless).font(.caption)
                     .accessibilityIdentifier("try-demo").disabled(model.isWorking)

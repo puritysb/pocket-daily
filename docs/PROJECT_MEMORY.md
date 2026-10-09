@@ -4,6 +4,77 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Multiple readers — 2026-10-09 (local, not released)
+
+- My Reader → My Readers adds, renames, selects and removes registrations.
+  Each reader owns its connection, work lane, Bluetooth restoration identity,
+  prepared copies, transfer jobs and profile/card/source drafts. Selection does
+  not cancel another reader's work. A retained `ReaderWorkspace` owns pairing
+  and draft persistence; only the selected SwiftUI screen is mounted.
+- Same-Wi-Fi sessions run concurrently. Registration IDs are pinned and checked
+  on discovery/acceptance; duplicate/mismatched readers cannot take over a
+  workspace. Direct Wi-Fi requires other network sessions to finish first.
+  The first registration preserves legacy files/preferences/Bluetooth identity;
+  additional unidentified readers are refused. Removing an idle registration
+  leaves library/device files and local draft recovery files intact.
+- App-side wire contracts are unchanged; `docs/SYNC_SESSIONS.md` records storage,
+  identity and radio boundaries. iCloud/library remain common; reading-position
+  nudges reach every registered session. Background BLE delivery is OS-controlled.
+- Verified full 541-test regression (one opt-in hardware skip), followed by
+  focused registry/concurrency/removal and BLE/reading-engine checks, iPhone/iPad
+  draft switching, Mac firmware-XPointer cross-check, and all 19 regenerated
+  screenshots/source package validation. Local evidence: `.build/multi-reader/`.
+- Signed sandboxed Mac app is installed at `~/Applications/Pocket Daily.app`.
+  Existing X3 pairing and drafts survived; the real app reconnected over Same
+  Wi-Fi and loaded its inventory. Two physical readers and concurrent physical
+  Bluetooth behavior remain unverified; mocked sessions establish isolation.
+
+## Developer hardware scenarios — 2026-10-09
+
+- Shared `HardwareTests/ReaderHardwareTests.swift` runs on signed Debug macOS
+  and physical iOS test hosts only with explicit opt-in. It drives the real
+  running PocketModel through Connect, fresh inventory and optional BLE standby
+  wake, then validates complete root/Books pagination and unique reader cycle
+  evidence. `ReaderDevelopmentContext` is a weak Debug-only reference, with no
+  remote listener or alternate BLE transport; Release omits it.
+- App-side entry point: [DEVELOPER_PIPELINE.md](DEVELOPER_PIPELINE.md), also
+  linked from AGENTS.md and connectivity sign-off. Run the sibling firmware
+  `scripts/dev_pipeline.py` with `--app "$PWD"` to test this checkout. Canonical
+  deployment/recovery instructions remain in its `docs/developer-pipeline.md`.
+  Reuse existing local enrollment; close duplicate companion instances before
+  reader work. Normal tests skip without
+  device I/O; enabled simulator scenarios fail instead of claiming hardware
+  proof. Full firmware/app pipeline and two unattended post-install Mac/X3 wake cycles
+  passed (13.2/14.2 s reconnect); 134 iOS protocol tests passed, with the hardware
+  scenario skipped. Physical iPhone remains a separate opt-in gate requiring a
+  provisioned, permissioned and paired app.
+
+## App-requested reader wake — 2026-10-09 (local experimental)
+
+- Explicit Connect first checks LAN, then asks the remembered bonded reader
+  to wake over BLE (`WAKE1` / `START_WIFI`) and verifies the same identity on
+  LAN. The dedicated foreground transport has no restoration identifier and
+  sends no retry after an ambiguous acknowledgement. ReaderWorkLane suspends
+  quiet BLE exchange during this operation; quiet exchange never raises Wi-Fi.
+- Explicit Connect sheets now start automatically for a remembered reader.
+  Manage Reader alone does not. No automatic hotspot or Apple network change;
+  initial pairing, permission and saved Wi-Fi remain prerequisites.
+- Signed Mac app installed with existing sandbox/pairing intact. Three actual
+  Mac/X3 trials woke the experimental reader and reconnected over Same Wi-Fi,
+  including standby beyond one minute. Reader recorded actual SDK light-sleep
+  time; no current/battery-life claim follows. Firmware default/release and
+  X4 have not adopted experimental standby; physical iPhone remains unverified.
+- 134 connector/transport/protocol tests passed on iOS Simulator. Final shared
+  Connect UI built for iOS and signed macOS; Mac one-click flow was exercised.
+  Root file listing/preferences worked, but `/Books` listing returned a separate
+  reader error. See `docs/CONNECTIVITY_VALIDATION.md` and sibling firmware
+  `docs/ble-standby-review.md` for evidence and exact artifact identity.
+- Final firmware `8925b142-ble-standby-wd4168ca4` passed two additional trials
+  sleeping directly from Same Wi-Fi, including app restart + one Connect click
+  after 80.8 s standby. Final signed Mac and iOS builds passed; the Mac app is
+  installed and connected. Five app-wake trials total; no content-transfer or
+  battery-life claim follows from those connection results.
+
 ## Reader navigation — 2026-10-09 (local, not released)
 
 - My Reader combines identity, retained work and observed files. Library and
@@ -22,9 +93,8 @@ with a dated note below.
   external-EPUB sample skipped). All 19 store images and source validation
   pass. Evidence: `docs/IA_IMPLEMENTATION_REPORT.md`, `.build/reader-ia/`.
   The final signed, sandboxed Mac app is installed and running in My Reader.
-- This changes navigation, not the transport contract. One active Wi-Fi reader
-  session and one remembered Bluetooth reader remain the implementation;
-  multiple-reader registration and concurrent sessions are not implemented.
+- This navigation baseline is now extended by the multiple-reader implementation
+  recorded above; firmware transport formats remain unchanged.
 
 ## App design system — 2026-10-09 (local, not released)
 

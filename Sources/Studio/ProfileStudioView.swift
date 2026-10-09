@@ -405,8 +405,8 @@ struct ProfileStudioView: View {
                 Task {
                     defer { recoveringDraft = false }
                     do {
-                    try await editor.useDraft(with: identity)
-                    recoveredDrafts = await Task.detached { ProfileEditStore.live.recoveredDrafts() }.value
+                    try await editor.useDraft(with: identity, store: model.profileEditStore)
+                    recoveredDrafts = await loadRecoveredDrafts()
                     editor.sync(with: model.readerProfile)
                     editor.syncReading(model.preferences)
                     targetError = nil
@@ -419,7 +419,7 @@ struct ProfileStudioView: View {
         .onChange(of: model.readerProfile) { _, reader in editor.sync(with: reader) }
         .onChange(of: editor.draft.home.weather) { _, weather in if weather != .off { weatherWhenOn = weather } }
         .task(id: model.isDemoMode) {
-            recoveredDrafts = model.isDemoMode ? [] : await Task.detached { ProfileEditStore.live.recoveredDrafts() }.value
+            recoveredDrafts = model.isDemoMode ? [] : await loadRecoveredDrafts()
             await openCards()
         }
         .task(id: previewKey) {
@@ -1039,7 +1039,7 @@ struct ProfileStudioView: View {
                         Task {
                             defer { recoveringDraft = false }
                             do {
-                            if let current = editor.snapshot { try await Task.detached { try ProfileEditStore.live.archive(current) }.value }
+                            if let current = editor.snapshot { try await Task.detached { [store = model.profileEditStore] in try store.archive(current) }.value }
                             editor.restore(snapshot)
                             editor.observeTarget(model.readerStatus?.deviceID)
                             editor.sync(with: model.readerProfile)
@@ -1274,6 +1274,11 @@ struct ProfileStudioView: View {
                         question: "What is one thing from yesterday's reading you want to remember?"),
         ], images: images)
     }()
+
+    private func loadRecoveredDrafts() async -> [ProfileEditSnapshot] {
+        let store = model.profileEditStore
+        return await Task.detached { store.recoveredDrafts() }.value
+    }
 
     private func renderSchematic() {
         guard preview != .reading else { return }

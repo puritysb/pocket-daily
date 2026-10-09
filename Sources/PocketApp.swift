@@ -2,15 +2,16 @@ import SwiftUI
 
 @main
 struct PocketApp: App {
-    @StateObject private var model: PocketModel
+    @StateObject private var fleet: ReaderFleet
 
     init() {
         // Before any scene: a background relaunch for a restored Bluetooth
         // connection must recreate the reading-sync central at once.
-        let model = PocketModel()
-        _model = StateObject(wrappedValue: model)
-        ReaderBluetoothLink.shared.bindAppState(to: model)
-        ReaderBluetoothLink.shared.start()
+        let fleet = ReaderFleet()
+        _fleet = StateObject(wrappedValue: fleet)
+#if DEBUG
+        ReaderDevelopmentContext.model = fleet.selected?.model
+#endif
     }
 
     var body: some Scene {
@@ -33,8 +34,7 @@ struct PocketApp: App {
     }
 
     private var mainView: some View {
-        ContentView()
-            .environmentObject(model)
+        ReaderFleetView(fleet: fleet)
             // Selection is amber on every platform; iOS switches otherwise
             // stay system green while macOS follows the accent color.
             .tint(PocketPalette.accent)

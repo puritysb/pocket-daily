@@ -61,7 +61,7 @@ struct BookTransferSheet<Connection: View>: View {
                                 }.disabled(model.isWorking)
                             }
                         } else {
-                            LabeledContent("Reader", value: job.target?.displayName ?? model.readerStatus?.device ?? "Choose after connecting")
+                            LabeledContent("Reader", value: model.registrationName ?? job.target?.displayName ?? model.readerStatus?.device ?? "Choose after connecting")
                             if job.target?.readerID == nil, job.target != nil, !model.isDemoMode {
                                 Text("This reader has no unique identity. Its connection must be selected again before sending.")
                                     .font(.caption).foregroundStyle(.secondary)

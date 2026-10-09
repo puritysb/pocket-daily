@@ -16,13 +16,15 @@ final class LiveReaderDiscoveryIO: ReaderDiscoveryIO {
     private let browser = LocalReaderDiscovery()
     private let client: CrossPointClient
     private let rememberedHostKey: String
+    private let defaults: UserDefaults
 
-    init(client: CrossPointClient, rememberedHostKey: String) {
+    init(client: CrossPointClient, rememberedHostKey: String, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         self.client = client
         self.rememberedHostKey = rememberedHostKey
     }
 
-    var rememberedHost: String? { UserDefaults.standard.string(forKey: rememberedHostKey) }
+    var rememberedHost: String? { defaults.string(forKey: rememberedHostKey) }
     func candidates() -> [String] { ["192.168.4.1"] + LocalReaderDiscovery.localIPv4Candidates() }
     func firstBonjour(timeout: Duration) async -> (host: String, port: Int)? {
         await browser.first(timeout: timeout)

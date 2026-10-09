@@ -38,6 +38,7 @@ final class ReadingSync: ObservableObject {
     @Published private(set) var remoteRevision = 0
     /// Set by the app shell: exchanges with the last reader if it is reachable
     /// right now, quietly (see `PocketModel.quietReadingExchange`).
+    var readerNudges: [ObjectIdentifier: (TimeInterval) -> Bool] = [:]
     var readerNudge: ((TimeInterval) -> Void)?
     @Published var iCloudEnabled: Bool {
         didSet { defaults.set(iCloudEnabled, forKey: Keys.iCloud) }

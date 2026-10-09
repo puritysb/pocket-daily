@@ -213,6 +213,7 @@ targets:
     platform: iOS
     sources:
       - path: Tests
+      - path: HardwareTests
     dependencies:
       - target: Pocket
     settings:
@@ -235,6 +236,7 @@ targets:
     platform: macOS
     sources:
       - path: MacTests
+      - path: HardwareTests
     dependencies:
       - target: PocketMac
     settings:

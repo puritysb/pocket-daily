@@ -819,3 +819,29 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["Preview Font Notices"].exists)
     }
 }
+
+extension PocketFlowTests {
+    func testMultipleReaderSelectionKeepsEachDraft() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "--ui-test-multiple-readers", "--hardware=X3"]
+        app.launch()
+        app.openScreen("Home")
+        let weather = app.switches["profile-home-weather"]
+        app.revealInStudio(weather)
+        weather.tap()
+        XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
+        app.open("My Reader")
+        app.buttons["reader-picker"].tap()
+        let travel = app.buttons.containing(.staticText, identifier: "Travel X4").firstMatch
+        XCTAssertTrue(travel.waitForExistence(timeout: 5))
+        travel.tap()
+        app.openScreen("Home")
+        XCTAssertFalse(app.buttons["profile-revert"].isEnabled)
+        app.open("My Reader")
+        app.buttons["reader-picker"].tap()
+        app.buttons.containing(.staticText, identifier: "Desk X3").firstMatch.tap()
+        app.openScreen("Home")
+        XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
+        XCTAssertFalse(app.buttons["profile-apply"].isEnabled)
+    }
+}

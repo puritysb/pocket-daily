@@ -1,5 +1,55 @@
 # Connectivity hardware sign-off
 
+For repeatable app/firmware development, start with
+[Reader development from the app repository](DEVELOPER_PIPELINE.md). It links
+the shared hardware scenarios, Same-Wi-Fi runner and per-run evidence.
+
+## App-requested BLE wake — 2026-10-09 (local experimental build)
+
+`ReaderWakeConnector` serves an explicit Connect operation for the remembered
+bonded reader. It checks protocol 1, matching reader identity and `WAKE1`, sends
+one `START_WIFI <8 uppercase hex digits>` and requires the matching application
+acknowledgement. A write acknowledgement alone is not success. Cancellation,
+timeout and an ambiguous/lost reply do not replay the wake command. Subsequent
+LAN discovery can still recover the reader after a lost reply.
+
+Connect checks the current LAN first. An unreachable remembered reader can be
+woken over BLE and then accepted on its saved Wi-Fi only with matching identity.
+Explicit Connect sheets start this automatically for a remembered bonded reader;
+Manage Reader alone does not start work. Quiet position exchange never raises
+Wi-Fi. The foreground transport has no CoreBluetooth restoration identifier,
+leaving restoration owned by the existing background reading link. ReaderWorkLane
+suspends that quiet link while the foreground operation owns the connection.
+
+The reader requires the opt-in X3 `ble_standby` firmware, an existing bond,
+saved reachable Wi-Fi, enabled reading sync and battery above 10%. It uses
+controller modem sleep plus automatic light sleep, not BLE wake from deep sleep.
+Default/release firmware and X4 retain bounded BLE windows. No automatic hotspot
+or Apple-device network change is introduced. Initial pairing and OS permission
+remain one-time setup. Physical iPhone and X4 acceptance and current measurement
+are still outstanding.
+
+First physical Mac/X3 trial succeeded: actual Mac UI progressed from Bluetooth
+wake to joining Wi-Fi and connected; the reader recorded `app-wifi`, 611 actual
+light-sleep exits / 13,888 ms asleep during 17,607 ms standby and automatically
+returned to STA. Minimum sampled BLE heap was 64,564 B. Firmware evidence and
+artifact identity are in the sibling `docs/ble-standby-review.md`; device IDs stay
+in ignored local evidence. A separate file-inventory error was observed after
+connection and is not counted as a successful content transfer.
+
+Four connector tests and the existing transport/protocol suites passed (134
+tests on iOS Simulator); signed macOS and iOS builds passed for the transport
+change. This does not establish suspended iOS wake behavior or measured energy.
+
+Final firmware `8925b142-ble-standby-wd4168ca4` additionally passed two trials
+starting sleep from connected Same Wi-Fi. In the last, the Mac app was restarted
+during 80.8 s standby, and one Connect Reader click woke and connected the X3.
+The reader recorded 64.8 s actual light sleep and 60,936 B minimum BLE free heap.
+Final signed Mac and iOS builds include automatic Connect-sheet startup and
+paired-reader disconnect wording that no longer instructs a reader-menu visit.
+Five app-wake trials passed across the two images; the final two cover this
+firmware's Wi-Fi-entry path. Physical iPhone, X4 and energy gates remain open.
+
 ## Current installed baseline — 2026-09-22
 
 The X3 is confirmed on `1.6.6-dev-main-b8e38e39-sta-recovery-w998f2f9d`
