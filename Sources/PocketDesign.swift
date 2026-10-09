@@ -29,6 +29,16 @@ enum PocketDesign {
 #endif
     }
 
+    /// Location chrome is quieter than a content heading, especially when the
+    /// sidebar already identifies the destination. Compact iOS uses native titles.
+    static var navigationTitle: Font {
+#if os(macOS)
+        .system(size: 17, weight: .semibold)
+#else
+        .headline
+#endif
+    }
+
     static var actionTarget: CGFloat {
 #if os(macOS)
         32

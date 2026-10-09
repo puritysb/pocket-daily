@@ -34,7 +34,7 @@ not promised. No automatic LAN-to-hotspot fallback is permitted.
 
 ## Multiple registered readers (2026-10-09)
 
-`ReaderFleet` keeps independent `PocketModel` instances. My Reader → My Readers
+`ReaderFleet` keeps independent `PocketModel` instances. My Reader → Readers… (Manage Readers)
 selects the visible workspace, adds a reader on the current network, renames it,
 or removes an idle disconnected registration. Each instance owns its HTTP client,
 heartbeat, discovery, `ReaderWorkLane`, inventory and transfer state. Selecting a

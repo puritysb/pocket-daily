@@ -30,7 +30,7 @@ and saved reader Wi-Fi remain prerequisites. An initially offline reader cannot
 be recovered by this preflight; consult the firmware guide instead of retrying
 unknown mutations or switching the Mac network.
 
-Quick app build, actual connection and fresh file inventory:
+Quick app build, actual connection, fresh file inventory and a generated EPUB round trip:
 
 ```sh
 python3 ../pocket-daily-firmware/scripts/dev_pipeline.py run --app "$PWD"
@@ -71,6 +71,11 @@ Debug app. Simulator success does not establish physical radio behavior.
 - [ReaderDevelopmentContext](../Sources/ReaderDevelopmentContext.swift) holds a
   weak Debug-only model reference. Keep it out of Release; do not add a product
   control server or a second Bluetooth/model instance for the harness.
+- The hardware scenario also prepares and sends a uniquely named generated EPUB through
+  the running app, downloads it to compare all bytes, then deletes only that exact
+  generated path and size and checks the refreshed inventory. It uses a temporary
+  library, never an existing user book. A failed run may leave its generated task
+  or file for diagnosis; inspect the report before cleanup.
 - Normal unit tests skip hardware without I/O. The runner explicitly opts in;
   enabled simulator hardware tests fail. Skipped or stale evidence is not a pass.
 - Reports and `.xcresult` bundles are in the firmware checkout's ignored

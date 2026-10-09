@@ -63,7 +63,7 @@ struct ReaderPicker: View {
         Button { showingReaders = true } label: {
             HStack(spacing: 8) {
                 PocketSymbol("rectangle.portrait.on.rectangle.portrait", role: .accessory)
-                Text("My Readers").lineLimit(1)
+                Text("Readers…").lineLimit(1)
                 if fleet.connectedCount > 0 {
                     Text("\(fleet.connectedCount) Connected").foregroundStyle(.secondary)
                 }
@@ -72,7 +72,7 @@ struct ReaderPicker: View {
             .font(.subheadline)
         }
         .buttonStyle(.bordered)
-        .accessibilityLabel("My Readers")
+        .accessibilityLabel("Manage Readers")
         .accessibilityIdentifier("reader-picker")
         .sheet(isPresented: $showingReaders) { ReaderManager(fleet: fleet) }
     }
@@ -83,6 +83,7 @@ private struct ReaderManager: View {
     @Environment(\.dismiss) private var dismiss
     @State private var renaming: RegisteredReader?
     @State private var removing: RegisteredReader?
+    @State private var ending: RegisteredReader?
     @State private var name = ""
     @State private var host = ""
     @State private var showAddress = false
@@ -124,14 +125,14 @@ private struct ReaderManager: View {
                     }
                 }.padding(PocketDesign.pageInset)
             }
-            .navigationTitle("My Readers")
+            .navigationTitle("Manage Readers")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
 #if os(macOS)
-        .frame(width: 580, height: 600)
+        .frame(width: 540, height: 440)
 #endif
         .alert("Reader Could Not Be Changed", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("OK") { failure = nil }
@@ -143,6 +144,16 @@ private struct ReaderManager: View {
                 renaming = nil
             }
             Button("Cancel", role: .cancel) { renaming = nil }
+        }
+        .confirmationDialog("End session with \(ending?.registration.name ?? "Reader")?",
+                            isPresented: Binding(get: { ending != nil }, set: { if !$0 { ending = nil } }),
+                            titleVisibility: .visible) {
+            Button("End Session", role: .destructive) {
+                ending?.model.endConnection()
+                ending = nil
+            }
+        } message: {
+            Text("This closes Sync on the reader. To connect again, reopen Sync → Same Wi-Fi. Bluetooth wake requires supported standby mode.")
         }
         .confirmationDialog("Remove \(removing?.registration.name ?? "Reader")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
             Button("Remove Reader", role: .destructive) {
@@ -195,7 +206,7 @@ private struct ReaderManager: View {
             if !reader.model.isDemoMode {
                 HStack {
                     if reader.model.readerStatus != nil {
-                        Button("Disconnect") { reader.model.endConnection() }.disabled(reader.model.isWorking)
+                        Button("End Session…", role: .destructive) { ending = reader }.disabled(reader.model.isWorking)
                     } else if reader.model.canCancelConnection {
                         Button("Cancel Connection") { reader.model.cancelConnectionAttempt() }
                     } else {

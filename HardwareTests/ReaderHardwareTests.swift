@@ -130,6 +130,8 @@ final class ReaderHardwareTests: XCTestCase {
             }
             evidence["folderCounts"] = folders
             evidence["inventoryCount"] = model.readerInventory?.files.count ?? 0
+            evidence["bookTransferBytes"] = try await verifyBookRoundTrip(model, client: client,
+                host: host, identity: identity, run: run, idle: { !busy })
             evidence["passed"] = true
         } catch {
             evidence["error"] = error.localizedDescription
@@ -156,6 +158,62 @@ final class ReaderHardwareTests: XCTestCase {
         try require(status.deviceID == identity && status.version == version && status.mode == "STA",
                     "Reader identity, version or Same Wi-Fi mode changed")
         try require(version.contains("-dev-"), "Developer firmware required")
+    }
+
+    @MainActor
+    private func verifyBookRoundTrip(_ model: PocketModel, client: CrossPointClient, host: String,
+                                    identity: String, run: UInt32, idle: () -> Bool) async throws -> Int {
+        // Only this run's generated book is sent or removed. Never adopt a user's
+        // library item or delete a path derived from the reader's inventory.
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "Pocket.hardware." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: root)
+        }
+        defaults.set(true, forKey: "library.welcome.v1")
+        let storage = BookLibrary(root: root)
+        let document = EPUBDocument(title: "Pocket hardware check \(run)", language: "ko",
+            chapters: [.init(title: "Round trip", paragraphs: ["Test-only reader transfer. 한글 파일 검증."])])
+        let book = try await storage.importDocument(document, origin: .written)
+        let library = LibraryModel(storage: storage, defaults: defaults)
+        await library.load()
+        let file = try await library.fileURL(for: book)
+        let original = try Data(contentsOf: file)
+        try await until("lane before book transfer", timeout: 30) { idle() && !model.isWorking }
+        let created = await model.createBookTransferJob(books: [book], library: library)
+        let id = try XCTUnwrap(created)
+        try await until("generated book preparation", timeout: 30) { idle() && !model.isWorking }
+        try require(model.canSendBookTransferJob(id), "Generated book was not ready to send")
+        model.sendBookTransferJob(id)
+        try await until("app book transfer", timeout: 90) { idle() && !model.isWorking }
+        let job = try XCTUnwrap(model.bookTransferJob(id))
+        try require(job.stage == .completed && job.savedCount == 1, "App did not confirm book publication")
+        let path = try XCTUnwrap(job.items.first?.publishedPath)
+        try require(path == "/" + file.lastPathComponent, "Unexpected generated book destination")
+        var received = Data()
+        while received.count < original.count {
+            let piece = try await client.readerFilePiece(identity: identity, path: path,
+                size: Int64(original.count), offset: Int64(received.count), host: host, port: 80)
+            guard case .data(let bytes) = piece, !bytes.isEmpty else {
+                throw Failure.reason("Reader did not return the generated book")
+            }
+            received.append(bytes)
+            try require(received.count <= original.count, "Reader returned extra book bytes")
+        }
+        try require(received == original, "Published EPUB differs from library bytes")
+        try await until("lane before test book cleanup", timeout: 30) { idle() && !model.isWorking }
+        model.deleteReaderFile(path, size: Int64(original.count), folder: "/", identity: identity)
+        try await until("test book cleanup", timeout: 30) { idle() && !model.isWorking }
+        try require(model.readerFilesError == nil && model.readerFilePage != nil,
+                    "Test book cleanup was not confirmed")
+        // Fetch a fresh inventory after deletion; the pipeline must finish with
+        // the reader's pre-test books intact and the generated file absent.
+        try await inventory(model, idle: idle)
+        try require(model.readerInventory?.files.contains(where: { $0.path == path }) == false,
+                    "Generated book remains in inventory")
+        return original.count
     }
 
     @MainActor

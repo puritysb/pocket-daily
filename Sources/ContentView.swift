@@ -623,7 +623,7 @@ struct ContentView: View {
                         .buttonStyle(.plain).accessibilityLabel("Back to My Reader")
                         .accessibilityIdentifier("reader-back")
                 }
-                Text(section.rawValue).font(PocketDesign.pageTitle)
+                Text(section.rawValue).font(PocketDesign.navigationTitle)
                 Spacer()
             }
             .padding(.horizontal, PocketDesign.pageInset).padding(.vertical, 12)
@@ -689,7 +689,7 @@ struct ContentView: View {
                               connectionContent: {
                                   AnyView(VStack(alignment: .leading, spacing: 16) {
                                       ConnectionInspector(model: model, nearby: nearby, onConnect: connect, offersDemo: false,
-                                                          connectsOnOpen: true)
+                                                          connectsOnOpen: true, pinsActions: true)
                                       if showsStatus { StatusCallout(message: model.message, tone: model.messageTone) }
                                   })
                               },
@@ -1340,61 +1340,34 @@ struct ConnectionInspector: View {
     var offersDemo = true
     /// Only explicit Connect sheets start work on presentation.
     var connectsOnOpen = false
+    /// Editor connection steps keep their actions in the same bottom region.
+    var pinsActions = false
     private var readerLink: ReaderBluetoothLink { model.bluetoothLink }
     @State private var startedOnOpen = false
     @State private var confirmingDirectConnection = false
     @State private var otherMethods = false
+    @State private var confirmingEndSession = false
 
     var body: some View {
-        InspectorCard(title: "Connection", symbol: "antenna.radiowaves.left.and.right") {
-            HStack {
-                Circle().fill(model.readerStatus == nil || model.isDemoMode ? Color.secondary : PocketPalette.signal)
-                    .frame(width: 9, height: 9)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.readerStatus?.device ?? "Reader").fontWeight(.semibold)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                    if model.readerStatus == nil && !model.isDemoMode {
-                        // Compatibility, stated precisely; no product is implied.
-                        Text("For X3 and X4 readers running Pocket Daily or compatible CrossPoint-based firmware.")
-                            .font(.caption).foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if pinsActions {
+                VStack(spacing: 0) {
+                    ScrollView {
+                        InspectorCard(title: "Connection", symbol: "antenna.radiowaves.left.and.right") {
+                            connectionSummary
+                        }.padding(PocketDesign.pageInset)
                     }
+                    Divider()
+                    VStack(alignment: .leading, spacing: 12) { connectionActions }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, PocketDesign.pageInset).padding(.vertical, 12)
+                        .accessibilityIdentifier("connection-actions")
                 }
-                Spacer()
-                if model.isWorking || model.canCancelConnection { ProgressView().controlSize(.small) }
-                if isConnected { sessionMenu }
-            }
-            if model.canCancelConnection {
-                Button(model.isSearchingForReader ? "Cancel Search" : "Cancel Connection", systemImage: "xmark.circle") {
-                    nearby.disconnect()
-                    model.cancelConnectionAttempt()
+            } else {
+                InspectorCard(title: "Connection", symbol: "antenna.radiowaves.left.and.right") {
+                    connectionSummary
+                    connectionActions
                 }
-                .accessibilityIdentifier("cancel-reader-connection")
-            } else if model.isCancellingConnection {
-                Text("Stopping connection…").font(.callout).foregroundStyle(.secondary)
-            }
-            actions
-            if let lease = nearby.hotspotLease, model.manualHotspotFallback {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))
-                    if model.locationPermissionRequired {
-                        Text("Location access lets Pocket join this temporary network automatically. Pocket never reads your coordinates.")
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("Open Location Settings") { model.openLocationSettings() }
-                            .buttonStyle(.bordered)
-                    }
-                    Button("Retry Automatic Join") { model.useNearbyLease(lease) }
-                        .buttonStyle(.borderedProminent).disabled(model.isWorking)
-                    // Only the network name and passphrase are code-like.
-                    Text(lease.ssid).font(.caption.monospaced())
-                    Text(lease.passphrase).font(.caption.monospaced()).textSelection(.enabled)
-                    Button("Verify Connection") {
-                        Task { await model.verifyNearbyLease(lease) }
-                    }.disabled(model.isWorking)
-                }
-                .font(.caption)
-                .padding(8)
-                .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: PocketDesign.controlRadius))
             }
         }
         .onAppear {
@@ -1404,6 +1377,12 @@ struct ConnectionInspector: View {
                   !model.isDemoMode, !model.isWorking, !model.canCancelConnection,
                   !model.isCancellingConnection, !model.hasDirectSession else { return }
             onConnect()
+        }
+        .confirmationDialog("End session with \(model.readerStatus?.device ?? "Reader")?",
+                            isPresented: $confirmingEndSession, titleVisibility: .visible) {
+            Button("End Session", role: .destructive) { nearby.disconnect(); model.endConnection() }
+        } message: {
+            Text("This closes Sync on the reader. To connect again, reopen Sync → Same Wi-Fi. Bluetooth wake requires supported standby mode.")
         }
         .alert("Connect to the reader’s temporary Wi-Fi?", isPresented: $confirmingDirectConnection) {
             Button("Cancel", role: .cancel) {}
@@ -1424,6 +1403,61 @@ struct ConnectionInspector: View {
         }
     }
 
+    private var connectionSummary: some View {
+        HStack {
+            Circle().fill(model.readerStatus == nil || model.isDemoMode ? Color.secondary : PocketPalette.signal)
+                .frame(width: 9, height: 9)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.readerStatus?.device ?? "Reader").fontWeight(.semibold)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+                if model.readerStatus == nil && !model.isDemoMode {
+                    // Compatibility, stated precisely; no product is implied.
+                    Text("For X3 and X4 readers running Pocket Daily or compatible CrossPoint-based firmware.")
+                        .font(.caption).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer()
+            if model.isWorking || model.canCancelConnection { ProgressView().controlSize(.small) }
+            if isConnected { sessionMenu }
+        }
+    }
+
+    @ViewBuilder private var connectionActions: some View {
+        if model.canCancelConnection {
+            Button(model.isSearchingForReader ? "Cancel Search" : "Cancel Connection", systemImage: "xmark.circle") {
+                nearby.disconnect()
+                model.cancelConnectionAttempt()
+            }
+            .accessibilityIdentifier("cancel-reader-connection")
+        } else if model.isCancellingConnection {
+            Text("Stopping connection…").font(.callout).foregroundStyle(.secondary)
+        }
+        actions
+        if let lease = nearby.hotspotLease, model.manualHotspotFallback {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))
+                if model.locationPermissionRequired {
+                    Text("Location access lets Pocket join this temporary network automatically. Pocket never reads your coordinates.")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Location Settings") { model.openLocationSettings() }
+                        .buttonStyle(.bordered)
+                }
+                Button("Retry Automatic Join") { model.useNearbyLease(lease) }
+                    .buttonStyle(.borderedProminent).disabled(model.isWorking)
+                // Only the network name and passphrase are code-like.
+                Text(lease.ssid).font(.caption.monospaced())
+                Text(lease.passphrase).font(.caption.monospaced()).textSelection(.enabled)
+                Button("Verify Connection") {
+                    Task { await model.verifyNearbyLease(lease) }
+                }.disabled(model.isWorking)
+            }
+            .font(.caption)
+            .padding(8)
+            .background(PocketPalette.workspace, in: RoundedRectangle(cornerRadius: PocketDesign.controlRadius))
+        }
+    }
+
     private var isConnected: Bool { model.readerStatus != nil && !model.isDemoMode }
 
     /// Only what makes sense now: leave demo; connect (and how); or, once
@@ -1439,7 +1473,7 @@ struct ConnectionInspector: View {
             Button("Reconnect Directly") { confirmingDirectConnection = true }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.accent).frame(maxWidth: .infinity, alignment: .leading)
                 .disabled(model.isWorking)
-            Button("End Session") { nearby.disconnect(); model.endConnection() }
+            Button("End Session…", role: .destructive) { confirmingEndSession = true }
                 .buttonStyle(.borderless).font(.callout)
                 .disabled(model.isWorking)
         } else if model.readerStatus == nil {
@@ -1449,7 +1483,7 @@ struct ConnectionInspector: View {
                     .disabled(model.isWorking)
                 Text(readerLink.rememberedReader == nil
                      ? "On the reader: Pocket Daily → Sync → Same Wi-Fi."
-                     : "Keep your reader nearby. Compatible firmware wakes over Bluetooth and joins your saved Wi-Fi.")
+                     : "Keep your reader nearby. Supported standby mode can wake over Bluetooth. Otherwise, open Sync → Same Wi-Fi on the reader.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Button {
@@ -1487,9 +1521,8 @@ struct ConnectionInspector: View {
 
             }
             Divider()
-            Button("End Session", systemImage: "xmark.circle", role: .destructive) {
-                nearby.disconnect()
-                model.endConnection()
+            Button("End Session…", systemImage: "xmark.circle", role: .destructive) {
+                confirmingEndSession = true
             }
         } label: {
             PocketActionGlyph(name: "ellipsis")

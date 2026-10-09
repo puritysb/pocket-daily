@@ -137,6 +137,11 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(app.buttons["Connect Directly"].exists)
         XCTAssertFalse(app.buttons["try-demo"].exists, "Demo must not abandon an editor's pending work")
         XCTAssertFalse(city.exists, "Hidden editor inputs must not remain accessible during connection")
+        let primary = app.buttons["Find on Same Wi-Fi"]
+        XCTAssertTrue(primary.isHittable)
+        XCTAssertGreaterThan(primary.frame.minY, app.windows.firstMatch.frame.maxY * 0.7,
+                             "The connection action must remain near the bottom of the sheet")
+        attach(app, "source-connection-actions")
         app.buttons["content-connection-back"].tap()
         XCTAssertTrue(app.staticTexts["Weather & calendar"].waitForExistence(timeout: 5))
         XCTAssertEqual(city.value as? String, query, "Connect and Back must preserve the unsubmitted city query")
@@ -625,6 +630,9 @@ final class PocketFlowTests: XCTestCase {
     func testArticleCanBeSavedReadAndPrepared() {
         let articleTitle = "Article check " + UUID().uuidString.prefix(8)
         let app = XCUIApplication()
+        // Isolate reader registrations from protocol-test identities while
+        // retaining the library and transfer records across this test's relaunch.
+        app.launchArguments = ["--ui-test-empty-discovery"]
         app.launch()
         app.openShelf("Articles")
         app.buttons["article-add-menu"].tap()
@@ -664,7 +672,14 @@ final class PocketFlowTests: XCTestCase {
         app.openShelf("Articles")
         app.filterArticles("All Articles")
         XCTAssertTrue(saved.waitForExistence(timeout: 5))
-        app.buttons["book-transfer-reopen"].tap()
+        // More than one saved job uses a menu rather than a button. Previous
+        // interrupted runs may leave other jobs; reopen this article explicitly.
+        let reopen = app.descendants(matching: .any)["book-transfer-reopen"].firstMatch
+        XCTAssertTrue(reopen.waitForExistence(timeout: 5))
+        reopen.tap()
+        if !app.buttons["book-transfer-close"].exists {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", articleTitle)).firstMatch.tap()
+        }
         XCTAssertTrue(app.staticTexts[articleTitle].waitForExistence(timeout: 5))
         app.buttons["Discard This Transfer…"].tap()
         app.buttons["Discard Transfer"].tap()

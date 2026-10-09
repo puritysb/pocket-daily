@@ -57,12 +57,11 @@ struct StudioContentSheet: View {
                 .disabled(connecting)
                 .accessibilityHidden(connecting)
                 if connecting {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            if let connectionContent { connectionContent() }
-                            else { Text("Reader connection controls are unavailable.").foregroundStyle(.secondary) }
-                        }.padding(20)
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let connectionContent { connectionContent() }
+                        else { Text("Reader connection controls are unavailable.").foregroundStyle(.secondary).padding(20) }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("content-connection")
                 }
             }
@@ -73,7 +72,8 @@ struct StudioContentSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if connecting {
-                        Button("Back to \(task.title)") { cancelConnection(); connecting = false }
+                        Button("Back", systemImage: "chevron.left") { cancelConnection(); connecting = false }
+                            .accessibilityLabel("Back to \(task.title)")
                             .accessibilityIdentifier("content-connection-back")
                     } else {
                         Button("Close") { dismiss() }.accessibilityIdentifier("content-editor-close")

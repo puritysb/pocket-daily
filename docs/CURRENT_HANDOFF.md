@@ -1,6 +1,111 @@
-# 현재 상태 (2026-09-29, 세션 정리)
+# 현재 인수인계 — 2026-10-09
 
-이 절만 현재 사실이다. 아래 "이력"은 당시 상태 기록이다. 이력을 근거로 삭제된 기능(KOSync)을 되살리지 않는다.
+현재 구현은 [PROJECT_MEMORY.md](PROJECT_MEMORY.md)의 날짜별 검증 기록과 실제 코드를
+기준으로 한다. **1차 기능 구현은 갖췄지만 출시 승인 완료 상태는 아니다.**
+
+- 디자인 시스템 변경은 `f0adf02`로 원격 main에 반영됐다. 정리 시작 시 작업 트리는
+  깨끗했고 로컬 main은 `0c93a4f`(다중 리더)까지였다. 이 커밋의 물리적 다중 기기
+  동시 연결 검증은 아직 없으며, 디자인 테스트 통과와 구분한다.
+- Library와 My Reader가 주 목적지다. Reader Settings 안에 Home / Sleep / Reading
+  범위가 있고 Manage Reader는 기기 옵션에서 연다. 아래 9월의 Screens / Device
+  메뉴 및 BLE 미병합 설명은 현재 구조를 설명하지 않는다.
+- 이번 마감에서 넓은 화면의 탐색 제목을 콘텐츠 제목과 분리했다. iPhone의
+  My Reader는 이미 인라인 제목이다. 옛 QA 캡처를 최신 화면으로 판단하지 않는다.
+- 후속 UI 정리: 카드·날씨 연결 단계의 주요 행동을 하단에 고정했다.
+  리더 선택은 Readers… → Manage Readers로 구분하고 Mac 관리 시트를 줄였다.
+  End Session…은 리더의 Sync 종료와 재연결 방법을 확인한 후 실행한다.
+- 최신 제품 코드의 서명 IPA·Mac PKG 생성과 검증은 완료했다. 출시 전에는 실제
+  iPhone/X4 전송·복구·이어 읽기 수용 시험, TestFlight, 심사 연락처/앱 레코드/업로드/
+  실기기 영상 확인이 필요하다. 최신 export 증거는 `appstore/submission.json`에 있다.
+- 기준 확인: 과거 테스트 수를 최신 HEAD 재검증으로 인용하지 않는다. 이번 제목
+  변경과 후속 실기기 확인 결과는 아래에 기록한다. 계정·출시 작업은 수행하지 않았다.
+
+## 이번 제목 정리의 검증
+
+- 2026-10-09: `POCKET_SCREENSHOT_TEST_TARGET=PocketUITests/PocketScreenshotTests
+  ./scripts/capture_screenshots.sh` 종료 코드 0. iPhone/iPad 캡처·접근성 테스트와
+  Mac 테스트 통과, 스크린샷 19장 재생성, 소스 패키지 검증 통과.
+- iPhone/iPad의 Manage Reader와 Mac의 My Reader QA 캡처를 직접 확인했다.
+  Mac 탐색 제목은 17pt, 넓은 iPad는 headline, iPhone은 기존 인라인 제목이다.
+- 로그: `.build/design-closeout-capture.log`. Mac My Reader QA 이미지:
+  `.build/design-closeout/my-reader.png`(로컬 산출물). 전체 단위 테스트 재실행,
+  설치된 앱 교체, 실기기 및 새 배포본 검증을 의미하지 않는다.
+
+## 후속 UI 수정 전 재빌드 및 X3 검증 — 2026-10-09
+
+- 기준: HEAD `0c93a4f` + 위 탐색 제목 변경. 서명된 sandbox Debug Mac 앱을
+  개발 파이프라인으로 재빌드하여 `~/Applications/Pocket Daily.app`에 설치·실행했다.
+  최종 파이프라인 후 설치 앱을 다시 실행했고 X3 Same Wi-Fi 연결 상태를 확인했다.
+  설치본과 빌드 실행 파일의 SHA-256은
+  `f03535cb7b56cc60d4c6dbc4f3846e710e91010f8fb3824e09935a9131830740`이며 바이트 일치 확인.
+- iOS 단위 테스트: 543개 실행, 하드웨어 opt-in 1개 건너뜀, 실패 0.
+  로그 `.build/final-unit.log`. 이는 물리 iPhone 검증을 대신하지 않는다.
+- iOS UI 회귀: 첫 실행 8개 중 7개 통과. 기사 재개 시험은 단위 시험이 남긴
+  비규격 가짜 기기 ID로 등록 복구가 실패한 테스트 환경 문제를 확인했다. 이 시험에
+  기존 `--ui-test-empty-discovery` 등록 격리를 적용하고, 여러 대기 작업의 메뉴도
+  선택하도록 고쳤다. 수정 후 기사 저장·읽기·준비·재실행·재개·삭제 시험 통과.
+  로그 `.build/final-ui.log`, `.build/final-article-ui-isolated.log`.
+- 실제 X3 / Same Wi-Fi: 개발 파이프라인 연결·전체 inventory 페이지 확인 통과
+  (`../pocket-daily-firmware/build/dev-pipeline-runs/20261009T042817-e13ac1/report.json`).
+  펌웨어는 `0.1.0-dev-fix-ble-window-cache-preflight-8925b142-ble-standby-w7763019d`.
+- 실행 앱에서 테스트 글 작성 → EPUB 저장 → 한글 포함 본문 읽기 → X3 전송 →
+  기기 보관함 갱신 확인. 앱의 폴더 복사 기능으로 얻은 EPUB과 실제 리더 다운로드가
+  3,114바이트 및 SHA-256 `9368ac81f9e1a19ced2b3df569b8dace422118f1464dd654066db61a76b2f722` 일치.
+  증거 `.build/final-verification/reader-roundtrip.json`. 로컬 폴더 복사이며 실제 SD 매체 시험은 아니다.
+- Reading 여백 5→10px 적용을 기기 API로 확인하고 5px로 복원 확인.
+  기존 Home 미적용 초안은 보존했다. 테스트 책 `Pocket QA 20261009-1333`은 앱과 X3에 남아 있다.
+- 연결 종료 후 재연결은 실패했다. Disconnect가 기기의 Sync 세션을 종료한 뒤
+  My Readers의 Connect가 탐색을 마쳤지만 `No Pocket reader was visible`로 끝났고 HTTP도
+  응답하지 않았다. BLE 깨우기 성공으로 해석하지 않는다. X3에서 Sync → Same Wi-Fi를
+  사용자가 다시 열자 설치 앱이 자동 재연결하고 inventory를 갱신했다.
+  Sync가 열린 기기에 재연결하는 경로는 확인됐지만, 종료된 Sync를 BLE로 깨우는 경로는 미확인이다.
+- 실제 iPhone 첫 시도는 잠금으로 중단됐으나, 사용자가 잠금을 해제한 후 서명 빌드와
+  Mac·물리 iPhone 연결/inventory 파이프라인이 모두 통과했다. 최종 두 플랫폼 모두
+  루트 20개·/Books 3개 엔트리를 끝까지 조회했고 inventory 15개를 확인했다.
+  최종 보고서 `../pocket-daily-firmware/build/dev-pipeline-runs/20261009T044234-25e75e/report.json`,
+  로그 `.build/final-hardware-iphone-unlocked.log`. iPhone 파일 전송·직접 Wi-Fi·BLE·이어 읽기
+  수용 시험까지 통과한 것으로 확대하지 않는다.
+- `./scripts/validate_app_store.sh` 통과. 새 제출·업로드·출시 승인을 의미하지 않는다.
+- 이번 확인 범위 밖: X4, 물리 다중 리더 동시 연결, BLE 절전 깨우기·직접 Wi-Fi,
+  물리 리더 화면·장 넘김·양방향 이어 읽기 수용 시험, iCloud 기기간 교환, TestFlight·출시 서명 export.
+
+## 후속 마감 — 2026-10-09
+
+- 일반 End Session은 펌웨어의 Sync를 닫고 홈으로 복귀한다. 이는 개발용 BLE standby와
+  다른 상태다. 이전 Disconnect 뒤 실패를 곧바로 standby wake 결함으로 판단하지 않는다.
+- 최종 설치 펌웨어 그대로 Mac의 제어된 standby→BLE wake→Same Wi-Fi 복귀가
+  2회 연속 통과(13.21/12.94초). 보고서 `20261009T053635-d99fbe`.
+- 실기기 시험을 확장해 앱의 실제 Library→준비→전송 경로로 생성 EPUB을 보내고,
+  기기 다운로드와 전체 바이트를 비교한 뒤 그 파일만 크기·경로 검증을 거쳐 삭제한다.
+  Mac 2,856바이트 왕복·정리 및 13.17초 standby wake 통과
+  (`20261009T054304-49d77f`의 Mac 단계). 보고서는 형제 저장소 `build/dev-pipeline-runs/`에 있다.
+- 확장 시험의 첫 시도는 비동기 준비를 기다리지 않는 시험 코드 문제로 전송 전에 실패했다.
+  준비 완료 대기를 추가했다. 이전 실패의 생성 작업은 진단용으로 남을 수 있으며,
+  기존 사용자 책이나 확인되지 않은 발행을 일괄 삭제하지 않는다.
+- 전송 단위 시험은 기존 UI 파일을 읽지 않도록 시험별 ReaderSessionStorage로 분리했다.
+  이후 전체 단위 543개: 542 통과, opt-in 하드웨어 1 건너뜀, 실패 0.
+- 최종 UI의 편집 초안 유지·연결 복귀와 선택 책 작업 복귀 2개 시험 통과.
+  연결 버튼의 하단 위치도 검증하고 실제 캡처를 확인했다. 스크린샷 19장 재생성,
+  Mac 시험과 스토어 소스 검증 통과 (`.build/followup-editor-ui-v3.log`,
+  `.build/followup-screenshots.log`).
+- 최종 제품 코드의 Mac 재빌드·연결·inventory·2,856바이트 EPUB 왕복 및 시험 파일 정리
+  통과: `20261009T055656-a28dde/report.json`. 설치본과 빌드 실행 파일 SHA-256
+  `db9f181a0b29c14f20549cb3bc3fad8aa27f316b81482b1463d0c7a9624a929e` 일치,
+  서명 검증 통과. 설치 앱을 실행해 X3 Same Wi-Fi 자동 연결과 목록 갱신을 확인했다.
+- 확장된 iPhone 전송·standby 시험은 다시 잠긴 기기 때문에 실행되지 못했다
+  (`20261009T054304-49d77f`). 앞선 iPhone 연결·inventory 통과와 구분한다.
+  X4, 물리 다중 리더, 직접 Wi-Fi, 양방향 이어 읽기·iCloud 및 TestFlight는 남은 수용 시험이다.
+
+- 최종 배포 파이프라인 `.build/app-store/final-20261009-v2/` 완료: 단위 543개 중
+  542 통과/1 건너뜀, arm64 iOS IPA 및 universal sandbox Mac PKG 서명·프로파일·
+  개인정보 매니페스트 검증 통과. 본앱과 Share 확장의 App Group 프로파일·버전도 일치.
+  `release-evidence.json`과 `appstore/submission.json`에 전체 해시를 기록했다.
+  빌드 기준은 `0c93a4f` + 이번 커밋의 제품 변경이며 이후 제품 코드는 바뀌지 않았다.
+  업로드·심사·출시는 수행하지 않았다.
+
+# 2026-09-29 당시 상태 (이력)
+
+이 절과 아래 이력은 당시 상태이며 현재 출시 판단의 근거가 아니다. 삭제된 기능(KOSync)을 되살리지 않는다.
 
 - 제품: 기기 없이 쓰는 집중형 리더 + X3/X4 컴패니언([READER_EXPANSION.md](READER_EXPANSION.md)).
   Library 첫 화면, Screens(Home/Sleep·읽기 설정), Device(연결·파일·펌웨어), Weather/Calendar 분리,

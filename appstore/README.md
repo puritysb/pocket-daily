@@ -11,7 +11,7 @@ Pocket Daily 1.0.
 - SKU: `pocket-daily-universal-2026`
 - Version/build: `1.0.0 (1)`
 - Platforms: iOS/iPadOS and macOS
-- Categories: Education, then Books
+- Categories: Books, then Education
 - Price: Free; no purchases or account
 - Privacy answer: **No, we do not collect data from this app**
 - Privacy manifest: app-only UserDefaults (`CA92.1`) and user-selected file metadata (`3B52.1`)
@@ -27,22 +27,26 @@ uploaded to both storefront localizations.
 
 ## Locally verified release evidence
 
-- Organization team `QF36NDHYHD` can provision both products. The iOS Store
-  profile includes Hotspot Configuration, and the Mac Store profile preserves
-  the sandbox and required hardware/file/network capabilities.
-- App Store exports succeeded for both platforms: an arm64 iOS IPA and a
-  universal arm64/x86_64 macOS PKG, both signed with Apple Distribution.
-- Both exported apps contain `PrivacyInfo.xcprivacy`; their distribution
-  entitlements and signatures were verified from the packaged products.
-- On 2026-09-06 the iOS simulator test suite passed 40 tests, the macOS build
-  passed, the screenshot set was regenerated from the current UI, and
-  `scripts/validate_app_store.sh` passed the staged submission package. The
-  signed exports below predate those source changes; rerun
-  `scripts/package_app_store.sh` before upload.
-- The safe local packaging script completed end to end and emitted verified IPA,
-  PKG, test-result, signature/profile, entitlement, and SHA-256 evidence.
-- The configured marketing, support, and privacy URLs return HTTP 200 from the
-  public GitHub Pages site.
+- On 2026-10-09 the final closeout product source passed 543 iOS unit tests:
+  542 passed, one opt-in hardware skip, zero failures. Focused editor/connection
+  UI flows, screenshot/accessibility suites and Mac tests passed. All 19 store
+  images were regenerated and source package validation passed.
+- `scripts/package_app_store.sh` completed both local exports: Apple
+  Distribution-signed arm64 iOS IPA and universal arm64/x86_64 sandboxed Mac PKG
+  with a verified installer signature. Store profiles, privacy manifests and
+  required entitlements were checked. The parent iOS app and Share extension
+  have matching App Group profiles, versions and privacy manifests.
+- Local artifacts and full SHA-256 evidence are under
+  `.build/app-store/final-20261009-v2/`; `appstore/submission.json` records the
+  hashes. The evidence names pre-commit HEAD `0c93a4f` plus this closeout's
+  working changes. No product code changed after these builds.
+- Mac/X3 Same Wi-Fi connection, inventory and generated EPUB byte-for-byte
+  transfer passed; controlled BLE standby wake passed separately. Physical
+  iPhone connection/inventory passed earlier, but expanded tests were blocked
+  by device lock. See `docs/CURRENT_HANDOFF.md` for the precise scope.
+- Nothing was uploaded. Physical acceptance, TestFlight and App Store Connect
+  account fields remain release gates. Public URLs were last checked on
+  2026-09-06; this local packaging run did not recheck hosted pages.
 
 The packaging script runs the deterministic unit tests only; the UI-test bundles
 that capture screenshots and check first-run behaviour run from the full scheme
@@ -114,9 +118,10 @@ opens in the current window. Local checks of this IA revision are recorded in
 [the implementation report](../docs/IA_IMPLEMENTATION_REPORT.md); prior signed exports are not evidence for the new UI.
 
 The app and extension require the App Group `group.bound.serendipity.pocket.daily`.
-The extension bundle ID is `bound.serendipity.pocket.daily.share`. Registering
-these capabilities and obtaining matching distribution profiles are authorized
-account-holder actions, still pending; unsigned local builds do not verify them.
+The extension bundle ID is `bound.serendipity.pocket.daily.share`. The locally
+exported IPA on 2026-10-09 contains matching App Group entitlements and distribution
+profiles for both targets; signatures, version/build and privacy manifests were
+checked. This does not establish a physical Share extension or TestFlight pass.
 The extension must ship with matching parent version/build and privacy manifest.
 Article sending requires reader `articleLibrary: 1` plus the streaming transport.
 See `docs/ARTICLES.md` (from repository root) for the contract and acceptance gates.

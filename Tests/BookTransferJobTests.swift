@@ -4,10 +4,18 @@ import XCTest
 @MainActor
 final class BookTransferJobTests: XCTestCase {
     private var folders: [URL] = []
+    private let storageRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    private var transfers: URL { storageRoot.appendingPathComponent("Transfers") }
+    private func sessionStorage() throws -> ReaderSessionStorage {
+        ReaderSessionStorage(root: storageRoot,
+            defaults: try XCTUnwrap(UserDefaults(suiteName: "Pocket.book-job-test." + storageRoot.lastPathComponent)))
+    }
     private let bytes = Data("selected book bytes".utf8)
 
     override func tearDown() {
         for folder in folders { try? FileManager.default.removeItem(at: folder) }
+        try? FileManager.default.removeItem(at: storageRoot)
+        UserDefaults.standard.removePersistentDomain(forName: "Pocket.book-job-test." + storageRoot.lastPathComponent)
         super.tearDown()
     }
 
@@ -25,10 +33,10 @@ final class BookTransferJobTests: XCTestCase {
                                     remoteStagingID: pending ? UUID() : nil,
                                     publicationPending: pending,
                                     bookJobID: jobID, libraryBookID: bookID)
-        let folder = TransferPreparation.file(item).deletingLastPathComponent()
+        let folder = TransferPreparation.file(item, directory: transfers).deletingLastPathComponent()
         folders.append(folder)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try bytes.write(to: TransferPreparation.file(item))
+        try bytes.write(to: TransferPreparation.file(item, directory: transfers))
         try JSONEncoder().encode(item).write(to: folder.appendingPathComponent("transfer.json"), options: .atomic)
         return item
     }
@@ -41,7 +49,7 @@ final class BookTransferJobTests: XCTestCase {
     }
 
     private func setup(jobs: [BookTransferJob] = [], corrupt: Bool = false, missingManifest: Bool = false,
-                       localFiles: PocketModel.LocalFileOperations = .init()) async throws -> (PocketModel, BookTransferJobStore, URLSession) {
+                       localFiles: PocketModel.LocalFileOperations? = nil) async throws -> (PocketModel, BookTransferJobStore, URLSession) {
         let folder = try temporaryFolder()
         let file = folder.appendingPathComponent("jobs.json")
         let store = BookTransferJobStore(file: file)
@@ -51,7 +59,7 @@ final class BookTransferJobTests: XCTestCase {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [BookJobProtocol.self]
         let session = URLSession(configuration: config)
-        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session), localFiles: localFiles, bookTransferStore: store)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session), localFiles: localFiles, bookTransferStore: store, sessionStorage: try sessionStorage())
         for _ in 0..<300 where model.bookTransferJobsLoading { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertFalse(model.bookTransferJobsLoading)
         model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: BookJobProtocol.status())
@@ -97,11 +105,11 @@ final class BookTransferJobTests: XCTestCase {
         XCTAssertTrue(BookJobProtocol.paths.contains("/api/pocket/v1/publication"))
         XCTAssertEqual(model.bookTransferJob(id)?.stage, .completed)
         XCTAssertEqual(model.bookTransferJob(id)?.items.first?.result, .saved)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: TransferPreparation.file(selected).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: TransferPreparation.file(selected, directory: transfers).path))
         let persisted = try await store.load()
         XCTAssertEqual(persisted.first?.items.first?.result, .saved)
         XCTAssertNotNil(persisted.first?.items.first?.publishedPath)
-        let restarted = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), bookTransferStore: store)
+        let restarted = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), bookTransferStore: store, sessionStorage: try sessionStorage())
         for _ in 0..<300 where restarted.bookTransferJobsLoading { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(restarted.bookTransferJob(id)?.stage, .completed)
         restarted.pauseForBackground()
@@ -120,7 +128,7 @@ final class BookTransferJobTests: XCTestCase {
         try await wait(model)
         XCTAssertEqual(model.bookTransferJob(id)?.stage, .confirmationUnknown)
         XCTAssertNotNil(model.bookTransferJob(id)?.failure)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(selected).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(selected, directory: transfers).path))
         XCTAssertTrue(BookJobProtocol.controls.isEmpty)
         XCTAssertFalse(BookJobProtocol.paths.contains("/upload"))
         XCTAssertFalse(BookJobProtocol.paths.contains("/api/pocket/v1/commit"))
@@ -210,9 +218,10 @@ final class BookTransferJobTests: XCTestCase {
         let library = LibraryModel(storage: storage, defaults: defaults)
         await library.load()
         let gate = BookPreparationGate()
+        let directory = transfers
         let operations = PocketModel.LocalFileOperations(prepareBook: { url, id, jobID, bookID in
             await gate.wait()
-            return try await Task.detached { try TransferPreparation.prepare(url, id: id, bookJobID: jobID, libraryBookID: bookID) }.value
+            return try await Task.detached { try TransferPreparation.prepare(url, directory: directory, id: id, bookJobID: jobID, libraryBookID: bookID) }.value
         })
         let (model, store, session) = try await setup(localFiles: operations)
         defer { model.pauseForBackground(); session.invalidateAndCancel() }
@@ -235,11 +244,11 @@ final class BookTransferJobTests: XCTestCase {
         XCTAssertEqual(model.bookTransferJob(id)?.stage, .paused)
         let transferID = try XCTUnwrap(model.bookTransferJob(id)?.items.first?.transferID)
         let transfer = try XCTUnwrap(model.preparedTransfers.first { $0.id == transferID })
-        folders.append(TransferPreparation.file(transfer).deletingLastPathComponent())
+        folders.append(TransferPreparation.file(transfer, directory: transfers).deletingLastPathComponent())
         XCTAssertEqual(transfer.bookJobID, id)
         XCTAssertEqual(transfer.libraryBookID, book.id)
         let source = try await library.fileURL(for: book)
-        XCTAssertEqual(try Data(contentsOf: TransferPreparation.file(transfer)), try Data(contentsOf: source))
+        XCTAssertEqual(try Data(contentsOf: TransferPreparation.file(transfer, directory: transfers)), try Data(contentsOf: source))
         let persisted = try await store.load()
         XCTAssertEqual(persisted.first?.items.first?.transferID, transferID)
         XCTAssertTrue(BookJobProtocol.paths.isEmpty, "Preparation and cancellation never send bytes")
@@ -275,9 +284,10 @@ final class BookTransferJobTests: XCTestCase {
         let library = LibraryModel(storage: storage, defaults: defaults)
         await library.load()
         let gate = FailingBookPreparation()
+        let directory = transfers
         let operations = PocketModel.LocalFileOperations(prepareBook: { url, id, jobID, bookID in
             if await gate.shouldFail() { throw LibraryError.unavailable }
-            return try await Task.detached { try TransferPreparation.prepare(url, id: id, bookJobID: jobID, libraryBookID: bookID) }.value
+            return try await Task.detached { try TransferPreparation.prepare(url, directory: directory, id: id, bookJobID: jobID, libraryBookID: bookID) }.value
         })
         let (model, _, session) = try await setup(localFiles: operations)
         defer { model.pauseForBackground(); session.invalidateAndCancel() }
@@ -292,8 +302,8 @@ final class BookTransferJobTests: XCTestCase {
         XCTAssertTrue(BookJobProtocol.paths.isEmpty, "Retry preparation still waits for explicit Send")
         let transferID = try XCTUnwrap(model.bookTransferJob(id)?.items.first?.transferID)
         let transfer = try XCTUnwrap(model.preparedTransfers.first { $0.id == transferID })
-        folders.append(TransferPreparation.file(transfer).deletingLastPathComponent())
-        let firstRecord = try JSONDecoder().decode(PreparedTransfer.self, from: Data(contentsOf: TransferPreparation.file(transfer).deletingLastPathComponent().appendingPathComponent("transfer.json")))
+        folders.append(TransferPreparation.file(transfer, directory: transfers).deletingLastPathComponent())
+        let firstRecord = try JSONDecoder().decode(PreparedTransfer.self, from: Data(contentsOf: TransferPreparation.file(transfer, directory: transfers).deletingLastPathComponent().appendingPathComponent("transfer.json")))
         XCTAssertEqual(firstRecord.bookJobID, id)
         XCTAssertEqual(firstRecord.libraryBookID, book.id)
     }
@@ -310,7 +320,7 @@ final class BookTransferJobTests: XCTestCase {
         model.discardBookTransferJob(id, localOnly: true)
         try await wait(model)
         XCTAssertNotNil(model.preparedTransfers.first { $0.id == unrelated.id })
-        XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(unrelated).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(unrelated, directory: transfers).path))
     }
 
     func testDemoStartupDoesNotRecoverOrRewriteRealTransferRecord() async throws {
@@ -321,13 +331,13 @@ final class BookTransferJobTests: XCTestCase {
         let store = BookTransferJobStore(file: file)
         try await store.save([job(selected, id: id, bookID: bookID, result: .sending)])
         let before = try Data(contentsOf: file)
-        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), bookTransferStore: store)
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), bookTransferStore: store, sessionStorage: try sessionStorage())
         model.enterDemoMode()
         for _ in 0..<300 where model.bookTransferJobsLoading { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertTrue(model.isDemoMode)
         XCTAssertTrue(model.bookTransferJobs.isEmpty)
         XCTAssertEqual(try Data(contentsOf: file), before)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(selected).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: TransferPreparation.file(selected, directory: transfers).path))
         model.exitDemoMode()
         for _ in 0..<300 where model.bookTransferJobsLoading { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertEqual(model.bookTransferJob(id)?.stage, .confirmationUnknown)

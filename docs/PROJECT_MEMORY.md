@@ -4,9 +4,34 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Design closeout and physical verification — 2026-10-09
+
+- Wide reader navigation uses a quiet navigation-title token (Mac 17pt/iPad
+  headline); content headings retain their own hierarchy. Editor connection
+  steps pin actions at the bottom and preserve drafts on Back. Readers… opens
+  Manage Readers. End Session… confirms that Sync closes on the reader; ordinary
+  session end is distinct from developer BLE standby.
+- Final product source: 543 unit tests, 542 passed/one hardware opt-in skipped;
+  editor connection/book-task return flows passed, 19 store images regenerated,
+  Mac tests and source package validation passed. Transfer-job tests now isolate
+  their session storage from persisted simulator UI state.
+- Final signed sandboxed Mac Debug build was installed and launched, reconnecting
+  to X3 over Same Wi-Fi. Pipeline `20261009T055656-a28dde` passed connection,
+  paginated inventory and a generated 2,856-byte EPUB round trip with exact bytes
+  and test-file cleanup. Earlier controlled standby trials passed in 13.21/12.94 s
+  (`20261009T053635-d99fbe`); no firmware was installed in this closeout.
+- Signed App Store IPA and universal sandboxed Mac PKG exports passed on the
+  same final product source; local evidence is `.build/app-store/final-20261009-v2/`
+  and hashes are in `appstore/submission.json`. No upload or submission occurred.
+- Physical iPhone connection/inventory passed in `20261009T044234-25e75e`, but the
+  expanded transfer/standby attempt was blocked by device lock. X4, simultaneous
+  physical readers, direct Wi-Fi, physical bidirectional reading/iCloud acceptance
+  and TestFlight remain separate gates. Exact local artifacts and limitations:
+  [CURRENT_HANDOFF.md](CURRENT_HANDOFF.md).
+
 ## Multiple readers — 2026-10-09 (local, not released)
 
-- My Reader → My Readers adds, renames, selects and removes registrations.
+- My Reader → Readers… → Manage Readers adds, renames, selects and removes registrations.
   Each reader owns its connection, work lane, Bluetooth restoration identity,
   prepared copies, transfer jobs and profile/card/source drafts. Selection does
   not cancel another reader's work. A retained `ReaderWorkspace` owns pairing
@@ -35,7 +60,8 @@ with a dated note below.
   and physical iOS test hosts only with explicit opt-in. It drives the real
   running PocketModel through Connect, fresh inventory and optional BLE standby
   wake, then validates complete root/Books pagination and unique reader cycle
-  evidence. `ReaderDevelopmentContext` is a weak Debug-only reference, with no
+  evidence. Opted-in runs also prepare/send a generated EPUB through the app,
+  compare downloaded bytes, and remove only that generated reader file. `ReaderDevelopmentContext` is a weak Debug-only reference, with no
   remote listener or alternate BLE transport; Release omits it.
 - App-side entry point: [DEVELOPER_PIPELINE.md](DEVELOPER_PIPELINE.md), also
   linked from AGENTS.md and connectivity sign-off. Run the sibling firmware

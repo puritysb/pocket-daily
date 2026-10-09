@@ -51,8 +51,9 @@ Live hardware actions require a compatible reader:
    current-window task sheet keeps that content selected through connection.
    Other prepared books and firmware are not included in this task.
 2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
-   choose Find on Same Wi-Fi. This requests local-network access without BLE or
-   automatic Wi-Fi switching. Afterwards the app reconnects by itself whenever
+   choose Find on Same Wi-Fi. Initial discovery requests local-network access
+   without changing Wi-Fi. Explicit Connect may also wake a previously paired
+   reader over Bluetooth when its firmware is in supported standby mode. Afterwards the app reconnects by itself whenever
    that reader answers again at its last address on the same Wi-Fi (Settings →
    Reconnect on the same Wi-Fi); it asks only that address and never changes networks.
 3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
@@ -122,8 +123,8 @@ the page to another device's position without asking.
 
 The iOS app declares the `bluetooth-central` background mode for one purpose:
 keeping reading places in step with the reader the user paired with Connect
-directly. After that pairing the app keeps a single pending connection to that
-one bonded reader (no scanning, no other accessories, no new pairing). When the
+directly. Each registered, paired reader has its own pending connection
+(no scanning, no unpaired accessories, no new pairing in the background). When the
 reader closes a book, wakes or goes to sleep it may advertise briefly when memory
 allows; eligible background connections are controlled by the operating system. The app
 reads the reader's reading list, sends back the places that are further along
@@ -173,9 +174,10 @@ sending remain explicit and use the existing EPUB format. The iOS/iPadOS Share �
 Pocket Daily extension and + → Add article remain available for manual captures.
 
 The app and extension require the App Group `group.bound.serendipity.pocket.daily`.
-The extension bundle ID is `bound.serendipity.pocket.daily.share`. Registering
-these capabilities and obtaining matching distribution profiles are authorized
-account-holder actions, still pending; unsigned local builds do not verify them.
+The extension bundle ID is `bound.serendipity.pocket.daily.share`. The locally
+exported IPA on 2026-10-09 contains matching App Group entitlements and distribution
+profiles for both targets; signatures, version/build and privacy manifests were
+checked. This does not establish a physical Share extension or TestFlight pass.
 The extension must ship with matching parent version/build and privacy manifest.
 Article sending requires reader `articleLibrary: 1` plus the streaming transport.
 See `docs/ARTICLES.md` (from repository root) for the contract and acceptance gates.

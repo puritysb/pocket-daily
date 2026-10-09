@@ -50,7 +50,7 @@ enum ReaderRegistrationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidRegistry: "Saved readers could not be loaded. Their records are preserved. Restore the registry before adding or connecting readers."
-        case .duplicate: "This reader is already registered. Select it in My Readers."
+        case .duplicate: "This reader is already registered. Select it in Manage Readers."
         case .mismatch: "This is a different reader. Select its registration or choose Add Reader."
         case .unidentified: "This firmware does not report a reader ID. Additional readers need compatible firmware that reports a unique device ID."
         case .busy: "End this reader’s connection and wait for its current task before removing it."
