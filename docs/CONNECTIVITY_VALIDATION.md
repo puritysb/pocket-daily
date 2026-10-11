@@ -4,6 +4,13 @@ For repeatable app/firmware development, start with
 [Reader development from the app repository](DEVELOPER_PIPELINE.md). It links
 the shared hardware scenarios, Same-Wi-Fi runner and per-run evidence.
 
+## Current acceptance records
+
+Use [PROJECT_MEMORY.md](PROJECT_MEMORY.md) and
+[CURRENT_HANDOFF.md](CURRENT_HANDOFF.md) for the latest installed artifact,
+real-hardware reports and remaining limitations. The dated trials below are
+historical evidence, not instructions to reinstall an older firmware.
+
 ## App-requested BLE wake — 2026-10-09 (local experimental build)
 
 `ReaderWakeConnector` serves an explicit Connect operation for the remembered
@@ -22,7 +29,9 @@ leaving restoration owned by the existing background reading link. ReaderWorkLan
 suspends that quiet link while the foreground operation owns the connection.
 
 The reader requires the opt-in X3 `ble_standby` firmware, an existing bond,
-saved reachable Wi-Fi, enabled reading sync and battery above 10%. It uses
+saved reachable Wi-Fi and enabled reading sync. The current gate requires battery
+strictly above 10%, or strictly above 5% when positive charging current is
+confirmed (updated 2026-10-11). It uses
 controller modem sleep plus automatic light sleep, not BLE wake from deep sleep.
 Default/release firmware and X4 retain bounded BLE windows. No automatic hotspot
 or Apple-device network change is introduced. Initial pairing and OS permission
@@ -50,12 +59,12 @@ paired-reader disconnect wording that no longer instructs a reader-menu visit.
 Five app-wake trials passed across the two images; the final two cover this
 firmware's Wi-Fi-entry path. Physical iPhone, X4 and energy gates remain open.
 
-## Current installed baseline — 2026-09-22
+## Historical installed baseline — 2026-09-22
 
-The X3 is confirmed on `1.6.6-dev-main-b8e38e39-sta-recovery-w998f2f9d`
-after the already completed SD bootstrap. Keep this image and the existing
-File Transfer → Join a Network connection fixed; do not use the historical
-preflight or failed-upload notes below as a reason to install it again.
+At this checkpoint the X3 was confirmed on
+`1.6.6-dev-main-b8e38e39-sta-recovery-w998f2f9d` after SD bootstrap.
+The trials below deliberately kept that image and File Transfer → Join a Network
+connection fixed. This is not the currently installed baseline.
 
 A subsequent single read-only `/api/status` request returned HTTP 200:
 TCP connect 0.093414 s, first byte 0.118271 s, total 0.118802 s. Status reported

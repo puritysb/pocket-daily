@@ -4,6 +4,19 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Repeated X3 standby/wake acceptance — 2026-10-11
+
+- After pushing app `fb0629a` and firmware tools `5d512c56`, the default enrolled
+  pipeline passed three consecutive 90-second idle/wake/EPUB-cleanup cycles:
+  sibling `build/dev-pipeline-runs/20261011T122403-b8cecb/report.json`.
+  Reconnect 13.007/13.246/14.573 s; each actual standby ~99.6 s, `app-wifi` close,
+  one BLE connection and zero READ_LISTs. Inventory stayed at 18; byte comparison,
+  owned-file deletion and transfer-idle recovery passed every cycle.
+- Charging confirmed at 25/25/26%; BLE minimum free heap 64,452/64,444/64,432 B,
+  largest contiguous block minimum 55,284 B. No new failure or code fix.
+  Three charging-powered cycles do not establish overnight/battery-only behavior,
+  power-transition thresholds, current draw or long-term absence of leaks.
+
 ## Network-change discovery acceptance — 2026-10-11
 
 - Firmware runner `5d512c56` now starts the real Debug app's discovery when its
@@ -26,7 +39,7 @@ with a dated note below.
   and verified against that revision (`apple-host-r7ve89gq`). The physical trial
   below retains its original pre-commit artifact identity rather than claiming
   a reflash of the new Git label.
-- Latest idle/wake acceptance: sibling `build/dev-pipeline-runs/20261011T105840-d292e9/report.json`.
+- Latest 30-minute idle/wake acceptance: sibling `build/dev-pipeline-runs/20261011T105840-d292e9/report.json`.
   The app suspended automatic BLE/LAN traffic for 1800 s, then its normal Connect
   woke X3 and reconnected in 12.223 s. Firmware recorded 1807.465 s standby,
   1472.430 s light sleep, one connection, zero READ_LISTs and `app-wifi` close;
