@@ -1,5 +1,36 @@
 # 현재 인수인계 — 2026-10-11
 
+## Wi-Fi 변경 후 IP 입력 없는 검색 — 2026-10-11
+
+- 이전 IP가 응답하지 않거나 다른 기기이면 펌웨어 runner가 실제 Mac Debug 앱의
+  Connect 경로(Bonjour/현재 LAN 검색/기존 bond BLE wake)로 등록된 리더를 찾는다.
+  앱 admission에서 신원·STA·개발 펌웨어를 검사하고 runner가 HTTP 신원/버전을
+  다시 확인한 뒤 host만 원자적으로 갱신한다. 실패 시 enrollment는 보존된다.
+- 자동화 변경은 `HardwareTests/ReaderHardwareTests.swift`와 형제 저장소의
+  `scripts/dev_pipeline.py`, `scripts/test_dev_pipeline.py`에 있다. 기기 펌웨어나
+  shipping 앱의 통신 구현 변경/재설치는 필요하지 않았다.
+- 첫 실기기 PASS: 형제 `build/dev-pipeline-runs/20261011T121552-cbe0f1/report.json`.
+  앱과 runner 양쪽에 이전 네트워크 주소를 넣은 별도 비공개 설정으로 시작,
+  실제 앱 검색 24.696초 후 현재 X3 발견. 사용자의 IP 입력 없이 신원 확인,
+  목록 18건, 생성 EPUB 2856바이트 왕복 비교/삭제/전송 idle 복귀까지 통과.
+  시험 중 공유기 자체를 전환한 것은 아니며, 이미 바뀐 네트워크에서 오래된
+  주소와 캐시로 시작하는 복구 경로를 검증했다.
+- 최종 실기기 PASS: 형제 `build/dev-pipeline-runs/20261011T121809-dab6d8/report.json`.
+  오래된 주소에서 재검색한 뒤 `--standby`까지 자동 연속 실행. 요청 대기 90초,
+  실제 standby 101,676ms / light sleep 82,657ms, `app-wifi` 종료, BLE 연결 1회,
+  READ_LIST 0회, 앱 재연결 18.975초. 생성 EPUB 2852바이트 왕복 비교·삭제와
+  파일 목록 18건·전송 idle 복귀 PASS. 배터리 24%, 충전 확인 true.
+  정상 설정을 훼손하지 않도록 별도 비공개 설정을 사용했으며, 새 host 저장도
+  확인했다. 다음 실행은 기본 enrollment 설정으로 IP 인자 없이 수행하면 된다.
+- Python 개발 도구 31 tests PASS (`.build/rediscovery-python-final.log`).
+  주소 재할당/누락·다른 신원/오래된 결과/중복 결과/timeout/실패 시 설정 보존과
+  새 주소를 다음 실제 앱 검증 단계에 넘기는 흐름을 검사한다.
+  iOS device SDK build-for-testing PASS (`.build/rediscovery-ios-final.log`).
+  시뮬레이터 및 물리 iPhone 실행은 하지 않았다.
+- 최초 enrollment와 OS 권한/bond는 필요하다. 리더가 새 Wi-Fi를 모르면 앱의
+  Wi-Fi 설정으로 먼저 저장해야 한다. 전원 꺼짐/deep sleep/BLE 저전력 차단,
+  AP isolation 등 통신 불가 상황까지 자동 복구된다고 주장하지 않는다.
+
 ## X3 30분 무통신 대기·BLE 깨우기 완료 — 2026-10-11 20:30 KST
 
 - 실제 Mac/X3 PASS: 형제 저장소

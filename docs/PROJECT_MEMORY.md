@@ -4,6 +4,22 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Network-change discovery acceptance — 2026-10-11
+
+- Firmware runner `5d512c56` now starts the real Debug app's discovery when its
+  saved address is stale/reassigned. Shared hardware tests admit only the enrolled
+  identity and development Same-Wi-Fi session; the runner independently verifies
+  HTTP identity/version before saving the new host and continuing validation.
+- Both runner and app were seeded with an old-network IP. Physical runs
+  `20261011T121552-cbe0f1` and `20261011T121809-dab6d8` passed automatic discovery,
+  inventory and generated EPUB byte comparison/cleanup. The second also passed
+  90-second idle/BLE wake (18.975 s reconnect, charging at 24%). No manual IP input
+  or reader operation was needed during either run. Router switching during an
+  active transfer, overnight/battery-only standby and physical iPhone remain unverified.
+- Developer tool tests: 31 passed; Mac and iOS device-SDK test builds passed.
+  No simulator execution. Product/renderer sources are unchanged; the existing
+  verified renderer remains pinned to `99e3d6a7`, not relabeled to a tooling commit.
+
 ## X3 interface and unattended verification — 2026-10-11
 
 - Committed firmware dependency is `99e3d6a7`; the Apple host renderer was rebuilt

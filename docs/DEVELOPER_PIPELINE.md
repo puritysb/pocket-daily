@@ -26,9 +26,20 @@ Close any separately running Pocket Daily instance before the run; the test host
 must own the radio and reader HTTP traffic. The runner rejects duplicate apps
 before reader I/O. During an agent-led iteration, handle this setup without
 asking the user to repeat reader menus. Initial OS permissions, Bluetooth pairing
-and saved reader Wi-Fi remain prerequisites. An initially offline reader cannot
-be recovered by this preflight; consult the firmware guide instead of retrying
-unknown mutations or switching the Mac network.
+and saved reader Wi-Fi remain prerequisites. A stale saved address automatically falls back to the Debug app's normal
+Connect flow (Bonjour/current-LAN discovery and bonded BLE wake). Only the enrolled
+reader identity is admitted. The runner independently rechecks identity, Same
+Wi-Fi mode and development version over HTTP before atomically saving its new
+address and continuing the requested scenarios. No new IP input or re-enrollment
+is needed after DHCP/Wi-Fi changes. Initial enrollment is still required.
+
+The reader must already know the new Wi-Fi (or be provisioned through the app's
+Wi-Fi setup). This does not copy credentials, switch the Mac network, recover a
+powered-off/deep-sleep reader or bypass network isolation. Discovery is bounded;
+a failed or stale result leaves the runner's enrollment unchanged. The app and
+runner both start with the saved address hint, so a fresher app cache cannot hide
+a broken discovery path in this test. Reports distinguish `saved-address` from
+`app-discovery` and include a separate discovery `.xcresult`.
 
 Quick app build, actual connection, fresh file inventory and a generated EPUB round trip:
 

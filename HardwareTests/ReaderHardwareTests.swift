@@ -7,6 +7,72 @@ import XCTest
 /// Opt-in only: this test talks to a physical reader and can reboot it into a
 /// developer standby trial. Normal unit/simulator runs skip it without I/O.
 final class ReaderHardwareTests: XCTestCase {
+    /// Bootstrap through the shipping discovery path when the pipeline's address
+    /// is stale. No firmware mutation or transfer is requested by this scenario.
+    @MainActor
+    func testDiscoverEnrolledReader() async throws {
+        let env = ProcessInfo.processInfo.environment
+        guard env["POCKET_HARDWARE_ENABLED"] == "1",
+              env["POCKET_HARDWARE_DISCOVERY"] == "1" else {
+            throw XCTSkip("Discovery is opted in by the firmware developer pipeline.")
+        }
+#if targetEnvironment(simulator) || !DEBUG || !os(macOS)
+        throw Failure.reason("Discovery requires a physical Mac Debug app.")
+#else
+        let identity = try required("POCKET_HARDWARE_DEVICE_ID", env)
+        let run = try required("POCKET_HARDWARE_RUN", env)
+        try require(UInt32(run).map { $0 != 0 } == true, "Invalid discovery run")
+        try await until("app startup", timeout: 20) { ReaderDevelopmentContext.model != nil }
+        let model = try XCTUnwrap(ReaderDevelopmentContext.model)
+        try require(!model.isDemoMode, "Exit demo mode before hardware testing.")
+        var busy = true
+        let ownership = model.readerWorkActive.sink { busy = $0 }
+        defer { ownership.cancel() }
+        try await until("reader work drain", timeout: 45) { !busy && !model.isWorking && !model.bookTransferJobsLoading }
+        let priorAcceptance = model.acceptsReader
+        model.acceptsReader = { status, host, port in
+            status.deviceID == identity && status.mode == "STA"
+                && status.version.contains("-dev-") && port == 80
+                && priorAcceptance(status, host, port)
+        }
+        defer { model.acceptsReader = priorAcceptance }
+        // Start with the same stale hint as the runner, not an accidentally
+        // fresher app cache. Restore it on failure; successful discovery owns it.
+        let defaults = model.sessionStorage.defaults
+        let hostKey = "Pocket.lastReaderHost", portKey = "Pocket.lastReaderPort"
+        let previousHost = defaults.object(forKey: hostKey)
+        let previousPort = defaults.object(forKey: portKey)
+        var succeeded = false
+        defer {
+            if !succeeded {
+                model.pauseForBackground()
+                defaults.set(previousHost, forKey: hostKey)
+                defaults.set(previousPort, forKey: portKey)
+            }
+        }
+        defaults.set(try required("POCKET_HARDWARE_HOST", env), forKey: hostKey)
+        defaults.set(80, forKey: portKey)
+        model.startConnectionSearch()
+        try require(model.readerStatus == nil, "Discovery did not start a fresh attempt")
+        try await until("enrolled reader discovery on current Wi-Fi", timeout: 180) {
+            model.readerStatus?.deviceID == identity && !busy && !model.isWorking
+        }
+        let status = try XCTUnwrap(model.readerStatus)
+        let host = try XCTUnwrap(defaults.string(forKey: hostKey))
+        let port = model.rememberedPort
+        try require(port == 80 && status.mode == "STA" && status.version.contains("-dev-"),
+                    "Discovery did not find a developer reader in Same Wi-Fi")
+        let fresh = try await CrossPointClient().status(host: host, port: port)
+        try verify(fresh, identity: identity, version: status.version)
+        let record: [String: Any] = ["passed": true, "run": run, "platform": "macOS",
+                                    "host": host, "port": port, "version": status.version,
+                                    "identityVerified": true, "staleHintUsed": true]
+        let data = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
+        print("POCKET_DISCOVERY_RESULT " + String(decoding: data, as: UTF8.self))
+        succeeded = true
+#endif
+    }
+
     @MainActor
     func testDeveloperConnectionCycle() async throws {
         let env = ProcessInfo.processInfo.environment
@@ -50,6 +116,12 @@ final class ReaderHardwareTests: XCTestCase {
             try await until("app startup", timeout: 20) { ReaderDevelopmentContext.model != nil }
             let model = try XCTUnwrap(ReaderDevelopmentContext.model)
             try require(!model.isDemoMode, "Exit demo mode before hardware testing.")
+            let priorAcceptance = model.acceptsReader
+            model.acceptsReader = { status, candidate, port in
+                status.deviceID == identity && status.mode == "STA" && status.version == version
+                    && priorAcceptance(status, candidate, port)
+            }
+            defer { model.acceptsReader = priorAcceptance }
             var busy = true
             let ownership = model.readerWorkActive.sink { busy = $0 }
             defer { ownership.cancel() }
