@@ -4,6 +4,29 @@ import Foundation
 import UIKit
 #endif
 
+/// A single pre-command recovery. Cancellation must be acknowledged before
+/// scanning, and only a fresh matching advertisement permits a new connect.
+struct ReaderRediscovery {
+    enum Phase { case idle, cancelling, scanning, reconnecting }
+    private(set) var phase = Phase.idle
+    mutating func begin() -> Bool {
+        guard phase == .idle else { return false }
+        phase = .cancelling
+        return true
+    }
+    mutating func cancelled() -> Bool {
+        guard phase == .cancelling else { return false }
+        phase = .scanning
+        return true
+    }
+    mutating func found() -> Bool {
+        guard phase == .scanning else { return false }
+        phase = .reconnecting
+        return true
+    }
+    mutating func reset() { phase = .idle }
+}
+
 /// CoreBluetooth for `ReaderBluetoothLink`: one central that keeps a pending
 /// connection to the paired reader. On iOS it carries a restore identifier, so
 /// eligible connections can resume while suspended or after system termination.
@@ -21,6 +44,7 @@ final class CoreBluetoothReaderTransport: NSObject, ReaderLinkTransport {
     private var status: Data?
     private var notifying = false
     private var preparing = false
+    private var rediscovery = ReaderRediscovery()
     private let restoresState: Bool
     private let restorationIdentifier: String
 
@@ -62,7 +86,27 @@ final class CoreBluetoothReaderTransport: NSObject, ReaderLinkTransport {
         return true
     }
 
+    func discoverKnownReader(_ identifier: UUID) {
+        guard let central, central.state == .poweredOn,
+              let peripheral, peripheral.identifier == identifier,
+              peripheral.state == .connecting else { return }
+        guard rediscovery.begin() else { return }
+        onEvent?(.connectionReset)
+        central.cancelPeripheralConnection(peripheral)
+    }
+
+    private func resumeDiscoveryAfterCancellation(_ central: CBCentralManager) -> Bool {
+        guard rediscovery.cancelled() else { return false }
+        reset()
+        onEvent?(.pendingConnectionCancelled)
+        central.scanForPeripherals(withServices: [NearbySyncProtocol.service], options: nil)
+        onEvent?(.discoveryStarted)
+        return true
+    }
+
     func cancelConnection() {
+        rediscovery.reset()
+        central?.stopScan()
         for candidate in restored { central?.cancelPeripheralConnection(candidate) }
         restored = []
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
@@ -114,6 +158,8 @@ extension CoreBluetoothReaderTransport: CBCentralManagerDelegate {
             case .poweredOn: onEvent?(.availabilityChanged(true))
             case .unknown, .resetting: break
             default:
+                rediscovery.reset()
+                central.stopScan()
                 peripheral = nil
                 reset()
                 onEvent?(.availabilityChanged(false))
@@ -129,9 +175,31 @@ extension CoreBluetoothReaderTransport: CBCentralManagerDelegate {
     }
 #endif
 
+    nonisolated func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
+                                    advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        MainActor.assumeIsolated {
+            guard central.isScanning, self.peripheral?.identifier == peripheral.identifier,
+                  rediscovery.found() else { return }
+            ReadingSyncTrace.note("wake bonded advertisement observed")
+            onEvent?(.knownAdvertisement)
+            central.stopScan()
+            self.peripheral = peripheral
+            peripheral.delegate = self
+            onEvent?(.reconnectRequested)
+            central.connect(peripheral)
+        }
+    }
+
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         MainActor.assumeIsolated {
             guard self.peripheral == peripheral else { return }
+            if rediscovery.phase == .cancelling || rediscovery.phase == .scanning {
+                // A raced completion of the old attempt must finish cancelling.
+                central.cancelPeripheralConnection(peripheral)
+                return
+            }
+            rediscovery.reset()
+            central.stopScan()
             onEvent?(.connected(peripheral.identifier))
         }
     }
@@ -140,6 +208,9 @@ extension CoreBluetoothReaderTransport: CBCentralManagerDelegate {
                                     error: Error?) {
         MainActor.assumeIsolated {
             guard self.peripheral == peripheral else { return }
+            if resumeDiscoveryAfterCancellation(central) { return }
+            rediscovery.reset()
+            central.stopScan()
             self.peripheral = nil
             reset()
             onEvent?(.disconnected(error))
@@ -150,6 +221,9 @@ extension CoreBluetoothReaderTransport: CBCentralManagerDelegate {
                                     error: Error?) {
         MainActor.assumeIsolated {
             guard self.peripheral == peripheral else { return }
+            if resumeDiscoveryAfterCancellation(central) { return }
+            rediscovery.reset()
+            central.stopScan()
             self.peripheral = nil
             reset()
             onEvent?(.disconnected(error))

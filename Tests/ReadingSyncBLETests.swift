@@ -131,6 +131,8 @@ final class ReadingSyncBLEProtocolTests: XCTestCase {
 final class ReaderBluetoothLinkTests: XCTestCase {
     final class FakeTransport: ReaderLinkTransport {
         var onEvent: ((ReaderLinkTransportEvent) -> Void)?
+        var discoveries: [UUID] = []
+        func discoverKnownReader(_ identifier: UUID) { discoveries.append(identifier) }
         var isAvailable = true
         var known: Set<UUID> = []
         var connectedOnRequest = false

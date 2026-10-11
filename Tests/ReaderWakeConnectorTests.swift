@@ -39,6 +39,117 @@ final class ReaderWakeConnectorTests: XCTestCase {
         XCTAssertEqual(transport.cancels, 1)
     }
 
+    func testStalledConnectionRequestsOneBondedRecoveryWithoutReplayingWake() async throws {
+        let transport = Transport(), scheduler = Scheduler()
+        transport.known = [reader.peripheralID]
+        let connector = ReaderWakeConnector(transport: transport, scheduler: scheduler)
+        let task = Task { try await connector.wake(reader) }
+        await started(transport)
+        XCTAssertTrue(transport.discoveries.isEmpty)
+        scheduler.fire(8)
+        XCTAssertEqual(transport.discoveries, [reader.peripheralID])
+        XCTAssertEqual(transport.connects.count, 1)
+        XCTAssertTrue(transport.writes.isEmpty)
+        ready(transport)
+        let command = try XCTUnwrap(transport.writes.first.flatMap { String(data: $0, encoding: .utf8) })
+        transport.send(.received(Data("OK \(command.suffix(8))".utf8)))
+        try await task.value
+        XCTAssertEqual(transport.writes.count, 1)
+        XCTAssertEqual(transport.cancels, 1)
+        XCTAssertTrue(scheduler.pending.isEmpty)
+    }
+
+    func testDiscoveryCannotStartAfterConnectionCancellationOrTimeout() async {
+        for outcome in ["connected", "cancelled", "timeout", "wrong-reader"] {
+            let transport = Transport(), scheduler = Scheduler()
+            transport.known = [reader.peripheralID]
+            let connector = ReaderWakeConnector(transport: transport, scheduler: scheduler)
+            let task = Task { try await connector.wake(reader) }
+            await started(transport)
+            switch outcome {
+            case "connected": transport.send(.connected(reader.peripheralID))
+            case "cancelled":
+                task.cancel()
+                _ = await task.result
+            case "wrong-reader": transport.send(.connected(UUID()))
+            default: scheduler.fire(20)
+            }
+            scheduler.fire(8)
+            XCTAssertTrue(transport.discoveries.isEmpty, outcome)
+            XCTAssertTrue(transport.writes.isEmpty, outcome)
+            scheduler.fire(20)
+            _ = await task.result
+            XCTAssertTrue(scheduler.pending.isEmpty, outcome)
+        }
+    }
+
+    func testActiveDiscoveryEndsAtOriginalDeadlineCancellationOrBluetoothLoss() async {
+        for outcome in ["timeout", "cancelled", "unavailable"] {
+            let transport = Transport(), scheduler = Scheduler()
+            transport.known = [reader.peripheralID]
+            let connector = ReaderWakeConnector(transport: transport, scheduler: scheduler)
+            let task = Task { try await connector.wake(reader) }
+            await started(transport)
+            scheduler.fire(8)
+            XCTAssertEqual(transport.discoveries, [reader.peripheralID])
+            switch outcome {
+            case "cancelled": task.cancel()
+            case "unavailable": transport.send(.availabilityChanged(false))
+            default: scheduler.fire(20)
+            }
+            do { try await task.value; XCTFail("Expected failure: \(outcome)") } catch { }
+            XCTAssertEqual(transport.connects.count, 1)
+            XCTAssertEqual(transport.cancels, 1, "Transport must cancel discovery and connection")
+            XCTAssertTrue(transport.writes.isEmpty)
+            XCTAssertTrue(scheduler.pending.isEmpty)
+        }
+    }
+
+    func testDiscoveryDelayStartsWhenBluetoothBecomesAvailable() async throws {
+        let transport = Transport(), scheduler = Scheduler()
+        transport.known = [reader.peripheralID]
+        transport.isAvailable = false
+        let connector = ReaderWakeConnector(transport: transport, scheduler: scheduler)
+        var events: [ReaderWakeConnector.Observation] = []
+        connector.observe = { events.append($0) }
+        let task = Task { try await connector.wake(reader) }
+        for _ in 0..<100 where transport.activations == 0 { await Task.yield() }
+        scheduler.fire(8)
+        XCTAssertTrue(transport.discoveries.isEmpty)
+        transport.isAvailable = true
+        transport.send(.availabilityChanged(true))
+        await started(transport)
+        scheduler.fire(8)
+        XCTAssertEqual(transport.discoveries, [reader.peripheralID])
+        XCTAssertEqual(events, [.connecting], "Requesting discovery is not evidence that the radio started scanning")
+        transport.send(.discoveryStarted)
+        transport.send(.knownAdvertisement)
+        ready(transport)
+        let command = try XCTUnwrap(transport.writes.first.flatMap { String(data: $0, encoding: .utf8) })
+        transport.send(.received(Data("OK \(command.suffix(8))".utf8)))
+        try await task.value
+        XCTAssertEqual(events, [.connecting, .discoveryStarted, .knownAdvertisement, .connected,
+                                .authenticated, .commandSent, .accepted])
+        XCTAssertTrue(scheduler.pending.isEmpty)
+    }
+
+    func testRediscoveryRequiresCancellationThenFreshAdvertisementExactlyOnce() {
+        var recovery = ReaderRediscovery()
+        XCTAssertFalse(recovery.cancelled())
+        XCTAssertFalse(recovery.found())
+        XCTAssertTrue(recovery.begin())
+        XCTAssertFalse(recovery.begin())
+        XCTAssertFalse(recovery.found(), "A cached or raced advertisement cannot reconnect before cancellation")
+        XCTAssertTrue(recovery.cancelled())
+        XCTAssertFalse(recovery.cancelled())
+        XCTAssertTrue(recovery.found())
+        XCTAssertFalse(recovery.found(), "Duplicate advertisements cannot create another connection")
+        XCTAssertEqual(recovery.phase, .reconnecting)
+        recovery.reset()
+        XCTAssertFalse(recovery.found())
+        XCTAssertFalse(recovery.cancelled(), "Late cancellation after timeout must not restart scanning")
+    }
+
     func testWrongReaderAndOldFirmwareNeverReceiveWakeCommand() async {
         for (identity, capabilities) in [("OTHER", "READ1,WAKE1"), ("89ABCDEF", "READ1")] {
             let transport = Transport(), scheduler = Scheduler()

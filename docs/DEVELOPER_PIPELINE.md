@@ -63,6 +63,47 @@ path. The result requires unchanged BLE exchange history during the wait, matchi
 firmware recovery deadline and measured standby duration. See the firmware guide
 for the 90..1800-second range and wait-plus-90-second recovery boundary.
 
+For a user-coordinated physical cable-removal/battery-only trial, add
+`--standby --standby-seconds 300 --cycles 2 --battery-only`. Wait for
+`POCKET_STANDBY_READY <run> waitSeconds=300` in the first hardware log before
+asking the user to unplug the reader. The marker follows a single standby
+request and an unsuccessful LAN probe; the eventual firmware evidence must still
+prove actual standby and BLE wake. Keep the cable removed through both cycles.
+The first covers removal during the trial; the second starts without the cable.
+Record the user's physical confirmation separately in the private run directory.
+
+`--battery-only` requires a noncharging firmware checkpoint above 10% in addition
+to the ordinary idle/wake/transfer checks. Charging, missing power evidence or
+battery protection cannot count as a pass. A noncharging sample alone does not
+prove physical cable removal or continuous current measurement. No charging
+threshold is lowered, and the test does not establish overnight battery life.
+
+### Reproduce delayed BLE connection without physical intervention
+
+With matching development firmware, `--standby --delayed-advertising --cycles 2`
+withholds the reader's actual BLE advertiser until the requested standby wait
+plus 16 seconds. Battery checks, buttons and the existing wait-plus-90-second
+recovery remain active. The one-shot fault is absent from production builds and
+does not persist into ordinary sleep. Installation still requires explicit
+developer authorization and `--flash`.
+
+The real app must record, in order: connecting, pending connection reset requested,
+cancellation confirmed, scan started, enrolled advertisement observed, reconnect
+requested, connected, authenticated, one command sent and matching acceptance.
+The scan must start after at least 7.5 seconds and acceptance remain within the
+original 20-second BLE deadline. Firmware reports requested and actual advertising
+start times; missing/stale evidence, time-up return or ordinary fast connection
+cannot pass this recovery scenario. Normal standby trials also record wake
+milestones so a future natural failure retains its failed stage.
+
+Add `--wake-control` only for the negative control: the test scheduler suppresses
+the eight-second rediscovery action and preserves the real transport and original
+deadline. It never fakes callbacks or command acceptance. A control connection
+may succeed and must not be counted as proof of rediscovery recovery. Neither
+an injected delay nor its successful recovery establishes the RF cause of a
+historical failure without matching evidence. Current findings are in
+[CURRENT_HANDOFF.md](CURRENT_HANDOFF.md).
+
 When the user's developer iteration includes firmware installation:
 
 ```sh

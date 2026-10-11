@@ -1,4 +1,144 @@
-# 현재 인수인계 — 2026-10-11
+# 현재 인수인계 — 2026-10-12
+
+## 전체 회귀 점검 — BLE 원인 반복 시험 중단 후
+
+- 시뮬레이터 없이 Mac 전체 타깃 96 PASS/3 opt-in skip, 펌웨어 host 916 PASS,
+  Python 전체 130 PASS, 앱 Python 2 PASS. cppcheck 2.11, default 빌드,
+  iOS device-SDK build-for-testing, App Store 소스 패키지 검증 및 양쪽 diff 검사 통과.
+  iOS 테스트 실행·iPhone/X4 확대·출시 작업은 하지 않았다.
+- 전체 Python 검색에서 경계 검사 실패를 발견했다. 개발 캡처에 필요한
+  `RenderLock` 의존성만 명시하고 미사용 `ScreenshotUtil` include를 제거했다.
+  펌웨어 `--checks`도 일부 파일만이 아닌 `scripts/test_*.py` 전체를 실행한다.
+- 첫 실기기 `20261011T162812-ca3f95`: BLE 대기 후 Wi-Fi 복귀 12.448초와
+  잘못된 Wi-Fi 설정의 기존 네트워크 복원 통과. pause/resume 이후 다운로드
+  고정 120초 제한에서 실패했다. 시험에 시작 가능 여부 확인, 바이트 진행에
+  따른 45초 정지 감지, 크기별 총 제한과 다운로드 소요 시간 기록을 추가했다.
+- 최종 `20261011T163609-3fc6ac` PASS: 인터페이스 10/10, 화면 13장 픽셀·OCR,
+  카드/설정/독서 기록 원상 복원, 실제 timer deep sleep/자동 복귀 통과.
+  853319B 파일을 재개 후 17.061초, 취소 후 보존 확인에서 17.313초에 다시
+  다운로드하여 원본과 비교했다. 첫 timeout은 재현되지 않았고 발생 원인은
+  미확정이다. 단순 시간 제한 문제로 확정하거나 제품 결함 해결로 주장하지 않는다.
+- 비공개 통합 결과: `.build/full-regression/summary.json`; 원본 로그·xcresult·
+  캡처는 해당 폴더와 위 firmware run 폴더에 유지한다. 실물 패널 광학 품질,
+  전류 측정, iCloud 실기기 간 교환 등 기존 미검증 범위는 그대로다.
+  default flash 97.6% 사용. 추가 케이블 조작·펌웨어 설치·커밋·푸시는 없었다.
+
+## 실제 광고 지연 주입·대조군 — 최초 원인은 여전히 미확정
+
+- 후속 `20261011T151925-d3c4f6`에서 **기존 요청 유지 + 스캔 추가 방식도 실패**했다.
+  실제 scan 시작 8.048초, 광고 전달 0개, connecting 20초 timeout. 펌웨어 광고
+  시작 기록 106077ms, 배터리 100%, gate open, 최종 `time-up` 180021ms였다.
+  이후 Mac 배경 링크는 00:22:17에 새 connect를 요청해 00:22:21에 GATT를
+  열고 독서 교환을 했다(기기 connections 1/lists 1). 리더 전체 멈춤은 아니다.
+  실패한 스캔을 성공으로 처리하지 않으며, 재탐색만 추가한 최초 보완은 불충분했다.
+- 이를 근거로 **명령 전 한 번의 cancel → 취소 callback → scan → 동일 UUID
+  광고 → 새 connect**로 수정했다. 전체 deadline 20초와 명령 1회는 유지한다.
+  취소 완료 전 광고/연결 callback, 중복 광고, timeout 뒤 callback은 새 명령을
+  유발하지 않는다. 단계 순서 및 늦은 Bluetooth 준비 경계까지 Mac 43개 통과.
+  새 방식 `20261011T152735-7c55e9` **3/3 PASS**: scan 8.053/8.033/8.054초,
+  광고 16.224/17.110/10.263초, 새 연결 17.827/18.704/11.890초,
+  수락 18.122/19.026/12.207초. 매회 cancel 요청·취소 callback·광고 후 connect
+  각 1회, 명령 1회, Wi-Fi 포함 재연결 30.275/31.380/25.290초.
+  각 `app-wifi`/연결 1회/READ_LIST 0회, EPUB 2856B 비교·삭제·idle 복귀 통과.
+  minFree 64440/64432/64512B, minBlock 55284B, 배터리 100%·비충전.
+  이 결과는 재현된 지연의 새 복구 경로 수용이며, 최초 케이블 사건의 RF 미수신
+  원인이 완전히 확정됐다는 의미는 아니다. 연결 요청이 성립하지 않는 구간에
+  대한 복구 결함과, 첫 광고를 못 받은 외부/무선 원인은 분리한다.
+- 최종 일반 대기 `20261011T153650-823ed8` **PASS**. 광고 지연 0/start 85ms로
+  one-shot fault 잔류 없음, BLE 연결 1.235초/수락 1.523초, Wi-Fi 포함 13.296초,
+  standby 99725ms/light sleep 81076ms, `app-wifi`/연결 1회/READ_LIST 0회.
+  minFree 64456B/minBlock 55284B, 충전 확인 true·배터리 100%, EPUB 2856B
+  비교·삭제·idle 복귀 통과. 최종 iOS device-SDK build-for-testing 및 diff 검사 통과.
+  실험 중 추가 케이블 조작은 요청하지 않았다. 실제 iPhone/X4·무선 패킷 수신
+  원인 규명·장시간 전류 측정은 미검증이며 커밋/푸시는 하지 않았다.
+
+- 개발용 `--delayed-advertising`을 구현했다. 앱 callback을 가짜로 지연시키지 않고
+  X3의 BLE startup/advertiser를 standby wait + 16초까지 보류한다. 배터리·버튼·
+  time-up 복구는 유지하며, production에는 없고 다음 일반 대기에 남지 않는다.
+  실제 스캔/동일 기기 광고/연결/인증/명령 1회/수락의 순서와 20초 제한을
+  앱·runner에서 검사한다. `--wake-control`은 시험 scheduler에서 재탐색만 제거한다.
+- 설치 확인: `0.1.0-dev-main-5610af50-ble-standby-w244dc28a`.
+  전체 host 916개, 검증기 35개, 관련 Mac 43개 통과. default/ble_standby 빌드
+  오류·경고 0과 strict cppcheck 통과. iOS는 device SDK 빌드이며 실기기 실행 아님.
+- 첫 실제 복구 `20261011T150000-193aa5` **PASS**. 광고 시작 106088ms,
+  앱 wake 기준 scan 8.096초 → 동일 기기 광고 13.214초 → 연결 14.020초 →
+  인증 14.261초 → 명령 수락 14.321초. Wi-Fi 포함 재연결 25.749초,
+  `app-wifi`/BLE 연결 1회, EPUB 2856B 왕복·삭제·idle 복귀 통과.
+  OS도 high scan 만료/low scan 전환 뒤 앱 `CBMsgIdScan`, 광고 1개 전달,
+  연결 후 stop scan을 기록했다. 테스트 callback만 흉내 낸 결과가 아니다.
+- 대조군 `20261011T151143-ca5c59`도 **2/2 연결 성공**. 같은 106초 광고 지연,
+  재탐색 없음, 연결 15.125/14.707초, 수락 15.441/14.994초, 파일 검증 통과.
+  따라서 이번 실험은 재탐색 경로 동작을 증명하지만, 재탐색 부재가 최초 실패의
+  근본 원인이라는 가설을 증명하지 않는다. 최초 RF 수신 실패/광고 상태의 원인은
+  당시 관측 부족으로 미확정이다. 성공한 대조군을 실패 재현으로 포장하지 않는다.
+- 최초 로그의 `locked: 1`은 Bluetooth scan request 필드이며 Mac 잠금 증거로
+  사용할 수 없다. 잠금 원인 추정은 철회한다. 일반 standby에서도 wake 단계
+  기록을 수집하도록 변경했다. 별도로 Bluetooth 준비가 늦으면 8초 timer가
+  connecting 이전에 소진되던 경계 조건을 수정·단위 검증했다. 이는 최초 실패의
+  원인이 아니다(당시 Bluetooth 준비는 즉시 완료).
+
+## 케이블 분리 실패 조사·연결 복구 보완 — 3회 통과, 인과 검증 미완료
+
+- 첫 실패의 macOS Bluetooth 로그에서 pending connect의 고빈도 탐색이 만료된 뒤
+  낮은 빈도(480/48)로 전환되고 앱의 20초 제한으로 취소된 것을 확인했다.
+  기기 기록은 390초 동안 gate open/연결 0회 후 `time-up` 복구였다.
+  배터리 보호·크래시 증거는 없으며, 케이블 분리 자체와의 인과관계는 미확정이다.
+  당시 scan request의 locked 필드는 실제 Mac 잠금 증거가 아니다(위 정정 참고).
+- foreground `ReaderWakeConnector`가 8초 뒤에도 connecting이면 기존 pending
+  연결을 유지하면서 해당 서비스만 제한적으로 탐색하도록 보완했다. 전체 제한
+  20초는 그대로이며 다른 기기 선택·재페어링·connect/명령 재전송은 없다.
+  연결·취소·실패·timeout에 탐색을 종료한다. 배경 독서 링크는 여전히 스캔하지 않는다.
+- 관련 Mac 테스트 41개 및 iOS device-SDK build-for-testing 통과.
+- 수정 앱의 같은 조건 재시험 `20261011T142042-2bbce1` **PASS**. 사용자가
+  시작 전 연결/대기 marker 후 분리를 확인했다(비공개 power confirmation).
+  300초 요청/312186ms 실제 standby, light sleep 253857ms, 배터리 100%·비충전,
+  `app-wifi`/연결 1회/READ_LIST 0회, 앱 재연결 13.724초. minFree 64476B,
+  minBlock 55284B, 목록 18건, EPUB 2856B 비교·삭제·idle 복귀 통과.
+  재탐색 fallback 실행 증거는 확보하지 못했다. 정상 경로 통과만으로 변경의
+  인과적 효과나 최초 간헐 실패의 완전 해결을 주장하지 않는다.
+- 추가 실행 `20261011T143106-f648e6` **2/2 PASS**. 첫 회차 대기 marker 뒤
+  사용자가 케이블 분리를 확인했고 두 번째는 계속 분리된 상태에서 시작했다.
+  300초 대기 각각 재연결 13.001/13.450초, standby 309596/311885ms,
+  light sleep 252097/253841ms, 배터리 100%·비충전. 각 `app-wifi`, BLE 연결 1회,
+  READ_LIST 0회, 목록 18건과 EPUB 2856B 비교·삭제·idle 복귀 통과.
+  minFree 64440/64428B, minBlock 모두 55284B. 총 수정 후 3/3이며
+  대기 중 분리 2회, 처음부터 배터리 단독 1회다. 자동 time-up 복구가 아니다.
+- 이 회차들에서는 최초 connecting timeout이 재현되지 않았다. 현재 판정은
+  동일 조건 회귀 통과 + 연결 지연 복구 보완이며, 원인 확정/완전 해결은 아니다.
+  후속 증거는 실제 지연 시 서비스 재탐색 실행과 동일 대상 광고·연결 관측이다.
+  장시간 배터리 단독/밤샘, 전류 측정, 물리 iPhone/X4는 이번 검증 범위 밖이다.
+  기기 펌웨어 재설치는 하지 않았다. 변경은 아직 커밋/푸시하지 않았다.
+
+## 물리 케이블 분리·배터리 시험 — 2026-10-11 결과
+
+- 사용자 요청으로 대기 중 케이블 분리 후 BLE 재연결과 배터리 단독 대기를
+  검증했다. 추가한 `--battery-only`는 앱과 runner 양쪽에서 비충전 체크포인트와
+  배터리 10% 초과를 요구한다. 첫 `POCKET_STANDBY_READY` 후 사용자가 케이블을
+  분리했다고 명시적으로 확인했으며, 확인 기록은 첫 실행의 비공개
+  `physical-power-confirmation.json`에 있다. 초기 충전 정보는 직전 trial의
+  기록이지 새로운 실시간 전력 측정은 아니다.
+- 첫 시험 `build/dev-pipeline-runs/20261011T135258-8e4f7e/report.json` **FAIL**.
+  300초 앱 무통신 대기 후 BLE connecting 단계 timeout. 기기의 해당 run은
+  배터리 100%, `chargingAtCheckpoint:false`, BLE connections 0, gate open,
+  minFree 64560B/minBlock 55284B, standby 390024ms/light sleep 324210ms,
+  종료 `time-up`을 기록했다. 390초 복구 제한으로 스스로 Same Wi-Fi에 복귀해
+  실패 기록을 회수했다. crashReportAvailable false. 자동 복귀를 BLE wake
+  성공으로 계산하지 않는다. 예정했던 두 회차 중 첫 실패로 pipeline이 중단돼
+  두 번째 회차는 실행되지 않았다.
+- 케이블을 계속 뺀 상태의 별도 300초 시험
+  `build/dev-pipeline-runs/20261011T140115-d05c3d/report.json`은 **PASS**.
+  배터리 100%, 비충전, standby 311678ms/light sleep 253735ms,
+  `app-wifi` 종료/BLE 연결 1회/READ_LIST 0회, 앱 재연결 13.210초.
+  minFree 64484B/minBlock 55284B, 목록 18건, EPUB 2856바이트 왕복 비교·삭제·
+  전송 idle 복귀 통과. 사용자 추가 조작/펌웨어 재설치 없이 자동 완료했다.
+- 결론: 처음부터 케이블이 빠진 상태에서의 5분 대기·BLE 복귀는 통과했다.
+  대기 중 케이블 분리 시험의 첫 BLE 연결 실패는 미해결이다. 두 조건 각 1회의
+  결과로 USB 분리 자체가 원인이라고 단정하지 않는다. 다음 조사는 해당
+  전환 조건의 재현과 BLE 연결 전 단계 관측이며, 단순 timeout 확대나
+  저배터리 기준 완화를 해결책으로 간주하지 않는다. 밤샘·전류 측정은 미검증.
+- 검증기 Python 32 tests와 Mac/iOS device-SDK build-for-testing 통과.
+  시뮬레이터 및 물리 iPhone 실행 없음. 원인은 저배터리로 단정할 수 없으며
+  BLE 연결 성립 전 단계의 실패로 좁혀졌다. 펌웨어 수정/해결을 주장하지 않는다.
 
 ## 커밋 후 X3 반복 대기·깨우기 3회 완료 — 2026-10-11
 

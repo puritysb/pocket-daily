@@ -20,6 +20,28 @@ acknowledgement. A write acknowledgement alone is not success. Cancellation,
 timeout and an ambiguous/lost reply do not replay the wake command. Subsequent
 LAN discovery can still recover the reader after a lost reply.
 
+If the remembered connection is still pending eight seconds after connecting starts, foreground
+wake briefly scans only the reader service within the original 20-second deadline.
+It cancels the pending connection, waits for the cancellation callback, scans
+the service and reconnects once only after a fresh advertisement with the same
+enrolled peripheral identifier. It does not select another reader, pair or replay
+a command. A raced completion of the cancelled attempt cannot prepare GATT or
+send a command. Connection, cancellation, failure and timeout stop the scan. The quiet background
+position link still does not scan. Deterministic tests cover the delayed fallback
+and cancellation boundaries; physical cable-removal acceptance is recorded in
+`CURRENT_HANDOFF.md` separately from this implementation contract. Hardware
+`--delayed-advertising` now requires a real scan and observed enrolled advertisement
+before connection/authentication/acceptance; `--wake-control` keeps negative-control
+results separate. Bluetooth availability delay does not consume the rediscovery
+timer before connection starts; the overall 20-second deadline still applies.
+Apple documents that pending CoreBluetooth connection attempts do not time out
+on their own ([connect](https://developer.apple.com/documentation/CoreBluetooth/CBCentralManager/connect(_:options:))).
+The 20-second deadline is therefore the app's foreground bound, not evidence
+that firmware rejected the connection. Service scanning does not guarantee a
+particular OS scan duty cycle or reception of an advertisement.
+The recovery waits for the delegate cancellation callback before scanning, following
+Apple's [cancellation contract](https://developer.apple.com/documentation/corebluetooth/cbcentralmanager/cancelperipheralconnection(_:)).
+
 Connect checks the current LAN first. An unreachable remembered reader can be
 woken over BLE and then accepted on its saved Wi-Fi only with matching identity.
 Explicit Connect sheets start this automatically for a remembered bonded reader;

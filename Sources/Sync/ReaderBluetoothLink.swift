@@ -47,7 +47,10 @@ protocol ReaderLinkTransport: AnyObject {
     /// Keeps a pending connection to a known peripheral, completed by the system
     /// whenever it advertises. False when the system does not know the peripheral.
     func connect(to peripheral: UUID) -> Bool
-    /// Cancels the pending or active connection.
+    /// Foreground-only recovery: cancel the pending connection, scan the service,
+    /// then reconnect only this known identifier. Never select or pair another reader.
+    func discoverKnownReader(_ identifier: UUID)
+    /// Cancels discovery and the pending or active connection.
     func cancelConnection()
     /// Discovers the service, subscribes to events and reads the status record;
     /// answers `.ready(status:)` or `.failed`.
@@ -57,6 +60,7 @@ protocol ReaderLinkTransport: AnyObject {
 }
 
 enum ReaderLinkTransportEvent {
+    case connectionReset, pendingConnectionCancelled, discoveryStarted, knownAdvertisement, reconnectRequested
     case availabilityChanged(Bool)
     case connected(UUID)
     case ready(status: Data)
@@ -354,6 +358,7 @@ final class ReaderBluetoothLink: ObservableObject {
 
     private func handle(_ event: ReaderLinkTransportEvent) {
         switch event {
+        case .connectionReset, .pendingConnectionCancelled, .discoveryStarted, .knownAdvertisement, .reconnectRequested: break
         case let .availabilityChanged(available):
             if available {
                 update()

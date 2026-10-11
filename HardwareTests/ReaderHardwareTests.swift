@@ -109,6 +109,11 @@ final class ReaderHardwareTests: XCTestCase {
             let standby = env["POCKET_HARDWARE_STANDBY"] == "1"
             guard let standbySeconds = Int(env["POCKET_HARDWARE_STANDBY_SECONDS"] ?? "90"),
                   (90...1800).contains(standbySeconds) else { throw Failure.reason("Invalid standby duration") }
+            let delayedAdvertising = env["POCKET_HARDWARE_DELAYED_ADVERTISING"] == "1"
+            let wakeControl = env["POCKET_HARDWARE_WAKE_CONTROL"] == "1"
+            try require(!wakeControl || delayedAdvertising, "Wake control requires delayed advertising")
+            evidence["wakeControl"] = wakeControl
+            try require(!delayedAdvertising || standby, "Delayed advertising requires standby")
             let client = CrossPointClient()
             let preflight = try await client.status(host: host)
             try verify(preflight, identity: identity, version: version)
@@ -116,6 +121,21 @@ final class ReaderHardwareTests: XCTestCase {
             try await until("app startup", timeout: 20) { ReaderDevelopmentContext.model != nil }
             let model = try XCTUnwrap(ReaderDevelopmentContext.model)
             try require(!model.isDemoMode, "Exit demo mode before hardware testing.")
+            let priorWake = model.wakeSleepingReader
+            defer { model.wakeSleepingReader = priorWake }
+            if standby {
+                model.wakeSleepingReader = { reader in
+                    let started = ProcessInfo.processInfo.systemUptime
+                    var observations: [[String: Any]] = []
+                    let connector = ReaderWakeConnector(scheduler: wakeControl ? NoDiscoveryScheduler() : nil)
+                    connector.observe = { event in
+                        observations.append(["event": event.rawValue,
+                                             "seconds": ProcessInfo.processInfo.systemUptime - started])
+                    }
+                    defer { evidence["wakeObservations"] = observations }
+                    try await connector.wake(reader)
+                }
+            }
             let priorAcceptance = model.acceptsReader
             model.acceptsReader = { status, candidate, port in
                 status.deviceID == identity && status.mode == "STA" && status.version == version
@@ -170,7 +190,7 @@ final class ReaderHardwareTests: XCTestCase {
                         link.nearbySessionActive = priorOwnership
                     }
                     var request = URLRequest(url: try XCTUnwrap(URL(string:
-                        "http://\(host)/api/pocket/v1/dev/ble-cycle?run=\(run)&sleep=standby&standbySeconds=\(standbySeconds)")))
+                        "http://\(host)/api/pocket/v1/dev/ble-cycle?run=\(run)&sleep=standby&standbySeconds=\(standbySeconds)\(delayedAdvertising ? "&delayAdvertising=1" : "")")))
                     request.httpMethod = "POST"
                     request.httpBody = Data()
                     request.timeoutInterval = 8
@@ -183,6 +203,13 @@ final class ReaderHardwareTests: XCTestCase {
                     // Firmware recovery is this wait plus 90 seconds. Both LAN
                     // monitoring and automatic BLE exchange are held until wake.
                     evidence["standbyWaitSeconds"] = standbySeconds
+                    if env["POCKET_HARDWARE_BATTERY_ONLY"] == "1" {
+                        let reachable = try? await client.status(host: host, timeout: 2)
+                        try require(reachable == nil, "Reader has not left Wi-Fi for standby")
+                        evidence["batteryOnlyRequested"] = true
+                        let signal = "POCKET_STANDBY_READY \(runText) waitSeconds=\(standbySeconds)\n"
+                        FileHandle.standardOutput.write(Data(signal.utf8))
+                    }
                     try await Task.sleep(for: .seconds(standbySeconds))
                     try require(link.phase == .off && link.nearbySessionActive
                                 && link.rememberedReader?.lastExchangeAt == exchangeBeforeIdle,
@@ -208,6 +235,37 @@ final class ReaderHardwareTests: XCTestCase {
                 try require((response as? HTTPURLResponse)?.statusCode == 200, "Missing cycle evidence")
                 let cycle = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
                 evidence["cycle"] = cycle
+                if !delayedAdvertising {
+                    try require(cycle["advertisingDelayMs"] == nil || cycle["advertisingDelayMs"] as? Int == 0,
+                                "Injected advertising delay leaked into ordinary standby")
+                }
+                if delayedAdvertising {
+                    let delayMs = (standbySeconds + 16) * 1000
+                    try require(cycle["advertisingDelayMs"] as? Int == delayMs
+                                && (cycle["advertisingStartedMs"] as? Int ?? 0) >= delayMs,
+                                "Reader did not inject the advertising delay")
+                    if !wakeControl {
+                        let observations = evidence["wakeObservations"] as? [[String: Any]] ?? []
+                        let names = observations.compactMap { $0["event"] as? String }
+                        try require(names == ["connecting", "connectionReset", "pendingConnectionCancelled", "discoveryStarted",
+                                              "knownAdvertisement", "reconnectRequested", "connected", "authenticated",
+                                              "commandSent", "accepted"],
+                                    "Real discovery and exactly one acknowledged wake are required")
+                        guard let scan = observations.first(where: { $0["event"] as? String == "discoveryStarted" }),
+                              let connected = observations.first(where: { $0["event"] as? String == "connected" }),
+                              let scanTime = scan["seconds"] as? Double,
+                              let connectedTime = connected["seconds"] as? Double else {
+                            throw Failure.reason("Missing scan/connection timestamps")
+                        }
+                        try require(scanTime >= 7.5 && connectedTime > scanTime && connectedTime < 20,
+                                    "Connection must follow real delayed discovery within the original deadline")
+                    }
+                }
+                if env["POCKET_HARDWARE_BATTERY_ONLY"] == "1" {
+                    try require(cycle["chargingAtCheckpoint"] as? Bool == false
+                                && (cycle["batteryPercent"] as? Int ?? 0) > 10,
+                                "Battery-only standby requires a noncharging checkpoint above 10%")
+                }
                 try require((cycle["standbyMs"] as? Int ?? 0) >= (standbySeconds - 30) * 1000,
                             "Reader did not remain in standby for the requested duration")
                 if standbySeconds > 90 {
@@ -278,6 +336,18 @@ final class ReaderHardwareTests: XCTestCase {
             throw error
         }
 #endif
+    }
+
+    // Negative control only: execute the production transport and original
+    // total deadline, suppressing just the 8-second recovery action. No fake
+    // radio callbacks, altered identities, commands or successful results.
+    @MainActor
+    private final class NoDiscoveryScheduler: ReaderLinkScheduling {
+        private let base = TaskReaderLinkScheduler()
+        func schedule(after seconds: TimeInterval, keepAwake: Bool,
+                      _ action: @escaping @MainActor () -> Void) -> ReaderLinkTimer {
+            base.schedule(after: seconds, keepAwake: keepAwake, seconds == 8 ? {} : action)
+        }
     }
 
     private enum Failure: LocalizedError {

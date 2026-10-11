@@ -4,6 +4,23 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Foreground wake recovery and full regression — 2026-10-12
+
+- Foreground wake now cancels a stalled pending BLE connection once after 8 s,
+  waits for cancellation, scans for the bonded service/identifier and reconnects.
+  Authentication, one command and the original 20 s deadline remain required;
+  background reading exchange does not scan. Firmware developer delay evidence
+  verifies actual cancellation/advertisement/reconnection, not simulated callbacks.
+- Physical delayed-advertising recovery passed 3/3 (`20261011T152735-7c55e9`).
+  Final broad X3 run `20261011T163609-3fc6ac` passed 10 interface cases and
+  13 framebuffer/OCR captures, including timer deep sleep and restoration.
+  Mac 96 tests passed (3 opt-in skips), firmware host 916 and Python 130 passed;
+  iOS device-SDK build passed, without simulator or expanded iPhone/X4 tests.
+- First broad-run download timed out at 120 s; the rerun downloaded the 853319 B
+  fixture in ~17 s twice. Its initial cause and the historical RF miss remain
+  unconfirmed. Hardware download checks now fail on unavailable admission or
+  stalled progress and report bytes/time. See `docs/CURRENT_HANDOFF.md`.
+
 ## Repeated X3 standby/wake acceptance — 2026-10-11
 
 - After pushing app `fb0629a` and firmware tools `5d512c56`, the default enrolled

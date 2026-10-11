@@ -226,13 +226,30 @@ final class ReaderInterfaceSuite {
         }
     }
     func download(path: String, book: LibraryBook, original: URL, library: LibraryModel) async throws {
+        try check(model.canDownloadFromReader, "App download was not available after the reader lane drained")
         var result: Result<URL, Error>?
+        let started = Date()
+        // The interrupted-transfer fixture is much larger than the small EPUBs.
+        // Bound total time by size, but still fail promptly if byte progress stops.
+        let deadline = started.addingTimeInterval(min(600, max(120, Double(book.byteCount) / 2048 + 60)))
+        var lastProgress = started
+        var received: Int64 = 0
         model.downloadFromReader(path: path, size: book.byteCount, document: book.documentDigest) { result = $0 }
-        try await wait("app download", seconds: 120) { result != nil }
+        while result == nil {
+            let current = model.readerDownload?.received ?? received
+            if current != received { received = current; lastProgress = Date() }
+            guard Date() < deadline, Date().timeIntervalSince(lastProgress) < 45 else {
+                model.cancelReaderDownload()
+                try await drained()
+                throw Failure(message: "App download stalled or exceeded its size budget: \(received)/\(book.byteCount) bytes")
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
         try await drained()
         let file = try XCTUnwrap(result).get()
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
         try check(FileManager.default.contentsEqual(atPath: original.path, andPath: file.path), "Downloaded EPUB bytes differ")
+        print("POCKET_INTERFACE_DOWNLOAD bytes=\(book.byteCount) seconds=\(Date().timeIntervalSince(started)) verified")
         if downloadedBook == nil {
             let kept = root.appendingPathComponent("downloaded.epub")
             try FileManager.default.copyItem(at: file, to: kept)

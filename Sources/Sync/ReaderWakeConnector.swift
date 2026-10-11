@@ -1,10 +1,13 @@
 import Foundation
 import os
 
-/// Foreground connection only. Reuses an existing bond, never scans, pairs,
-/// joins a hotspot or changes the Apple device's network.
+/// Foreground connection only. Reuses an existing bond and briefly rediscovers
+/// its service if connection stalls. Never pairs or changes the Apple network.
 @MainActor
 final class ReaderWakeConnector {
+    enum Observation: String { case connecting, connectionReset, pendingConnectionCancelled, discoveryStarted, knownAdvertisement, reconnectRequested, connected, authenticated, commandSent, accepted }
+    // Bounded, identifier-free milestones for opted-in hardware verification.
+    var observe: ((Observation) -> Void)?
     enum Phase: String { case idle, waiting, connecting, preparing, requesting }
     enum Failure: LocalizedError, Equatable {
         case unavailable, unsupported, wrongReader, timedOut(Phase), rejected
@@ -18,7 +21,7 @@ final class ReaderWakeConnector {
             case .timedOut(let phase):
                 switch phase {
                 case .idle, .waiting: return "Bluetooth did not become ready."
-                case .connecting: return "The paired reader did not accept a Bluetooth connection."
+                case .connecting: return "Could not establish a Bluetooth connection to the paired reader within 20 seconds."
                 case .preparing: return "The reader connected, but its secure wake service did not become ready."
                 case .requesting: return "The reader did not confirm the wake command. It may already be joining Wi-Fi."
                 }
@@ -37,6 +40,7 @@ final class ReaderWakeConnector {
     private var reader: RememberedBluetoothReader?
     private var pending: CheckedContinuation<Void, Error>?
     private var timeout: ReaderLinkTimer?
+    private var discoveryTimer: ReaderLinkTimer?
     private var requestID = ""
     private var wifiCredentials: ReaderWiFiCredentials?
     private var configuringWiFi = false
@@ -80,17 +84,31 @@ final class ReaderWakeConnector {
     private func connectIfReady() {
         guard phase == .waiting, transport.isAvailable, let reader else { return }
         phase = .connecting
+        observe?(.connecting)
+        discoveryTimer = scheduler.schedule(after: 8, keepAwake: false) { [weak self] in
+            guard let self, self.pending != nil, self.phase == .connecting else { return }
+            ReadingSyncTrace.note("wake connection pending; discovering bonded service")
+            self.transport.discoverKnownReader(reader.peripheralID)
+        }
         if !transport.connect(to: reader.peripheralID) { finish(.failure(Failure.unavailable)) }
     }
 
     private func handle(_ event: ReaderLinkTransportEvent) {
         guard pending != nil, let reader else { return }
         switch event {
+        case .connectionReset: observe?(.connectionReset)
+        case .pendingConnectionCancelled: observe?(.pendingConnectionCancelled)
+        case .reconnectRequested: observe?(.reconnectRequested)
+        case .discoveryStarted: observe?(.discoveryStarted)
+        case .knownAdvertisement: observe?(.knownAdvertisement)
         case .availabilityChanged(let available):
             if available { connectIfReady() } else { finish(.failure(Failure.unavailable)) }
         case .connected(let identifier):
             guard phase == .connecting else { return }
             guard identifier == reader.peripheralID else { finish(.failure(Failure.wrongReader)); return }
+            discoveryTimer?.cancel()
+            discoveryTimer = nil
+            observe?(.connected)
             phase = .preparing
             transport.prepareSession()
         case .ready(let bytes):
@@ -103,6 +121,7 @@ final class ReaderWakeConnector {
             guard status.protocolVersion == 1, status.capabilities.contains(wifiCredentials == nil ? "WAKE1" : "WIFI1") else {
                 finish(.failure(Failure.unsupported)); return
             }
+            observe?(.authenticated)
             requestID = NearbySyncProtocol.requestID()
             let record: Data?
             if let wifiCredentials { record = wifiCredentials.command(requestID: requestID) }
@@ -111,6 +130,7 @@ final class ReaderWakeConnector {
                 finish(.failure(Failure.unsupported)); return
             }
             phase = .requesting
+            observe?(.commandSent)
             transport.write(command)
             wifiCredentials = nil
         case .received(let bytes):
@@ -127,7 +147,9 @@ final class ReaderWakeConnector {
     private func finish(_ result: Result<Void, Error>) {
         guard let continuation = pending else { return }
         switch result {
-        case .success: ReadingSyncTrace.note("wake accepted")
+        case .success:
+            observe?(.accepted)
+            ReadingSyncTrace.note("wake accepted")
         case .failure(let error):
             // Only our bounded categories; platform error text can contain identifiers.
             let category = error is CancellationError ? "cancelled"
@@ -140,6 +162,8 @@ final class ReaderWakeConnector {
         phase = .idle
         timeout?.cancel()
         timeout = nil
+        discoveryTimer?.cancel()
+        discoveryTimer = nil
         transport.cancelConnection()
         if configuringWiFi, case .failure(let error) = result,
            !(error is CancellationError), (error as? Failure) != .rejected, !requestID.isEmpty {
