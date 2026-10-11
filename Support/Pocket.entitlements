@@ -4,6 +4,8 @@
 <dict>
 	<key>com.apple.developer.networking.HotspotConfiguration</key>
 	<true/>
+	<key>com.apple.developer.networking.wifi-info</key>
+	<true/>
 	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
 	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 	<key>com.apple.developer.weatherkit</key>

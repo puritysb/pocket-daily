@@ -1,7 +1,107 @@
 import XCTest
 @testable import Pocket
 
+private final class InventoryURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let url = request.url, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
+        let query = Dictionary(uniqueKeysWithValues: (parts.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        let folder = query["path"] ?? "/"
+        let cursor = Int(query["cursor"] ?? "0") ?? 0
+        let scenario = request.value(forHTTPHeaderField: "X-Test-Scenario")
+        let partial = scenario == "partial.test" && folder == "/Articles"
+        let endless = scenario == "endless.test"
+        let missing = scenario == "missing.test" && folder == "/Articles"
+        let body: [String: Any] = ["deviceID": "1234ABCD", "path": folder,
+            "nextCursor": endless ? cursor + 32 : 0,
+            "entries": folder == "/" ? [["name": "book.epub", "size": 10, "directory": false, "deletable": true]] : []]
+        do {
+            let bytes = try JSONSerialization.data(withJSONObject: body)
+            let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: partial ? 503 : missing ? 404 : 200,
+                httpVersion: "HTTP/1.1", headerFields: nil))
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: bytes)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch { client?.urlProtocol(self, didFailWithError: error) }
+    }
+    override func stopLoading() {}
+}
+
+@MainActor
+final class ReaderInventoryModelTests: XCTestCase {
+    private func inspect(host: String, _ verify: (PocketModel) throws -> Void) async throws {
+        let name = "inventory-test." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defaults.set(host, forKey: "Pocket.lastReaderHost")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [InventoryURLProtocol.self]
+        config.httpAdditionalHeaders = ["X-Test-Scenario": host]
+        let session = URLSession(configuration: config)
+        let model = PocketModel(client: CrossPointClient(session: session),
+            sessionStorage: ReaderSessionStorage(root: folder, defaults: defaults))
+        defer {
+            model.pauseForBackground()
+            session.invalidateAndCancel()
+            defaults.removePersistentDomain(forName: name)
+            try? FileManager.default.removeItem(at: folder)
+        }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"version":"t","device":"X3","deviceID":"1234ABCD","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1,"readerFiles":1}"#.utf8))
+        var busy = false
+        let subscription = model.readerWorkActive.sink { busy = $0 }
+        defer { subscription.cancel() }
+        model.requestReaderInventoryRefresh()
+        let deadline = Date().addingTimeInterval(5)
+        while busy && Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertFalse(busy, "Inventory must settle")
+        try verify(model)
+    }
+
+    func testSecondaryFolderFailureKeepsUsefulFilesAndShowsIncompleteWarning() async throws {
+        try await inspect(host: "partial.test") { model in
+            XCTAssertEqual(model.readerInventory?.files.map(\.path), ["/book.epub"])
+            XCTAssertTrue(model.readerInventoryError?.contains("/Articles") == true)
+            XCTAssertTrue(model.readerInventoryError?.contains("Refresh") == true)
+        }
+    }
+
+    func testEmptyOptionalFoldersAreComplete() async throws {
+        try await inspect(host: "complete.test") { model in
+            XCTAssertEqual(model.readerInventory?.files.map(\.path), ["/book.epub"])
+            XCTAssertNil(model.readerInventoryError)
+        }
+    }
+
+    func testMissingDestinationFolderIsEmptyRatherThanAConnectionFailure() async throws {
+        try await inspect(host: "missing.test") { model in
+            XCTAssertEqual(model.readerInventory?.files.map(\.path), ["/book.epub"])
+            XCTAssertNil(model.readerInventoryError)
+        }
+    }
+
+    func testUnterminatedPaginationDoesNotPublishAnApparentlyCompleteInventory() async throws {
+        try await inspect(host: "endless.test") { model in
+            XCTAssertNil(model.readerInventory)
+            XCTAssertTrue(model.readerInventoryError?.contains("too long") == true)
+        }
+    }
+}
+
 final class ReaderShelfTests: XCTestCase {
+    func testReaderBooksFolderIsListedAndMixedCaseRecentPathKeepsDownloadMetadata() {
+        XCTAssertTrue(ReaderInventory.folders.contains("/Books"))
+        let inventory = ReaderInventory(deviceID: "1234ABCD", model: "X3", files: [
+            .init(path: "/Books/Novel.epub", size: 500),
+        ], reading: [entry("/books/Novel.epub", digestA, 0.4)], readAt: Date())
+        let shelf = ReaderShelf(inventory: inventory, books: [])
+        XCTAssertEqual(shelf.items.count, 1)
+        XCTAssertEqual(shelf.items.first?.path, "/Books/Novel.epub")
+        XCTAssertEqual(shelf.items.first?.percentage, 0.4)
+        XCTAssertEqual(shelf.items.first?.document, digestA)
+        XCTAssertEqual(shelf.items.first?.canAddToLibrary, true)
+    }
     private func book(_ fileName: String, size: Int64, digest: String, article: Bool = false) -> LibraryBook {
         LibraryBook(id: UUID(), title: fileName, author: "", language: "en", fileName: fileName, byteCount: size,
                     documentDigest: digest, origin: article ? .article(UUID()) : .imported, addedAt: Date(),

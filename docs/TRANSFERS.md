@@ -287,3 +287,24 @@ admission, persistence failure/restart, directory reselection, denied access,
 missing sources, independent wireless uncertainty and demo protection. These
 checks do not establish physical SD-card, Wi-Fi, permission-prompt or reader
 installation acceptance.
+
+
+## Reader feedback state (2026-10-09)
+
+Compatible Sync firmware adds optional `transferState` to `/api/status`:
+`{"version":1,"phase":"saved","kind":"content","percent":100}`.
+Phases are `idle`, `ready`, `receiving`, `verifying`, `saved`, `paused`, `removed`,
+`failed`; kind is `content` or `firmware`, percent is bounded to 0–100. The same
+firmware feedback drives its Content transfer screen. `idle` means no transfer
+feedback overlay, not a claim that a book or a particular underlying screen is open.
+The app displays the last reported state through its existing 15-second heartbeat
+and hides the stale feedback line during its own active work; it does
+not poll during its own transfer or use this state as a publication receipt.
+Missing/unknown versions or values do not invent a state for older firmware.
+
+Successful content `saved`/`removed` feedback expires after five seconds and
+reveals the underlying Sync view without closing Wi-Fi. Errors, paused transfers
+and firmware staging remain visible. A new transfer replaces the old feedback;
+the timeout cannot dismiss an active transfer. Firmware staging never installs
+or acknowledges an update. The optional hardware test checks return to `idle`
+through both the app heartbeat and a reader response, only on supporting firmware.

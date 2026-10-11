@@ -64,6 +64,13 @@ Debug app. Simulator success does not establish physical radio behavior.
 
 ## Extend and diagnose
 
+For the full unattended app regression and 10-case physical interface suite, see
+[READER_INTERFACE_VALIDATION.md](READER_INTERFACE_VALIDATION.md). The focused
+runner option is `--interface-suite`; it requires every case and cleanup to pass.
+Add `--screen-suite` for 13 actual X3 Home/Brief/card/EPUB/sleep captures, local
+image/OCR checks, timer deep sleep and automatic Same Wi-Fi return. This requires
+the matching development firmware; it never flashes implicitly.
+
 - [HardwareTests/ReaderHardwareTests.swift](../HardwareTests/ReaderHardwareTests.swift)
   is shared by `PocketTests` and `PocketMacTests`. It uses the running app's
   actual model, clients and connection ownership. Add bounded scenarios here
@@ -75,7 +82,9 @@ Debug app. Simulator success does not establish physical radio behavior.
   the running app, downloads it to compare all bytes, then deletes only that exact
   generated path and size and checks the refreshed inventory. It uses a temporary
   library, never an existing user book. A failed run may leave its generated task
-  or file for diagnosis; inspect the report before cleanup.
+  or file for diagnosis; inspect the report before cleanup. On `transferState` v1
+  firmware it also checks automatic return to idle and a fresh app heartbeat;
+  older firmware is explicitly reported as unsupported for that check.
 - Normal unit tests skip hardware without I/O. The runner explicitly opts in;
   enabled simulator hardware tests fail. Skipped or stale evidence is not a pass.
 - Reports and `.xcresult` bundles are in the firmware checkout's ignored
@@ -89,3 +98,9 @@ Debug app. Simulator success does not establish physical radio behavior.
 
 For the verified baseline see [PROJECT_MEMORY.md](PROJECT_MEMORY.md); physical
 acceptance boundaries remain in [CONNECTIVITY_VALIDATION.md](CONNECTIVITY_VALIDATION.md).
+
+`--wifi-setup` adds an explicitly opted-in production BLE Wi-Fi provisioning
+failure/recovery scenario. It sends a unique nonexistent SSID, checks the
+matching failure receipt and old-network return, and does not read or log real
+credentials. See [READER_WIFI_SETUP.md](READER_WIFI_SETUP.md) for positive-test
+requirements and the protocol boundary.

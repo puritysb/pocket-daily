@@ -1,4 +1,94 @@
-# 현재 인수인계 — 2026-10-09
+# 현재 인수인계 — 2026-10-11
+
+## X3 실제 화면·독서·잠자기 자동 검증 — 2026-10-11
+
+- 최종 전체 PASS: 형제 저장소
+  `build/dev-pipeline-runs/20261011T011839-f8c099/report.json`.
+  실행: `python3 ../pocket-daily-firmware/scripts/dev_pipeline.py run --app "$PWD" --build-firmware ble_standby --flash --standby --interface-suite --screen-suite`.
+  실제 Mac/X3만 사용했고 시뮬레이터는 실행하지 않았다.
+- 인터페이스 10개, 실제 화면 13장(Home/Brief 8, 카드 3, EPUB 본문 1,
+  실제 잠자기 1)을 통과했다. 개발 펌웨어가 렌더 완료 후 framebuffer를 SD BMP로
+  저장하고, 앱이 회수해 디스크에서 다시 읽고 SHA-256·픽셀·로컬 Vision OCR로
+  검증한다. XCTest 첨부파일은 같은 실행의 `macOS-hardware-1-screens/`에 있다.
+- 카드 A→B→A는 전송한 128×96 이미지와 정확히 일치하고, 복원 차이 0이다.
+  앱이 만든 EPUB을 실제 기기 reader에서 열어 세 문단을 OCR로 확인한 뒤 자동
+  Same Wi-Fi 복귀한다. 실제 deep sleep은 같은 실행 번호의 타이머 진입/기상
+  기록과 잠자기 캡처를 함께 요구한다. 기존 카드·프로파일·독서 목록·파일 보존,
+  테스트 EPUB/캡처 삭제까지 통과했다.
+- X3 BLE 배터리 기준은 충전 전류가 확인될 때만 5% 초과, 그 외 10% 초과다.
+  BQ27220 읽기 실패·0/음수 전류는 완화하지 않는다. 대기 중 USB 상태 변경과
+  60초 주기에 재검사한다. 실제 9%에서 90초 대기 후 앱 BLE 깨우기 및 LAN 복귀
+  통과(12.876초), 자동 light sleep 누적 65.897초. 물리 케이블 분리 시험이나
+  소비전류 측정은 하지 않았다. 조건 전환은 결정적 테스트로 검증했다.
+- 이번에 수정한 검증기 문제: 흰 여백 이미지 탐색의 긴 main-actor 점유를 ink
+  선검사로 해소했고, 재부팅에 따라 커지는 `/agentdeck.log`의 크기만 파일 복원
+  비교에서 제외했다. 로그 존재 여부와 다른 모든 파일의 경로/크기는 계속 검사한다.
+  실패 시 복원 단계도 각각 실행하고 원래 오류와 복원 오류를 모두 보존한다.
+- 펌웨어 호스트 914개, 파이프라인/라우트/업로드 검사, cppcheck, default 및
+  ble_standby 빌드 통과. Mac 이미지/보존 검사 6개, iOS 기기 SDK 빌드 통과.
+  iOS 빌드는 실기기 실행 증거가 아니다.
+- 설치 버전: `8925b142-ble-standby-w3f7e719b`, SHA-256
+  `41ad9276c0240b221e9628764fd4f04ba62a04b1cebd1f3ef7ecbee4784d36bf`.
+  하드웨어 시험은 host renderer `apple-host-ezx0ib2o` 기준이다. 최종 코드 정리 후
+  동일 제품 소스를 펌웨어 `c2290a4a`에 고정한 `apple-host-phhli1gk`를 재생성·반영했다.
+  최종 Mac 앱을 서명 확인 후 설치·실행했고 X3 Same Wi-Fi 연결과 보관함,
+  저장된 편집, 기존 일시정지 작업 보존을 실제 UI에서 확인했다.
+- 경계: framebuffer 검사는 광학 잔상·패널 손상 측정이 아니다. EPUB 첫 fixture
+  페이지를 검사하며 모든 책/글꼴/방향/페이지 넘김이나 물리 버튼까지 보장하지 않는다.
+  iPhone/X4 범위 확대와 출시 준비는 사용자 지시로 보류한다.
+
+## 최종 코드 정리 — 2026-10-11
+
+- 펌웨어: 저장소 접근 수정 `b1f27f79`, X3 연결·자동 검증 `c2290a4a`를 main에
+  fast-forward 반영했다. 외부 SDK 수정은 `scripts/storage_sdk.patch`로 재현하며
+  서브모듈에 별도 커밋을 만들지 않는다. 로컬 `.agents/`는 보존하되 추적하지 않는다.
+- 앱: Wi-Fi 설정, BLE, 파일 목록과 화면 검사 단위 테스트를 Mac 타깃 및
+  `verify_reader_interface.py --physical-only`에 연결했다. Mac 테스트 83개 전부
+  통과했고 테스트의 main-actor 격리 경고도 수정했다. 시뮬레이터 실행은 없다.
+- 아래 항목은 이전 단계의 시험 이력이다. 당시 미커밋/실패/보류 표기는 해당
+  시점의 기록이며 현재 기준은 위의 최종 자동 검증과 코드 정리 항목이다.
+
+## 현재 Wi-Fi 이름 자동 채우기 — 2026-10-10
+
+- 사용자 지시: 이후 검증은 시뮬레이터를 사용하지 않고 실제 Mac/iPhone/리더에서
+  수행한다. iPhone 캡처 4개는 완료됐으나 iPad 캡처가 정체돼 중단하고 해당
+  시뮬레이터를 종료했다. 이 실행을 전체 스크린샷 갱신 완료로 인용하지 않는다.
+- Reader Wi-Fi의 Use Current Wi-Fi 버튼에서만 현재 SSID 조회/위치 권한을
+  요청한다. Mac은 CoreWLAN, iOS/iPadOS는 NEHotspotNetwork.fetchCurrent와
+  Access Wi-Fi Information을 사용한다. iOS는 Precise Location 승인이 필요하지만
+  좌표를 읽거나 위치 업데이트를 시작하지 않는다. 거부/조회 실패 시 수동 입력을
+  유지하고 취소된 조회는 화면에 값을 쓰지 않는다. 다른 SSID로 채우면 기존 비밀번호를 지운다.
+- 서명된 sandboxed Mac 앱을 설치해 실제 현재 SSID 자동 채우기를 확인했다.
+  sandbox/location entitlement 유지도 확인했다. iOS 관련 10개 단위 테스트와
+  권한 팝업 없이 폼을 여는 UI 테스트 1개 통과:
+  `.build/tests/Logs/Test/Test-Pocket-2026.10.10_23-15-25-+0900.xcresult`.
+- Apple Wi-Fi Infrastructure의 일반 고객 배포는 EU 계정 + EU 내 기기로 제한된다.
+  Accessory Transport Extension은 iOS 전용이다. 한국/전 플랫폼 자동 비밀번호
+  공유로 설명하거나 노출하지 않는다. Mac의 공개 CWKeychainFindWiFiPassword는
+  실제 sandboxed 앱에서 인증 UI 비활성 시 -25293, 허용 시 성공(0, 비밀번호 존재)을
+  확인했다. 현재 네트워크에 한해 Use Current Wi-Fi에서 호출하고, 실패 시 수동
+  입력을 제공한다. 값 자체는 진단에 기록하지 않았다. 증거:
+  `.build/current-wifi-password-{probe,prompt}.xcresult`.
+  2026-10-11 실제 설치 앱에서도 자동 채우기 완료 안내, 마스킹된 SecureField와
+  활성화된 Save and Connect를 확인했다. 추가 전송 없이 Done으로 폼을 닫았다.
+  macOS 인증 창은 사용자 직접 승인 영역이며 보안 도구로 조작하지 않는다.
+  비밀번호는 SecureField에만 채우고 전송은 별도 Save and Connect로 시작한다.
+  근거와 범위: [READER_WIFI_SETUP.md](READER_WIFI_SETUP.md).
+- 사용자가 App ID/개발 프로파일 갱신을 승인했고, 실제 iPhone 서명 빌드는
+  새 wifi-info 권한으로 성공했다. 배포 프로파일/IPA는 별도 재검증이 필요하다.
+  첫 iPhone UI 시험은 iOS 자동화 모드 초기화 시간 초과로 중단돼 조회 성공으로
+  간주하지 않는다. `.build/current-wifi-iphone-physical.xcresult`.
+  2026-10-11 사용자가 SBiPhone을 잠금 해제한 뒤 물리 기기 UI 재시험은 통과했다
+  (1개, 실패 0): `.build/current-wifi-iphone-retry-20261011.xcresult`.
+  현재 SSID 채우기, 비밀번호 미입력 상태에서 전송 불가, Done 닫기를 확인했다.
+  이 시험은 iPhone에서 리더로 실제 전송한 증거와 구분한다.
+  최종 코드의 sandboxed Mac 빌드 및 generic iOS 기기용 서명 빌드, App Store
+  source validator는 통과했다. `.build/current-wifi-mac-final.log`,
+  `.build/current-wifi-device-final-generic.log`, `.build/current-wifi-store-final.log`.
+- 사용자가 새 Wi-Fi 비밀번호를 입력한 뒤 X3의 동일 기기 ID와 `saved` 결과를
+  확인했다. 새 네트워크에서 앱 연결·inventory·EPUB 왕복 원본 비교·시험 파일
+  정리까지 통과했다. 형제 저장소 증거:
+  `build/dev-pipeline-runs/20261010T144635-5e64f9/report.json`.
 
 현재 구현은 [PROJECT_MEMORY.md](PROJECT_MEMORY.md)의 날짜별 검증 기록과 실제 코드를
 기준으로 한다. **1차 기능 구현은 갖췄지만 출시 승인 완료 상태는 아니다.**
@@ -14,11 +104,173 @@
 - 후속 UI 정리: 카드·날씨 연결 단계의 주요 행동을 하단에 고정했다.
   리더 선택은 Readers… → Manage Readers로 구분하고 Mac 관리 시트를 줄였다.
   End Session…은 리더의 Sync 종료와 재연결 방법을 확인한 후 실행한다.
-- 최신 제품 코드의 서명 IPA·Mac PKG 생성과 검증은 완료했다. 출시 전에는 실제
+- 디자인 마감 당시 서명 IPA·Mac PKG 생성과 검증은 완료했으나 아래 후속 수정은
+  포함하지 않는다. 출시 전에는 실제
   iPhone/X4 전송·복구·이어 읽기 수용 시험, TestFlight, 심사 연락처/앱 레코드/업로드/
   실기기 영상 확인이 필요하다. 최신 export 증거는 `appstore/submission.json`에 있다.
 - 기준 확인: 과거 테스트 수를 최신 HEAD 재검증으로 인용하지 않는다. 이번 제목
   변경과 후속 실기기 확인 결과는 아래에 기록한다. 계정·출시 작업은 수행하지 않았다.
+
+## 앱에서 리더 Wi-Fi 설정 — 2026-10-09
+
+- My Reader → More → Manage Reader → Set Up Reader Wi-Fi에서 SSID/비밀번호를
+  입력한다. 공개 CoreBluetooth와 기존 페어링을 사용하며 Apple 기기 네트워크는
+  변경하지 않는다. 연결된 Same Wi-Fi에서 BLE 설정으로 전환할 수 있다.
+  최초 페어링의 기기 확인은 필요하다. [계약과 제약](READER_WIFI_SETUP.md).
+- 앱은 비밀번호를 저장/로그하지 않는다. 펌웨어는 연결 성공 후에만 기존 SD
+  저장소를 교체하며 실패하면 기존 네트워크로 복귀한다. SD 저장소는 암호화가
+  아닌 기존 난독화 방식이다. 개인정보 문서와 심사 노트를 함께 갱신했다.
+- X3 설치본 `8925b142-ble-standby-wa68589c8`, SHA-256
+  `407ec692b4a984c1b49bacdb96feab78d851ba502e2665a90e58988ef4cf1303`.
+  실제 앱 → BLE 자격 증명 전달 → 존재하지 않는 SSID 실패 → 기존 Wi-Fi 복귀와
+  일치하는 결과 확인, 이후 inventory/EPUB 왕복·삭제가 통과했다.
+  증거: 형제 저장소 `build/dev-pipeline-runs/20261009T142853-910223/report.json`.
+- 펌웨어 host 909개, 비밀번호 삭제 누락 변이 검출, strict cppcheck와 기본/standby
+  빌드 통과. 앱 Wi-Fi/Wake 최종 11개, iPhone 입력 UI 테스트, Mac 테스트 10개
+  통과(별도 2개 skipped). iOS 및 sandboxed Mac 빌드를 완료했다.
+- 스크린샷 캡처의 첫 시뮬레이터 실행 정체를 종료하고 플랫폼별 기본 캡처와
+  Articles 캡처를 분리 재실행했다. 최종 19장과 App Store source validator 통과.
+  캡처 요약: `.build/screenshots/capture-reports/20261009T144050-65705/`,
+  Articles 결과: `.build/wifi-articles-{iphone,ipad}.xcresult`.
+- 새 Mac 앱을 `~/Applications/Pocket Daily.app`에 설치·실행하고 X3 Same Wi-Fi
+  연결과 입력 시트를 확인했다. 이후 올바른 새 SSID의 연결/저장 및 Mac/X3
+  왕복 전송도 위 2026-10-10 기록처럼 통과했다. 물리 iPhone/X4 전송 검증 및
+  새 IPA/PKG export·심사 업로드는 남아 있다.
+  공개 API 검토는 Apple의 심사 승인을 의미하지 않는다.
+
+## 인터페이스 전수 검토와 자동 검증 — 2026-10-09
+
+- 깨우기 수정 검증(23:04 KST): SDK의 `CONFIG_PM_SLP_DISABLE_GPIO=1`은 자동
+  light sleep에서 GPIO를 비활성화하는데, X3 대기는 SD를 마운트한 채 유지하고
+  버튼을 폴링했다. SD 공급 GPIO13·chip select·입력 pull을 보존하지 않는 충돌을
+  형제 저장소 `HalPowerManager::beginBleStandby()`의 `gpio_sleep_sel_dis()`로
+  수정했다. 절전 진입 전 유효 GPIO의 기존 설정을 보존하며 실패하면 진입을 거부한다.
+  기본 deep sleep의 명시적 전원 차단은 유지된다. 개발 시험은 SD 중간 체크포인트를
+  남기고, 앱은 BLE timeout 단계와 실패를 보존한다.
+  설치본 `8925b142-ble-standby-w79b237a9`, SHA-256
+  `6588fb6ca7de031f06132f2e243976fae76697993973d7cee246bab7aac90f75`.
+  Mac/X3 2회 모두 90초 대기 요청, 실제 83,058 / 82,120 ms standby 후
+  `app-wifi` 종료와 동일 기기 Wi-Fi 복귀(20.61 / 13.12초), 읽기 위치 목록 교환
+  각 2회, EPUB 2,856 B 전송·다운로드 원본 비교·시험 파일 삭제가 통과했다.
+  배터리 99%, 최소 free 61,280 B / block 53,236 B; 전류/장시간 배터리 수명은 미측정.
+  증거: 형제 저장소 `build/dev-pipeline-runs/20261009T135746-4d33d3/report.json`.
+  새 검증기는 실제 standby >=60초를 요구하며 두 기존 결과도 재검증했다.
+  펌웨어 host 898개, 파이프라인 Python 22개, strict cppcheck와 두 환경의 무경고
+  빌드가 통과했다. 중간 기록을 저장하지 않는 변이는 새 회귀 테스트에서 실패했다.
+  수 시간 대기, 물리 iPhone/X4 검증 완료를 뜻하지 않는다.
+  최종 Mac 서명 빌드를 `~/Applications/Pocket Daily.app`에 새 번들로 설치하고
+  서명과 빌드 산출물의 바이트 일치를 검증했다. 실행 후 X3 Same Wi-Fi 자동 연결과
+  fresh inventory를 UI에서 확인했다. 최종 앱 수정은 iOS 관련 7개 테스트를
+  재실행해 통과했으며, 앞선 전체 관련 104개 통과와 구분한다.
+  아래는 수정 전 실패 이력이다.
+
+- 깨우기 원인 추적(22:33–22:40 KST, 수정 전): 설치된 `w5467c36a`로
+  개발 파이프라인을 다시 실행해 초기 LAN 연결은 성공했으나 BLE wake/LAN 복귀가
+  시간 초과했다. 실패 보고서는 형제 저장소의
+  `build/dev-pipeline-runs/20261009T133345-0f2cb8/report.json`이며 2회 중 첫 회에서
+  중단했다. 180초 복귀 제한 후에도 등록 주소와 현재 /24에서 동일 ID가 응답하지
+  않아 기기의 cycle 결과는 아직 회수하지 못했다. 재요청·펌웨어 설치는 하지 않았다.
+  진단 빌드의 실제 Connect는 `connecting` 단계에서 시간 초과(22:40:11)했다.
+  이는 `START_WIFI`를 보내기 전 실패이며, 대기 중 멈춤/깊은 절전/전원 상태의
+  구분은 아직 불가능하다. USB 연결을 요청했으며 현재 USB serial 포트는 없다.
+  앱은 실패 단계별 오류, 식별자 없는 제한된 로컬 로그, 하드웨어 보고서의
+  `wakeFailure`를 추가했다. 원래 오류를 버리는 진단 결함을 보완했을 뿐,
+  장치 깨우기 원인이 해결됐다는 뜻은 아니다. 기존 시험은 재부팅 후 대기하므로
+  재부팅 없는 실사용 이력의 검증도 별도로 필요하다.
+  사용자는 대기 이미지가 그대로이며 USB 연결이 불가능하다고 답했다. 짧은 전원
+  버튼 후 Same Wi-Fi 복귀를 요청했으며, 당시 다음 작업은 새 mutation 전에 기존
+  run `88288109`의 `/api/pocket/v1/dev/ble-cycle` 결과를 읽는 것이다.
+  진단 수정 검증: Mac 서명 빌드와 iOS simulator 빌드 성공, iOS의
+  `ReaderWakeConnectorTests` 5개 + `NearbySyncProtocolTests` 99개 통과
+  (`.build/wake-diagnostics/ios-regression-tests.log`). 앞선 Mac 테스트 선택은
+  해당 타깃에 클래스가 없어 0개 실행됐으므로 검증 근거에서 제외한다.
+- 후속 실제 사용 점검(22:17 KST): 단일 실행 앱의 Connect가 BLE 깨우기 단계에
+  들어간 뒤 리더 미발견으로 종료됐다. 등록 주소의 `/api/status`도 3초 시간 초과.
+  Bluetooth 마지막 교환은 UI상 6시간 전, inventory는 5시간 전 캐시였다.
+  약 20초의 BLE 시도는 connector 제한과 일치하지만 앱이 원래 오류를 버려
+  정확한 실패 단계는 확인되지 않았다. 기기 화면·배터리·실제 절전 상태는 미확인.
+  이전 제어된 standby 통과를 장시간 일상 깨우기 신뢰성으로 확대하지 않는다.
+  로컬 증거: `.build/wake-diagnostics/latest.json`.
+  사용자 전원 버튼·Same Wi-Fi 복귀 후 다른 IP에서 동일 ID/`w5467c36a`를 확인했고
+  앱의 명시적 탐색도 연결과 새 inventory 갱신에 성공했다. 부팅 후 기록은
+  `software restart`, `lastTrigger=wake`, `lastGate=low-memory`, opened=0/skipped=1,
+  free=84,112 B/block=61,428 B였다(진입 최소 free=98,304 B).
+  게이트 순서상 해당 시점에는 설정·bond·배터리 >10% 조건을 통과했지만 정확한
+  잔량은 API에 없다. 이 새 부팅 기록으로 이전 대기 중 실패 원인을 확정하지 않는다.
+- 반복 실행: `python3 scripts/verify_reader_interface.py --standby --screenshots`.
+  [검증표와 전제 조건](READER_INTERFACE_VALIDATION.md)에 기능별 실기기/단위 시험과
+  아직 입증하지 않은 항목을 구분했다. 초기 권한·페어링·Same Wi-Fi 후 시험 중
+  사용자 버튼 조작은 필요하지 않다. 일반 앱 종료는 에이전트가 처리했다.
+- 앱 보관함은 `/Books`도 읽고 FAT 경로 대소문자 차이를 합친다. 누락 폴더의 404와
+  통신 오류를 구분하며, 일부 폴더 실패나 페이지 한도 도달을 정상 완료로 숨기지 않는다.
+- SD 용량 조회 503의 원인은 SDK의 USB 블록 장치 의존이었다. 형제 저장소의
+  `scripts/storage_sdk.patch`와 실제 SDK 헤더 회귀 시험으로 SPI 경로를 고쳤다.
+  호스트 897개, cppcheck, default/ble_standby 무경고 빌드, SDK 패치 4개 시험 통과.
+  호스트 시험은 SDK 헤더의 격리 사본에 검토된 패치를 적용하므로 로컬 SDK의
+  선행 패치에 의존하지 않는다. 기존 구현을 되살린 사본에서는 회귀 시험이 실패했다.
+- X3에 `ble-standby-w5467c36a` 설치 확인. 이미지 6,407,472바이트, SHA-256
+  `7ccb9d22627cf8c0067dd6580869f48e673bfb6200171bec2cde288fb548b567`.
+  형제 저장소 `build/dev-pipeline-runs/20261009T072250-084222/report.json` 통과:
+  BLE 재연결 12.68초, SD 용량 10.82초, 설정/프로필 원복, 책·기사 전송/다운로드,
+  실제 앱 독서·위치 복원, 중단/재개/폐기, 폴더 복사, 기존 파일 목록 보존 10항목.
+- 최종 검증 묶음: `.build/interface-runs/20261009T073304-335479/`.
+  앱 단위 시험 549개 통과/물리 opt-in 1개 건너뜀. Mac 독서 3개 및 별도 한글·장편
+  EPUB 표본 시험 1개 통과; 펌웨어 XPointer 교차 검증 포함.
+  독립된 빈 라이브러리에 다운로드를 저장하는 조건으로 실기기 10항목을 다시 통과했다
+  (`20261009T073721-bf036a`, BLE 재연결 12.97초, SD 용량 11.10초).
+- iPhone UI 36개 통과/건너뜀 0, 캡처 6장 생성. 최초 통합 실행의 UI 제한은
+  40분이었으므로 이 완료 결과를 보존하고 iPad/Mac 구간을 별도 자동 실행으로
+  이어갔다 (`.build/interface-ui-continuation.log`). 최초 `report.json`의 중단
+  이력은 보존한다. 실행기 기본 UI 제한은 60분으로 변경했으며 캡처별 결과 JSON을
+  별도 보존하고, 중단 시 임시 결과 묶음도 삭제하지 않도록 보완했다.
+- iPad 전체 UI는 최초 34/36 통과. 연결 버튼을 전체 화면 대신 모달 창 기준으로
+  판정하고, 오프라인 초안 시험의 외부 탐색을 격리한 뒤 실패 2개 재검증은 모두 통과했다.
+  초안 생성 직후·연결 창 복귀 직후에도 값을 확인하도록 시험을 강화했다.
+  최초 실패 결과와 후속 결과를 별도 보존한다 (`ipad-13-ui-summary.json`,
+  `ipad-targeted-final-summary.json`). Xcode의 실패 진단 수집은 600초 시간 초과했으며,
+  후속 실행에서는 부가 진단 수집만 중단/비활성화했다. 시험 판정은 건너뛰지 않았다.
+- Mac 화면/독서 묶음은 10개 통과/선택 시험 2개 건너뜀, 캡처 6장 생성 및 패키지
+  검증 통과 (`mac-ui-results/mac-16x10.json`). 한글·장편 표본은 위 별도 시험으로 확인했다.
+- 서명된 최신 Mac 앱을 새 번들로 설치·실행했다. 기존 설치본의 테스트 플러그인
+  잔재 때문에 단순 덮어쓰기는 서명 검증에 실패해, 기존 번들을 검증 폴더로 보관하고
+  새로 복사했다. 최종 코드 서명 검증 통과 및 빌드와 실행 파일·Debug dylib 바이트 일치.
+  `installed-app.json`에 두 해시를 보존했다. 실행 화면에서 X3 Same Wi-Fi 자동 재연결,
+  `Reader · No active transfer`, `289 MB used / 15 GB`, `/Books` 가져오기 가능을 확인했다.
+- 최종 정리: `completion.json`에 별도 실행 결과를 합쳤다. 최초 통합 실행을 통과로
+  바꾸지 않았다. 수정한 UI 시험 2개는 iPhone에서도 통과했다. iPad 캡처는 최초
+  묶음에서 개별 통과한 `PocketScreenshotTests` 4개의 첨부로 7장을 생성했다.
+  다른 프로젝트 UI 시험과 겹쳐 지연된 중복 캡처 실행은 중단 이력으로 보존했다.
+  최종 iPhone 6·iPad 7·Mac 6장, 총 19장 및 패키지 검증 통과.
+- 물리 SBiPhone은 개발 도구에서 `unavailable`로 확인됐다. 물리 X4·iPhone의 확장
+  시험, Direct 연결과 iCloud 다기기 수용을 이 결과로 대신하지 않는다. 계정·출시
+  작업과 추가 커밋·푸시는 수행하지 않았다.
+
+## 앞선 수정: 전송 화면과 앱 상태 — 2026-10-09 (X3 설치·검증 완료)
+
+- 사용자가 전송 종료 후 리더의 Content transfer 화면이 남는 것을 확인했다.
+  이전의 연결·파일 바이트 검증은 화면 복귀 수용 시험을 포함하지 않았다.
+- 펌웨어의 콘텐츠 Saved/Removed 결과를 5초 후 닫고 Sync 바탕 화면으로 복귀하게
+  수정했다. Paused/Failed 및 펌웨어 결과는 유지한다. optional `transferState` v1을
+  상태 API에 추가했으며 앱은 기존 15초 heartbeat로 받은 단계를 표시한다.
+  자체 작업 중에는 이전 상태를 숨긴다. 계약은 [TRANSFERS.md](TRANSFERS.md).
+- 호스트 895개, 앱 상태 시험 12개, 펌웨어 cppcheck 및 default 빌드 통과.
+  경계 조건을 고의로 바꾼 사본에서 관련 시험이 실패하는 것도 확인했다.
+- 새 앱과 기존 X3의 연결·2,856바이트 EPUB 왕복은 통과했다
+  (`20261009T063916-dbbce8`). 자동 복귀는 설치 펌웨어 미지원으로 명시했다.
+  수정 앱을 설치·실행했으며 빌드와 실행 파일 해시는 일치한다.
+- 설치 후보: `ble-standby-we19d4702`, 형제 저장소
+  `build/transfer-feedback-candidate/update.bin`, SHA-256
+  `234ee892ec6eb53ac02fbdc43388495d9811d7c9b99a45474b282be5f38d862d`.
+  default와 ble_standby 빌드 모두 경고·오류 없이 통과했다. 기존 미커밋 펌웨어
+  개발 기반을 유지한 후보이며 다른 작업의 변경을 제거하거나 커밋하지 않았다.
+- iPhone/iPad/Mac 화면 시험 및 스크린샷 19장 재생성, 스토어 소스 검증 통과
+  (`.build/transfer-state-screenshots.log`).
+- 사용자 승인 후 위 후보를 X3에 설치·재부팅했고 정확한 버전 일치를 확인했다.
+  `20261009T065715-2ce1a5/report.json` 전체 통과: 2,856바이트 EPUB 왕복·정리,
+  전송 표시 `idle` 복귀와 앱의 새 heartbeat 수신, BLE standby 후 13.79초 재연결.
+  이는 Mac/X3 API·앱 검증이며 리더 화면을 카메라로 관찰한 증거는 아니다.
+- 앞서 생성한 배포본은 이 추가 수정을 포함하지 않는다. 최신 배포본 재생성과
+  별도 iPhone/X4 수용 시험은 남아 있다. 이번 앱·펌웨어 수정은 아직 미커밋이다.
 
 ## 이번 제목 정리의 검증
 

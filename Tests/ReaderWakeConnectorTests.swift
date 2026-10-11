@@ -76,4 +76,21 @@ final class ReaderWakeConnectorTests: XCTestCase {
             XCTAssertNil(NearbySyncProtocol.startWifi(requestID: id))
         }
     }
+
+    func testTimeoutIdentifiesTheFailedStageWithoutSendingAnotherCommand() async {
+        for phase in [ReaderWakeConnector.Phase.connecting, .preparing, .requesting] {
+            let transport = Transport(), scheduler = Scheduler()
+            transport.known = [reader.peripheralID]
+            let connector = ReaderWakeConnector(transport: transport, scheduler: scheduler)
+            let task = Task { try await connector.wake(reader) }
+            await started(transport)
+            if phase == .preparing { transport.send(.connected(reader.peripheralID)) }
+            if phase == .requesting { ready(transport) }
+            scheduler.fire(20)
+            do { try await task.value; XCTFail("Expected timeout") }
+            catch { XCTAssertEqual(error as? ReaderWakeConnector.Failure, .timedOut(phase)) }
+            XCTAssertEqual(transport.writes.count, phase == .requesting ? 1 : 0)
+            XCTAssertEqual(transport.cancels, 1)
+        }
+    }
 }

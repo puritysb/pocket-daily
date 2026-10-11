@@ -1,6 +1,11 @@
 import Foundation
 import SwiftUI
 
+enum ReaderStorageError: LocalizedError {
+    case folderNotFound
+    var errorDescription: String? { "This folder is no longer on the reader. Refresh and try again." }
+}
+
 struct ReaderFilePage: Decodable {
     struct Entry: Decodable, Identifiable {
         let name: String

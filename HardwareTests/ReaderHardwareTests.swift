@@ -61,6 +61,23 @@ final class ReaderHardwareTests: XCTestCase {
             try await inventory(model, idle: { !busy })
             evidence["initialConnection"] = true
 
+            if env["POCKET_HARDWARE_WIFI_SETUP"] == "1" {
+                try require(model.readerStatus?.wifiSetup == 1, "Reader lacks app Wi-Fi setup")
+                try require(model.bluetoothLink.rememberedReader?.readerID == identity, "Pair app before Wi-Fi setup test")
+                // Nonexistent unique network: no real password is read, exported,
+                // or replaced. Test production BLE provisioning and old-network fallback.
+                model.configureReaderWiFi(ReaderWiFiCredentials(ssid: "Pocket-Test-\(run)", password: "test-only-123"))
+                try require(model.isConfiguringReaderWiFi, "Wi-Fi setup was not admitted")
+                try await until("Wi-Fi setup rollback", timeout: 150) { !model.isConfiguringReaderWiFi && !busy }
+                let restored = try XCTUnwrap(model.readerStatus)
+                try verify(restored, identity: identity, version: version)
+                try require(restored.wifiSetupResult?.state == "failed", "Missing failed-association receipt")
+                try require(model.readerWiFiSetupMessage.contains("previous saved networks are unchanged"),
+                            "App did not report verified failure")
+                evidence["wifiSetupRollback"] = "passed"
+                try await inventory(model, idle: { !busy })
+            }
+
             if standby {
                 try require(ReaderBluetoothLink.shared.rememberedReader?.readerID == identity,
                             "Pair this Debug app with the reader before the standby trial.")
@@ -75,7 +92,11 @@ final class ReaderHardwareTests: XCTestCase {
                     try require((response as? HTTPURLResponse)?.statusCode == 202, "Standby trial rejected")
                 } catch let failure as Failure { throw failure }
                 catch { evidence["cycleReplyLost"] = true }
-                try await Task.sleep(for: .seconds(40))
+                // Cross the firmware's first 60-second battery/eligibility check
+                // after reboot and Wi-Fi teardown, while staying inside its
+                // 180-second recovery limit. A short wake misses this idle path.
+                evidence["standbyWaitSeconds"] = 90
+                try await Task.sleep(for: .seconds(90))
                 let online = try? await client.status(host: host, timeout: 2)
                 try require(online == nil, "Reader did not enter offline standby")
                 try await until("reader lane before wake", timeout: 20) { !busy && !model.isWorking }
@@ -132,8 +153,29 @@ final class ReaderHardwareTests: XCTestCase {
             evidence["inventoryCount"] = model.readerInventory?.files.count ?? 0
             evidence["bookTransferBytes"] = try await verifyBookRoundTrip(model, client: client,
                 host: host, identity: identity, run: run, idle: { !busy })
+            evidence["transferFeedbackRecovery"] = preflight.transferState?.version == 1 ? "passed" : "unsupported by installed firmware"
+            if env["POCKET_HARDWARE_INTERFACE"] == "1" {
+                let suite = ReaderInterfaceSuite(model: model, client: client, host: host,
+                    identity: identity, run: run, idle: { !busy })
+                do { try await suite.runAll() }
+                catch {
+                    evidence["interfaceCases"] = suite.results
+                    evidence["interfaceRecoveryArtifacts"] = suite.root.path
+                    throw error
+                }
+                evidence["interfaceCases"] = suite.results
+            }
+#if os(macOS)
+            if env["POCKET_HARDWARE_SCREENS"] == "1" {
+                let suite = ReaderInterfaceSuite(model: model, client: client, host: host,
+                    identity: identity, run: run, idle: { !busy })
+                evidence["screenRecoveryArtifacts"] = suite.root.path
+                evidence["screenValidation"] = try await suite.screenChecks()
+            }
+#endif
             evidence["passed"] = true
         } catch {
+            evidence["wakeFailure"] = ReaderDevelopmentContext.model?.lastWakeFailure
             evidence["error"] = error.localizedDescription
             throw error
         }
@@ -182,6 +224,8 @@ final class ReaderHardwareTests: XCTestCase {
         let file = try await library.fileURL(for: book)
         let original = try Data(contentsOf: file)
         try await until("lane before book transfer", timeout: 30) { idle() && !model.isWorking }
+        let reportsTransferFeedback = model.readerStatus?.transferState?.version == 1
+        let initialReportedUptime = model.readerStatus?.uptime ?? 0
         let created = await model.createBookTransferJob(books: [book], library: library)
         let id = try XCTUnwrap(created)
         try await until("generated book preparation", timeout: 30) { idle() && !model.isWorking }
@@ -203,6 +247,17 @@ final class ReaderHardwareTests: XCTestCase {
             try require(received.count <= original.count, "Reader returned extra book bytes")
         }
         try require(received == original, "Published EPUB differs from library bytes")
+        if reportsTransferFeedback {
+            // Observe the app heartbeat, not just a direct HTTP probe. This proves
+            // the reader leaves terminal feedback and the app receives that state.
+            try await Task.sleep(for: .seconds(6))
+            try await until("reader transfer feedback returns to idle", timeout: 20) {
+                model.readerStatus?.transferState?.phase == "idle"
+                    && (model.readerStatus?.uptime ?? 0) > initialReportedUptime
+            }
+            let reported = try await client.status(host: host)
+            try require(reported.transferState?.phase == "idle", "Reader still shows transfer feedback")
+        }
         try await until("lane before test book cleanup", timeout: 30) { idle() && !model.isWorking }
         model.deleteReaderFile(path, size: Int64(original.count), folder: "/", identity: identity)
         try await until("test book cleanup", timeout: 30) { idle() && !model.isWorking }

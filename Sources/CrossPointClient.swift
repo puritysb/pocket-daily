@@ -21,6 +21,8 @@ struct CrossPointStatus: Codable, Equatable {
     var firmwareLineage: Int? = nil
     var crossPointBase: String? = nil
     var sessionEnd: Bool? = nil
+    var wifiSetup: Int? = nil
+    var wifiSetupResult: ReaderWiFiSetupReceipt? = nil
     var contentPresentation: Bool? = nil
     /// Live-studio capability advertisement. Absent on readers that predate
     /// the contract (`docs/live-studio-v1.md` in the firmware repository).
@@ -36,6 +38,7 @@ struct CrossPointStatus: Codable, Equatable {
     /// (sibling docs/pocket-screen-present-v1.md).
     var screenPresentation: Int? = nil
     var publicationReceipt: Int? = nil
+    var transferState: ReaderTransferState? = nil
     var transferControl: Int?
     var articleLibrary: Int? = nil
     var totalHeap: Int? = nil
@@ -49,6 +52,31 @@ struct CrossPointStatus: Codable, Equatable {
     var supportsAtomicUpload: Bool {
         transferControl == 1 || uploadStreamPort.map { (1...65535).contains($0) } == true
             || uploadChunkBytes.map { $0 > 0 } == true
+    }
+}
+
+/// Firmware-reported transfer feedback, refreshed by the connection heartbeat.
+/// This is distinct from connection state and never confirms a local job receipt.
+struct ReaderTransferState: Codable, Equatable {
+    let version: Int
+    let phase: String
+    let kind: String
+    let percent: Int
+
+    var statusText: String? {
+        guard version == 1, (0...100).contains(percent),
+              kind == "content" || kind == "firmware" else { return nil }
+        switch phase {
+        case "idle": return "Reader · No active transfer"
+        case "ready": return "Reader · Waiting for content"
+        case "receiving": return "Reader · Receiving \(percent)%"
+        case "verifying": return "Reader · Verifying transfer"
+        case "saved": return kind == "firmware" ? "Reader · Firmware staged, not installed" : "Reader · Content saved"
+        case "paused": return "Reader · Transfer paused"
+        case "removed": return "Reader · Transfer removed"
+        case "failed": return "Reader · Transfer failed"
+        default: return nil
+        }
     }
 }
 
@@ -1031,6 +1059,17 @@ actor CrossPointClient {
         return try JSONDecoder().decode(CrossPointStatus.self, from: data)
     }
 
+    func prepareReaderWiFi(deviceID: String, host: String, port: Int) async throws {
+        guard let url = Self.url(host: host, port: port, path: "/api/pocket/v1/wifi/setup", query: ["deviceID": deviceID]) else {
+            throw ClientError.invalidAddress
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        let (data, response) = try await http.data(for: request, session: session)
+        try Self.requireSuccess(response, body: data)
+    }
+
     func endDirectSession(host: String, port: Int) async throws {
         guard let url = URL(string: "http://\(host):\(port)/api/pocket/v1/session/end") else {
             throw ClientError.invalidAddress
@@ -1154,6 +1193,9 @@ actor CrossPointClient {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let (body, response) = try await http.data(for: request, session: session)
         try Task.checkCancellation()
+        if endpoint == "files", !delete, (response as? HTTPURLResponse)?.statusCode == 404 {
+            throw ReaderStorageError.folderNotFound
+        }
         try Self.requireSuccess(response, body: body)
         guard body.count <= 8192 else { throw ClientError.unexpectedMessage("Reader response is too large.") }
         return body

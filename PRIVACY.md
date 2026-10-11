@@ -68,9 +68,13 @@ local copy; deleting the app deletes the library.
   contents; GitHub receives the device's network address.
 
 
-Pocket Daily does not read precise coordinates of the device. On macOS, location permission is
-requested because the operating system gates nearby Wi-Fi network information
-behind that permission. On iOS, Wi-Fi changes use Apple's system confirmation.
+Pocket Daily does not read or store the device's coordinates. Choosing Use Current
+Wi-Fi requests location permission solely to fill in the connected network name.
+iOS/iPadOS require Precise Location authorization and Access Wi-Fi Information;
+macOS also gates Wi-Fi information behind location authorization. No location
+updates are started. Denying permission leaves manual entry available. macOS
+also uses this permission to find the reader's temporary network. On iOS,
+Wi-Fi changes use Apple's system confirmation.
 
 ## Articles and subscriptions
 
@@ -96,6 +100,22 @@ Article links, titles and saved text stay in a local shared container used by th
 iOS share extension and the app. On macOS, they are stored in the app’s local Application Support directory.
 They remain until you explicitly delete them from Articles. Sending or deleting a reader copy does not delete the app copy.
 No article is sent to the developer or an extraction service.
+
+## Reader Wi-Fi setup
+
+When you choose Save and Connect in Reader Wi-Fi, the app sends your chosen Wi-Fi
+name and password only to the identified, paired reader over authenticated,
+encrypted Bluetooth. On Mac, Use Current Wi-Fi can fill the current network's
+saved password through Apple's CoreWLAN API and system keychain authorization.
+It checks the current SSID and never queries other saved networks or changes
+keychain access rules. On iOS/iPadOS, passwords are entered manually. The app
+never retrieves passwords in the background or changes this Apple device's
+network. The app does not persist these credentials, sync them
+to iCloud, include them in diagnostics, or send them to the developer.
+The reader saves a network after a successful connection for future joins.
+Its existing SD-card credential store uses device-specific obfuscation, not
+cryptographic encryption at rest; remove saved networks on the reader before
+sharing its SD card. A failed connection leaves previous saved networks intact.
 
 ## Storage, sharing, and retention
 

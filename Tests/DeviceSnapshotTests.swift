@@ -8,6 +8,29 @@ final class DeviceSnapshotTests: XCTestCase {
             #"{"version":"t","device":"XTEINK X4","ip":"127.0.0.1","mode":"STA","rssi":-60,"freeHeap":20000,"uptime":1\#(id)\#(extra)}"#.utf8))
     }
 
+    func testReaderTransferFeedbackIsOptionalAndDoesNotImplyConnectionMode() throws {
+        XCTAssertNil(try status().transferState)
+        let reader = try status(#","transferState":{"version":1,"phase":"saved","kind":"content","percent":100}"#)
+        XCTAssertEqual(reader.transferState?.statusText, "Reader · Content saved")
+        XCTAssertEqual(reader.mode, "STA")
+        let phases = ["idle", "ready", "receiving", "verifying", "saved", "paused", "removed", "failed"]
+        for phase in phases {
+            XCTAssertNotNil(ReaderTransferState(version: 1, phase: phase, kind: "content", percent: 50).statusText)
+        }
+        XCTAssertEqual(ReaderTransferState(version: 1, phase: "saved", kind: "firmware", percent: 100).statusText,
+                       "Reader · Firmware staged, not installed")
+    }
+
+    func testUnknownOrInvalidReaderTransferFeedbackDoesNotClaimSuccess() {
+        for state in [ReaderTransferState(version: 2, phase: "saved", kind: "content", percent: 100),
+                      ReaderTransferState(version: 1, phase: "future", kind: "content", percent: 100),
+                      ReaderTransferState(version: 1, phase: "saved", kind: "unknown", percent: 100),
+                      ReaderTransferState(version: 1, phase: "saved", kind: "content", percent: -1),
+                      ReaderTransferState(version: 1, phase: "saved", kind: "content", percent: 101)] {
+            XCTAssertNil(state.statusText)
+        }
+    }
+
     func testOfflineReaderIsUnnamedAndOffersNothing() {
         let device = DeviceSnapshot.crossPoint(status: nil, isDemo: false,
                                                isConnecting: false, isDirect: false)
@@ -94,7 +117,7 @@ private final class RefusingURLProtocol: URLProtocol {
 }
 
 extension DeviceSnapshotTests {
-    private static let keys = ["Pocket.lastReaderDeviceID", "Pocket.lastReaderHost", PocketModel.autoReconnectKey]
+    @MainActor private static let keys = ["Pocket.lastReaderDeviceID", "Pocket.lastReaderHost", PocketModel.autoReconnectKey]
 
     @MainActor
     private func withRememberedReader(_ body: (PocketModel, RememberedReaderDiscovery) async throws -> Void) async throws {

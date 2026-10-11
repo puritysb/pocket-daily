@@ -139,8 +139,11 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertFalse(city.exists, "Hidden editor inputs must not remain accessible during connection")
         let primary = app.buttons["Find on Same Wi-Fi"]
         XCTAssertTrue(primary.isHittable)
-        XCTAssertGreaterThan(primary.frame.minY, app.windows.firstMatch.frame.maxY * 0.7,
+        let sheet = app.descendants(matching: .any)["content-editor-sheet"].firstMatch
+        XCTAssertTrue(sheet.exists)
+        XCTAssertGreaterThan(primary.frame.minY, sheet.frame.minY + sheet.frame.height * 0.7,
                              "The connection action must remain near the bottom of the sheet")
+        XCTAssertLessThanOrEqual(primary.frame.maxY, sheet.frame.maxY)
         attach(app, "source-connection-actions")
         app.buttons["content-connection-back"].tap()
         XCTAssertTrue(app.staticTexts["Weather & calendar"].waitForExistence(timeout: 5))
@@ -154,6 +157,7 @@ final class PocketFlowTests: XCTestCase {
 
     func testReadingSettingsAreEditableOfflineAndDiscardIsExplicit() {
         let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-empty-discovery"]
         app.launch()
         app.openScreen("Home")
         app.openScreen("Reading")
@@ -171,6 +175,8 @@ final class PocketFlowTests: XCTestCase {
         let homeWeather = app.switches["profile-home-weather"]
         app.revealInStudio(homeWeather)
         homeWeather.tap()
+        XCTAssertTrue(app.buttons["profile-revert"].isEnabled, "The Home edit must be established before testing preservation")
+        let editedWeather = homeWeather.value as? String
         app.openScreen("Reading")
         XCTAssertFalse(app.buttons["profile-revert"].isEnabled, "Reading starts clean despite Home edits")
         let size = app.buttons["profile-text-size"]
@@ -199,6 +205,8 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["profile-canvas"].label.contains("Landscape"))
         XCTAssertTrue(app.buttons["profile-revert"].isEnabled)
         app.openScreen("Home")
+        XCTAssertEqual(homeWeather.value as? String, editedWeather, "Connection must preserve the Home draft")
+        XCTAssertTrue(app.buttons["profile-revert"].isEnabled, "Connection must preserve Home edits")
         app.openScreen("Reading")
         XCTAssertTrue(app.descendants(matching: .any)["profile-canvas"].label.contains("Landscape"))
         app.buttons["profile-revert"].tap()
@@ -237,6 +245,61 @@ final class PocketFlowTests: XCTestCase {
         XCTAssertTrue(connect.waitForExistence(timeout: 5))
         attach(app, "selected-book-task")
         XCTAssertFalse(springboard.alerts.firstMatch.exists, "Preparing must not request network access")
+    }
+
+    func testReaderWiFiFormNeedsPairingAndDoesNotRequestPermissionsOnOpen() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fresh-library"]
+        app.launch()
+        app.open("Manage Reader")
+        let setup = app.buttons["reader-wifi-setup"]
+        XCTAssertTrue(setup.waitForExistence(timeout: 10))
+        setup.tap()
+        let name = app.textFields["reader-wifi-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.secureTextFields["reader-wifi-password"].exists)
+        XCTAssertTrue(app.buttons["reader-wifi-use-current"].exists)
+        XCTAssertFalse(app.buttons["reader-wifi-submit"].isEnabled)
+        XCTAssertFalse(springboard.alerts.firstMatch.exists)
+        attach(app, "qa-reader-wifi-setup")
+        app.buttons["Done"].tap()
+        setup.tap()
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        XCTAssertEqual(name.value as? String, "Wi-Fi name")
+        app.buttons["Done"].tap()
+    }
+
+    func testCurrentWiFiNameOnPhysicalDevice() throws {
+#if targetEnvironment(simulator)
+        throw XCTSkip("Physical device only")
+#else
+        guard ProcessInfo.processInfo.environment["POCKET_HARDWARE_WIFI_LOOKUP"] == "1" else {
+            throw XCTSkip("Requires explicit physical Wi-Fi lookup test")
+        }
+        let app = XCUIApplication()
+        // Preserve the actual user's library, pairing, and reader settings.
+        app.launch()
+        app.open("Manage Reader")
+        let setup = app.buttons["reader-wifi-setup"]
+        XCTAssertTrue(setup.waitForExistence(timeout: 15))
+        setup.tap()
+        let current = app.buttons["reader-wifi-use-current"]
+        XCTAssertTrue(current.waitForExistence(timeout: 5))
+        current.tap()
+        let allowOnce = springboard.buttons.matching(NSPredicate(format:
+            "label == %@ OR label == %@", "Allow Once", "한 번 허용")).firstMatch
+        if allowOnce.waitForExistence(timeout: 4) { allowOnce.tap() }
+        let name = app.textFields["reader-wifi-name"]
+        let filled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let value = name.value as? String else { return false }
+            return !value.isEmpty && value != "Wi-Fi name" && name.isEnabled
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [filled], timeout: 35), .completed,
+                       "SSID lookup requires Wi-Fi and precise location permission")
+        XCTAssertTrue(app.secureTextFields["reader-wifi-password"].exists)
+        XCTAssertFalse(app.buttons["reader-wifi-submit"].isEnabled, "Lookup alone must never send credentials")
+        app.buttons["Done"].tap()
+#endif
     }
 
     func testReaderWorkspaceKeepsInventoryAndSettingsAvailableOffline() {

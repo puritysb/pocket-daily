@@ -506,6 +506,7 @@ final class PocketModel: ObservableObject, DeviceSession {
     private var autoReconnectProbe: Task<Void, Never>?
     // Explicit foreground Connect can wake a bonded reader before LAN discovery.
     // Quiet reconnect probes never raise a sleeping reader's Wi-Fi radio.
+    private(set) var lastWakeFailure: String?
     var wakeSleepingReader: @MainActor (RememberedBluetoothReader) async throws -> Void = { reader in
         try await ReaderWakeConnector().wake(reader)
     }
@@ -1026,6 +1027,68 @@ final class PocketModel: ObservableObject, DeviceSession {
         startVerification(host: "192.168.4.1", port: 80)
     }
 
+    @Published private(set) var isConfiguringReaderWiFi = false
+    @Published private(set) var readerWiFiSetupMessage = ""
+    var sendReaderWiFi: @MainActor (RememberedBluetoothReader, ReaderWiFiCredentials) async throws -> String = { reader, credentials in
+        try await ReaderWakeConnector().configureWiFi(reader, credentials: credentials)
+    }
+
+    var canConfigureReaderWiFi: Bool {
+        !isDemoMode && !isInBackground && !isWorking && !hasReaderWork && !hasDirectSession
+    }
+
+    func configureReaderWiFi(_ credentials: ReaderWiFiCredentials) {
+        guard !isDemoMode, !isInBackground, !isWorking, !hasReaderWork, !hasDirectSession,
+              credentials.validationMessage == nil, let reader = bluetoothLink.rememberedReader,
+              admitNetwork(direct: false) else { return }
+        connectionAttempt += 1
+        let attempt = connectionAttempt
+        isConfiguringReaderWiFi = true
+        readerWiFiSetupMessage = "Preparing a secure Bluetooth connection…"
+        startReaderWork(attempt: attempt, kind: .connection) { [self] _ in
+            defer { isConfiguringReaderWiFi = false }
+            do {
+                if let status = readerStatus {
+                    guard status.deviceID == reader.readerID, status.wifiSetup == 1 else {
+                        readerWiFiSetupMessage = "This reader needs firmware with app Wi-Fi setup support."
+                        return
+                    }
+                    try await client.prepareReaderWiFi(deviceID: reader.readerID, host: activeHost, port: activeHTTPPort)
+                    readerStatus = nil
+                    mirror.apply(.connection(.searching))
+                    try await Task.sleep(for: .seconds(3))
+                }
+                try Task.checkCancellation()
+                let requestID: String
+                do { requestID = try await sendReaderWiFi(reader, credentials) }
+                catch ReaderWakeConnector.Failure.wifiOutcomeUnknown(let sentID) { requestID = sentID }
+                readerWiFiSetupMessage = "Details sent securely. Waiting for the reader to connect and save…"
+                expectedDeviceID = reader.readerID
+                // Command acceptance is not successful association or persistence.
+                // Observe the matching result once; never resend an ambiguous write.
+                for _ in 0..<3 {
+                    try await Task.sleep(for: .seconds(5))
+                    guard attempt == connectionAttempt else { throw CancellationError() }
+                    await discoverReader(attempt: attempt, retryIfMissing: false)
+                    if let status = readerStatus, status.deviceID == reader.readerID,
+                       let receipt = status.wifiSetupResult, let message = receipt.message(for: requestID) {
+                        readerWiFiSetupMessage = message
+                        return
+                    }
+                }
+                readerWiFiSetupMessage = "Wi-Fi setup could not be confirmed. Check the name, password and this device’s Wi-Fi, then retry. The reader may already have saved the network."
+            } catch is CancellationError {
+                readerWiFiSetupMessage = "Verification stopped. The reader may still be connecting. Reconnect to check before retrying."
+            } catch ReaderWakeConnector.Failure.unsupported {
+                readerWiFiSetupMessage = "This reader needs firmware with app Wi-Fi setup support. No Wi-Fi details were sent."
+            } catch ReaderWakeConnector.Failure.wrongReader {
+                readerWiFiSetupMessage = "Bluetooth reached a different reader. No Wi-Fi details were sent. Select and pair the correct reader."
+            } catch {
+                readerWiFiSetupMessage = "Wi-Fi setup could not be confirmed. Keep the paired reader in Bluetooth standby or Direct connection, check its firmware and try again."
+            }
+        }
+    }
+
     func startConnectionSearch() {
         guard admitNetwork(direct: false) else { return }
         guard !isWorking, !hasReaderWork, !hasDirectSession else { return }
@@ -1077,6 +1140,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                                     bonjourTask: Task<(host: String, port: Int)?, Never>, wakeIfNeeded: Bool) async {
         guard !Task.isCancelled, attempt == connectionAttempt else { return }
         post("Checking your current Wi-Fi without changing networks…")
+        if wakeIfNeeded { lastWakeFailure = nil }
         let lastHost = discoveryIO.rememberedHost
         let bondedReader = wakeIfNeeded ? bluetoothLink.rememberedReader : nil
         if let bondedReader { expectedDeviceID = bondedReader.readerID }
@@ -1114,6 +1178,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                 }
             } catch is CancellationError { return }
             catch {
+                lastWakeFailure = error.localizedDescription
                 // Older firmware and a lost BLE acknowledgement can still be
                 // reachable on LAN. Inspect it; never repeat the wake command.
             }
@@ -1657,13 +1722,16 @@ final class PocketModel: ObservableObject, DeviceSession {
         let model = PocketHardware(deviceName: status.device)?.rawValue
         let started = startReaderWork(attempt: attempt, kind: .inventory) { [self] owner in
             var files: [ReaderInventory.File] = []
+            var unavailableFolders: [String] = []
             do {
                 if (status.readerFiles ?? 0) >= 1 {
                     for folder in ReaderInventory.folders {
                         do {
                             files += try await readerFolder(folder, identity: identity, host: host, port: port)
+                        } catch ReaderStorageError.folderNotFound where folder != "/" {
+                            continue // The reader creates destination folders on first use.
                         } catch where folder != "/" && !(error is CancellationError) {
-                            continue
+                            unavailableFolders.append(folder)
                         }
                     }
                 }
@@ -1672,7 +1740,8 @@ final class PocketModel: ObservableObject, DeviceSession {
                 guard ownsReaderWork(owner, attempt: attempt) else { return }
                 readerInventory = ReaderInventory(deviceID: identity, model: model, files: files,
                                                   reading: reading, readAt: Date())
-                readerInventoryError = nil
+                readerInventoryError = unavailableFolders.isEmpty ? nil
+                    : "Some files could not be checked (\(unavailableFolders.joined(separator: ", "))). Refresh to try again."
             } catch {
                 guard ownsReaderWork(owner, attempt: attempt), !Task.isCancelled else { return }
                 readerInventoryError = error.localizedDescription
@@ -1743,6 +1812,10 @@ final class PocketModel: ObservableObject, DeviceSession {
             pages += 1
             try Task.checkCancellation()
         } while cursor != 0 && pages < 64
+        guard cursor == 0 else {
+            throw CrossPointClient.ClientError.unexpectedMessage(
+                "The reader file list is too long to check completely. Browse a smaller folder and try again.")
+        }
         return files
     }
 

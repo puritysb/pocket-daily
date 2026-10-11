@@ -20,6 +20,7 @@ IPAD_NAME="${POCKET_IPAD_SIMULATOR:-iPad Pro 13-inch (M5)}"
 DERIVED_DATA="${POCKET_SCREENSHOT_DERIVED_DATA:-.build/screenshots}"
 # Allow capture-only runs after functional UI tests have been run separately.
 TEST_TARGET="${POCKET_SCREENSHOT_TEST_TARGET:-PocketUITests}"
+REPORT_DIR="${POCKET_SCREENSHOT_REPORT_DIR:-$DERIVED_DATA/capture-reports/$(date -u +%Y%m%dT%H%M%S)-$$}"
 WORK="$(mktemp -d)"
 finish() {
   local status=$?
@@ -30,6 +31,8 @@ finish() {
   fi
 }
 trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 simulator_udid() {
   xcrun simctl list devices available -j | \
@@ -74,6 +77,18 @@ capture_mac() {
 
 publish() {
   local folder="$1" width="$2" height="$3"
+  mkdir -p "$REPORT_DIR"
+  xcrun xcresulttool get test-results summary --path "$WORK/$folder.xcresult" --compact | \
+    python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+if d["result"] != "Passed" or d["failedTests"] != 0 or d["passedTests"] < 1:
+    raise SystemExit("Capture tests did not produce a passing result")
+keys = ("result", "passedTests", "failedTests", "skippedTests", "totalTestCount", "testFailures")
+json.dump({k: d[k] for k in keys}, sys.stdout, indent=2)
+' \
+    > "$REPORT_DIR/$folder.json.tmp"
+  mv "$REPORT_DIR/$folder.json.tmp" "$REPORT_DIR/$folder.json"
   local target="appstore/screenshots/en-US/$folder"
   local export="$WORK/$folder-attachments"
   xcrun xcresulttool export attachments --path "$WORK/$folder.xcresult" --output-path "$export" >/dev/null
@@ -90,9 +105,24 @@ publish() {
   done < <(jq -r '.[].attachments[] | [.exportedFileName, .suggestedHumanReadableName] | @tsv' "$export/manifest.json")
   (( count > 0 )) || { echo "ERROR: no screenshots were exported for $folder." >&2; exit 1; }
   echo "Wrote $count screenshots to $target"
+  echo "Test summary: $REPORT_DIR/$folder.json"
 }
 
-capture_ios "$IPHONE_NAME" iphone-6.9 1320 2868
-capture_ios "$IPAD_NAME" ipad-13 2064 2752
-capture_mac
+# A failed/interrupted device group can resume without repeating completed groups.
+# Default remains the full set. Existing other-platform captures are still validated.
+PLATFORMS="${POCKET_SCREENSHOT_PLATFORMS:-iphone ipad mac}"
+[[ "$PLATFORMS" =~ [^[:space:]] ]] || { echo "ERROR: no screenshot platforms selected." >&2; exit 1; }
+for platform in $PLATFORMS; do
+  case "$platform" in
+    iphone|ipad|mac) ;;
+    *) echo "ERROR: unknown screenshot platform '$platform'." >&2; exit 1 ;;
+  esac
+done
+for platform in $PLATFORMS; do
+  case "$platform" in
+    iphone) capture_ios "$IPHONE_NAME" iphone-6.9 1320 2868 ;;
+    ipad) capture_ios "$IPAD_NAME" ipad-13 2064 2752 ;;
+    mac) capture_mac ;;
+  esac
+done
 ./scripts/validate_app_store.sh

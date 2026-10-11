@@ -267,7 +267,7 @@ struct ContentView: View {
             .frame(width: 500, height: 480)
 #endif
             .onChange(of: model.device.isConnected) { _, connected in
-                if connected { showingConnection = false }
+                if connected && !model.isConfiguringReaderWiFi { showingConnection = false }
             }
         }
     }
@@ -735,6 +735,12 @@ struct ContentView: View {
                     .fixedSize()
                     .accessibilityLabel("Reader Options")
                     .accessibilityIdentifier("reader-management-menu")
+                }
+                if !model.isDemoMode, !model.isWorking, let transfer = model.readerStatus?.transferState?.statusText {
+                    Text(transfer)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("overview-transfer-status")
                 }
                 if let paired = readerLink.rememberedReader, !model.isDemoMode {
                     // One Bluetooth line: what it is, and when it last worked.
@@ -1347,6 +1353,7 @@ struct ConnectionInspector: View {
     @State private var confirmingDirectConnection = false
     @State private var otherMethods = false
     @State private var confirmingEndSession = false
+    @State private var showingWiFiSetup = false
 
     var body: some View {
         Group {
@@ -1377,6 +1384,9 @@ struct ConnectionInspector: View {
                   !model.isDemoMode, !model.isWorking, !model.canCancelConnection,
                   !model.isCancellingConnection, !model.hasDirectSession else { return }
             onConnect()
+        }
+        .sheet(isPresented: $showingWiFiSetup) {
+            ReaderWiFiSetupView(model: model, nearby: nearby, link: readerLink)
         }
         .confirmationDialog("End session with \(model.readerStatus?.device ?? "Reader")?",
                             isPresented: $confirmingEndSession, titleVisibility: .visible) {
@@ -1434,6 +1444,12 @@ struct ConnectionInspector: View {
             Text("Stopping connection…").font(.callout).foregroundStyle(.secondary)
         }
         actions
+        if !model.isDemoMode && !model.hasDirectSession {
+            Button("Set Up Reader Wi-Fi…", systemImage: "wifi") { showingWiFiSetup = true }
+                .buttonStyle(.borderless).font(.callout)
+                .accessibilityIdentifier("reader-wifi-setup")
+                .disabled(!model.canConfigureReaderWiFi)
+        }
         if let lease = nearby.hotspotLease, model.manualHotspotFallback {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Manual Wi-Fi fallback").font(.caption.weight(.semibold))

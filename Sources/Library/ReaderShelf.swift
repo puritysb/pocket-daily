@@ -16,8 +16,8 @@ struct ReaderInventory: Equatable, Sendable {
     var reading: [ReaderReadingEntry]
     let readAt: Date
 
-    /// Library books go to the SD root and articles to `/Articles` (`PocketModel.destination`).
-    static let folders = ["/", "/Articles"]
+    /// Include the reader's usual Books folder as well as the app's destinations.
+    static let folders = ["/", "/Books", "/Articles"]
     /// Book files a reader shelf shows; XTC is the reader's own pre-rendered format.
     static let bookExtensions: Set<String> = ["epub", "txt", "md", "xtc"]
 }
@@ -60,16 +60,19 @@ struct ReaderShelf: Equatable {
             let name = (file.path as NSString).lastPathComponent
             guard ReaderInventory.bookExtensions.contains((name as NSString).pathExtension.lowercased()) else { continue }
             let book = books.first { $0.fileName == name && $0.byteCount == file.size }
-            items[file.path] = Item(path: file.path, size: file.size, percentage: nil, bookID: book?.id)
+            items[file.path.lowercased()] = Item(path: file.path, size: file.size, percentage: nil, bookID: book?.id)
         }
         for entry in inventory.reading {
             let book = byDigest[entry.document.lowercased()]
             guard let key = entry.path ?? book.map({ "#" + $0.documentDigest }) else { continue }
-            var item = items[key] ?? Item(path: key, size: nil, percentage: nil, bookID: nil)
+            // FAT paths are case-insensitive. Recent-reading paths may use
+            // `/books` while file enumeration uses `/Books`; merge their data.
+            let lookup = key.lowercased()
+            var item = items[lookup] ?? Item(path: key, size: nil, percentage: nil, bookID: nil)
             item.percentage = entry.percentage
             item.document = entry.document.lowercased()
             if let book { item.bookID = book.id }
-            items[key] = item
+            items[lookup] = item
         }
         self.items = items.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }

@@ -34,7 +34,7 @@
     "package_validation": "scripts/validate_app_store.sh passed",
     "signed_export": "2026-10-09: scripts/package_app_store.sh exported and verified the final closeout product source (0c93a4f plus the changes committed with this record): arm64 iOS IPA, Apple Distribution and store profile, parent/share-extension App Group profiles matched; universal sandboxed macOS PKG, distribution and installer signed. IPA SHA-256 785525f75004db850e15ab7267a9bdd3416b14366c17219d0272ddbd1e6e58a1; PKG SHA-256 f0b1eeeb431b142a36a9200f656711ebaecf1b1cf6171dff8c5d6f3c00bf53b4. Local evidence: .build/app-store/final-20261009-v2/release-evidence.json. Nothing was uploaded.",
     "public_urls": "Marketing, support, and privacy URLs returned HTTP 200 on 2026-09-06",
-    "next_step": "Finish physical iPhone transfer/standby, X4, direct Wi-Fi and reading-continuity acceptance; complete App Store Connect fields, upload the verified builds, run TestFlight and add a physical reader video."
+    "next_step": "Regenerate signed exports after the transfer-state feedback and reader-inventory fixes and final interface acceptance; the recorded IPA/PKG predate those fixes. Finish iPhone transfer/standby, X4, direct Wi-Fi and reading-continuity acceptance; complete App Store Connect fields, upload verified builds, run TestFlight and add a physical reader video."
   },
   "account_fields_still_required": [
     "App Store Connect app record and Apple-generated app ID",

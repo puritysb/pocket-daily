@@ -110,6 +110,10 @@ plutil -extract NSPrivacyTracking raw Sources/PrivacyInfo.xcprivacy | grep -qx f
   fail "PrivacyInfo.xcprivacy must declare tracking as false."
 plutil -extract NSLocationUsageDescription raw Support/PocketMac-Info.plist >/dev/null || \
   fail "The macOS Info.plist is missing NSLocationUsageDescription."
+plutil -extract NSLocationWhenInUseUsageDescription raw Support/Pocket-Info.plist >/dev/null || \
+  fail "The iOS Info.plist is missing the current Wi-Fi lookup purpose string."
+plutil -extract 'com\.apple\.developer\.networking\.wifi-info' raw Support/Pocket.entitlements | grep -qx true || \
+  fail "The iOS app needs Access Wi-Fi Information for current-network lookup."
 plutil -extract ITSAppUsesNonExemptEncryption raw Support/Pocket-Info.plist | grep -qx false || \
   fail "iOS export-compliance flag is not false."
 plutil -extract ITSAppUsesNonExemptEncryption raw Support/PocketMac-Info.plist | grep -qx false || \

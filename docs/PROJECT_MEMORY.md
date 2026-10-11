@@ -4,6 +4,26 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## X3 interface and unattended verification — 2026-10-11
+
+- App Wi-Fi setup uses an existing encrypted BLE bond; only a matching reader
+  association/persistence receipt confirms success. Current SSID lookup is
+  explicit; Mac saved-password lookup stays in the OS keychain permission flow.
+  Credentials are not stored in app defaults or sent by HTTP. See
+  `docs/READER_WIFI_SETUP.md` and the sibling firmware contract.
+- Final physical Mac/X3 acceptance: sibling
+  `build/dev-pipeline-runs/20261011T011839-f8c099/report.json`: ten interface cases,
+  13 native framebuffer captures (Home/Brief/card/EPUB/actual timer sleep), exact
+  image/restore checks, offline OCR and original data restoration passed.
+  X3 BLE standby passed at 9% while charging; app reconnect 12.876 s. Charging
+  allows strictly above 5%, otherwise above 10%; physical unplug/current draw
+  remain unmeasured. Firmware host tests: 914 passed.
+- Shared Wi-Fi, BLE, inventory and capture tests now belong to the Mac test target
+  and physical-only aggregate: 83 Mac tests passed, no simulator required.
+  iPhone/X4 expansion and release preparation remain deferred. Framebuffer
+  evidence does not establish optical panel quality or all EPUB/page-turn cases.
+  `docs/CURRENT_HANDOFF.md` records exact installed artifacts and limitations.
+
 ## Design closeout and physical verification — 2026-10-09
 
 - Wide reader navigation uses a quiet navigation-title token (Mac 17pt/iPad

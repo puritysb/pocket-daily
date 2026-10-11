@@ -25,6 +25,17 @@ generated from the built-in local demo by `scripts/capture_screenshots.sh`
 dimensions: six for iPhone, seven for iPad and six for Mac. The same set may be
 uploaded to both storefront localizations.
 
+Reader Wi-Fi setup now accepts a user-selected SSID/password and sends it only
+over authenticated BLE to compatible firmware. Bluetooth purpose strings,
+privacy policy and review notes describe it. Use Current Wi-Fi optionally fills
+in the SSID with location authorization. The iOS app now requires Access Wi-Fi
+Information in its signing profile and exported entitlements; macOS retains its
+existing sandbox/location entitlements. Mac can fill the saved password through
+CoreWLAN and system keychain authorization; iOS/iPadOS keep manual password entry.
+See [the implementation and App Store assessment](../docs/READER_WIFI_SETUP.md).
+Existing signed exports below predate this feature and must be regenerated
+before any upload. No upload or submission is authorized by these local checks.
+
 ## Locally verified release evidence
 
 - On 2026-10-09 the final closeout product source passed 543 iOS unit tests:
@@ -39,7 +50,8 @@ uploaded to both storefront localizations.
 - Local artifacts and full SHA-256 evidence are under
   `.build/app-store/final-20261009-v2/`; `appstore/submission.json` records the
   hashes. The evidence names pre-commit HEAD `0c93a4f` plus this closeout's
-  working changes. No product code changed after these builds.
+  working changes. These exports predate the subsequent transfer-state feedback
+  and reader-inventory fixes; re-export after final interface acceptance.
 - Mac/X3 Same Wi-Fi connection, inventory and generated EPUB byte-for-byte
   transfer passed; controlled BLE standby wake passed separately. Physical
   iPhone connection/inventory passed earlier, but expanded tests were blocked

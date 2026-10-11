@@ -1,6 +1,8 @@
 import AppKit
 import SwiftUI
 import XCTest
+import CoreWLAN
+import Security
 
 @testable import Pocket
 
@@ -12,6 +14,35 @@ import XCTest
 /// to draw itself needs no permission at all, and unlike `ImageRenderer` it lays out the
 /// scroll views the studio is built from.
 final class PocketMacScreenshotTests: XCTestCase {
+    /// Opt-in diagnostic for the signed, sandboxed Mac test host. Never attach
+    /// an SSID or password. Authorization UI requires a separate explicit opt-in.
+    @MainActor
+    func testSavedWiFiPasswordAvailabilityOnPhysicalMac() async throws {
+        guard ProcessInfo.processInfo.environment["POCKET_HARDWARE_WIFI_PASSWORD_PROBE"] == "1" else {
+            throw XCTSkip("Requires an explicit real-Mac keychain diagnostic")
+        }
+        let name = await CurrentWiFiName().read()
+        let ssid = try XCTUnwrap(name, "Current Wi-Fi name must be available")
+        var previous: DarwinBoolean = false
+        XCTAssertEqual(SecKeychainGetUserInteractionAllowed(&previous), errSecSuccess)
+        let allowPrompt = ProcessInfo.processInfo.environment["POCKET_HARDWARE_WIFI_PASSWORD_PROMPT"] == "1"
+        XCTAssertEqual(SecKeychainSetUserInteractionAllowed(allowPrompt), errSecSuccess)
+        defer { SecKeychainSetUserInteractionAllowed(previous.boolValue) }
+        var outcomes: [[String: Any]] = []
+        for (label, domain) in [("system", CWKeychainDomain.system), ("user", .user)] {
+            var password: NSString?
+            let status = CWKeychainFindWiFiPassword(domain, Data(ssid.utf8), &password)
+            outcomes.append(["domain": label, "status": status, "interactionAllowed": allowPrompt,
+                             "passwordAvailable": status == errSecSuccess && (password?.length ?? 0) > 0])
+            password = nil
+        }
+        let data = try JSONSerialization.data(withJSONObject: outcomes, options: [.sortedKeys])
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = "wifi-password-availability-no-credentials"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     /// 1440 × 900 points at the 2× backing scale is 2880 × 1800, an accepted Mac size.
     private static let pointSize = NSSize(width: 1440, height: 900)
 
@@ -91,6 +122,8 @@ final class PocketMacScreenshotTests: XCTestCase {
                              name: "qa-device-no-reader-dark", size: Self.pointSize, dark: true)
         try await renderView(ContentView(initialSection: .reader).environmentObject(model),
                              name: "qa-reader-overview", size: Self.pointSize)
+        try await renderView(ReaderWiFiSetupView(model: model, nearby: NearbySyncController(), link: model.bluetoothLink),
+                             name: "qa-reader-wifi-setup", size: NSSize(width: 500, height: 650))
         let demoReader = PocketModel()
         demoReader.enterDemoMode()
         try await renderView(ContentView(initialSection: .reader).environmentObject(demoReader),

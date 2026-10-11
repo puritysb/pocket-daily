@@ -21,6 +21,11 @@ struct ReaderInventoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             InspectorCard(title: "Books and articles", symbol: "books.vertical") {
+                if let error = model.readerInventoryError {
+                    PocketStatusLabel(error, tone: .failure).font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("inventory-error")
+                }
                 if let shelf {
                     HStack {
                         Text("\(shelf.readerModel ?? "Reader") · checked \(shelf.readAt.formatted(.relative(presentation: .named)))")
@@ -116,9 +121,6 @@ struct ReaderInventoryView: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 if let error = library.error {
-                    PocketStatusLabel(error, tone: .failure).font(.caption)
-                }
-                if let error = model.readerInventoryError {
                     PocketStatusLabel(error, tone: .failure).font(.caption)
                 }
             }

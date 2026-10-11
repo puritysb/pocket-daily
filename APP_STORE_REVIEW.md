@@ -145,6 +145,37 @@ stored by the app and are sent only to the user's reader over the local
 connection. Editing a source stays local until explicitly applied. Both sources
 are optional; an explicit apply after disabling them can clear the reader content.
 
+## Reader Wi-Fi setup
+
+My Reader → More → Manage Reader → Set Up Reader Wi-Fi lets the user enter an SSID and
+personal-network password on iOS/iPadOS/macOS. It uses public CoreBluetooth APIs
+and the existing Bluetooth permission. Use Current Wi-Fi reads only the SSID using
+CoreWLAN on macOS and NEHotspotNetwork.fetchCurrent on iOS/iPadOS. This explicit
+button requests location authorization (Precise Location on iOS) and the iOS
+app includes Access Wi-Fi Information. Opening the form does not request it;
+denial keeps manual entry available. No coordinates or location updates are read.
+On Mac the same explicit button uses CWKeychainFindWiFiPassword for the current
+SSID only; macOS controls any keychain authentication prompt. It never changes
+keychain ACLs or reads other saved networks. Failure retains manual entry.
+The app does not use HotspotHelper or change the Apple device's Wi-Fi. A matching paired reader with WIFI1 firmware receives credentials
+only through encrypted, MITM-authenticated BLE. HTTP can request the transition
+to Bluetooth but never accepts credentials. First pairing requires the system
+passkey prompt. Firmware confirms association and SD persistence separately from
+command acceptance. Demo mode never transmits credentials or mutates a reader.
+The feature requires compatible firmware; legacy firmware is rejected before
+credential transmission. Review without hardware uses the existing demo.
+
+Assessment checked 2026-10-09 against [2.5.1 and 5.1.1](https://developer.apple.com/app-store/review/guidelines/):
+public APIs, accurate Bluetooth purpose strings, user-initiated credential use,
+local-only handling and updated privacy text. This is an implementation review,
+not App Review approval. Apple also offers Wi-Fi Infrastructure sharing on newer
+iOS versions, but customer use requires an EU account and a device in the EU.
+This release uses optional SSID lookup on both platforms, optional system-authorized
+password autofill on Mac, and manual password entry on iOS/iPadOS.
+Before distribution, regenerate the iOS signing profile with Access Wi-Fi
+Information and verify that the exported IPA carries the entitlement. Simulator
+builds do not establish that the distribution profile supports it.
+
 ## Privacy
 
 Bluetooth, local-network, and location purpose strings describe the direct

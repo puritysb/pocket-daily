@@ -58,7 +58,7 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Pocket Daily uses Bluetooth to find and securely pair with your nearby reader, and to keep your reading places in step with that paired reader.</string>
+	<string>Pocket Daily uses Bluetooth to securely pair with your reader, send Wi-Fi details you choose, and keep your reading places in step.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_crosspoint._tcp</string>
@@ -68,6 +68,6 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Pocket Daily connects directly to your X3/X4 reader to send books, screens, and firmware.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>Pocket Daily uses location permission only to find and join your nearby reader's temporary Wi-Fi network.</string>
+	<string>Pocket Daily uses location permission to fill in your current Wi-Fi name or find your reader's temporary Wi-Fi network. Your coordinates are not read or stored.</string>
 </dict>
 </plist>
