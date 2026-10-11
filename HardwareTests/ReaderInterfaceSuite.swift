@@ -27,6 +27,8 @@ final class ReaderInterfaceSuite {
     var ownedBookSizes: [UUID: Int64] = [:]
     var baseline: [String: Int64] = [:]
     var receivingLibrary: LibraryModel?
+    var downloadEvidence: [[String: Any]] = []
+    var networkEvidence: [[String: Any]] = []
 
     init(model: PocketModel, client: CrossPointClient, host: String, identity: String, run: UInt32,
          idle: @escaping () -> Bool) {
@@ -172,6 +174,11 @@ final class ReaderInterfaceSuite {
 #else
             if let index = Self.caseIDs.firstIndex(of: "folder-copy") { results[index]["state"] = "not-applicable" }
 #endif
+            if ProcessInfo.processInfo.environment["POCKET_HARDWARE_NETWORK_FAULTS"] == "1" {
+                for point in ["receiving", "published"] {
+                    try await networkRecovery(book: large, library: library, point: point)
+                }
+            }
             try await record("inventory-preservation") {
                 try await cleanupFiles()
                 let after = try await fileMap()
@@ -184,6 +191,62 @@ final class ReaderInterfaceSuite {
             catch { throw Failure(message: "\(original.localizedDescription); cleanup also failed: \(error.localizedDescription). Recovery artifacts: \(root.path)") }
             throw original
         }
+    }
+
+    func faultRequest(point: String? = nil, size: Int64 = 0) async throws -> [String: Any] {
+        var parts = try XCTUnwrap(URLComponents(string: "http://\(host)/api/pocket/v1/dev/network-fault"))
+        parts.queryItems = [URLQueryItem(name: "deviceID", value: identity)]
+        if let point {
+            parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "run", value: String(run)),
+                URLQueryItem(name: "point", value: point), URLQueryItem(name: "size", value: String(size))]
+        }
+        var request = URLRequest(url: try XCTUnwrap(parts.url))
+        request.httpMethod = point == nil ? "GET" : "POST"
+        request.timeoutInterval = 10
+        let (data, reply) = try await URLSession.shared.data(for: request)
+        try check((reply as? HTTPURLResponse)?.statusCode == 200, "Network fault endpoint rejected trial")
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    func networkRecovery(book: LibraryBook, library: LibraryModel, point: String) async throws {
+        print("POCKET_NETWORK_FAULT \(point) running")
+        let id = try await prepare([book], library: library)
+        let armed = try await faultRequest(point: point, size: book.byteCount)
+        try check(armed["run"] as? UInt32 == run && armed["state"] as? Int == 1, "Fault was not armed for this run")
+        model.sendBookTransferJob(id)
+        try await wait("interrupted transfer drain", seconds: 180) { idle() && !model.isWorking }
+        let firstStage = model.bookTransferJob(id)?.stage.rawValue ?? "missing"
+        var attempts = 1
+        if model.bookTransferJob(id)?.stage != .completed {
+            // Invoke the normal foreground recovery/retry, using the same job.
+            // The publication ledger must prevent a second send after a lost ACK.
+            model.startConnectionSearch()
+            try await wait("network return", seconds: 100) {
+                self.model.readerStatus?.deviceID == self.identity && self.idle() && !self.model.isWorking
+            }
+            try check(model.canSendBookTransferJob(id), "Interrupted job cannot be retried")
+            attempts += 1
+            try await send(id)
+        }
+        let job = try XCTUnwrap(model.bookTransferJob(id))
+        try check(job.stage == .completed && job.savedCount == 1, "Recovered transfer was not confirmed")
+        let path = try XCTUnwrap(job.items.first?.publishedPath)
+        ownedFiles[path] = book.byteCount
+        var evidence = try await faultRequest()
+        evidence["firstJobStage"] = firstStage; evidence["appSendAttempts"] = attempts
+        networkEvidence.append(evidence)
+        try check(evidence["run"] as? UInt32 == run && evidence["point"] as? String == point
+            && evidence["state"] as? Int == 4 && evidence["sawOffline"] as? Bool == true
+            && (evidence["outageMs"] as? Int ?? 0) >= 5000, "Missing actual Wi-Fi outage and recovery")
+        try check(evidence["publications"] as? Int == 1, "Missing or repeated publication")
+        if point == "receiving" {
+            try check((evidence["resumed"] as? Int ?? 0) >= 65536, "Interrupted transfer restarted instead of resuming")
+        }
+        let original = try await library.fileURL(for: book)
+        try await download(path: path, book: book, original: original, library: library)
+        try await feedbackIdle()
+        networkEvidence[networkEvidence.count - 1]["passed"] = true
+        print("POCKET_NETWORK_FAULT \(point) passed")
     }
 
     func prepare(_ books: [LibraryBook], library: LibraryModel) async throws -> UUID {
@@ -226,15 +289,21 @@ final class ReaderInterfaceSuite {
         }
     }
     func download(path: String, book: LibraryBook, original: URL, library: LibraryModel) async throws {
-        try check(model.canDownloadFromReader, "App download was not available after the reader lane drained")
+
         var result: Result<URL, Error>?
+        var callbacks = 0
+        defer {
+            var detail = model.readerDownloadOperation?.diagnostics ?? ["phase": "missing"]
+            detail["callbacks"] = callbacks
+            downloadEvidence.append(detail)
+        }
         let started = Date()
         // The interrupted-transfer fixture is much larger than the small EPUBs.
         // Bound total time by size, but still fail promptly if byte progress stops.
         let deadline = started.addingTimeInterval(min(600, max(120, Double(book.byteCount) / 2048 + 60)))
         var lastProgress = started
         var received: Int64 = 0
-        model.downloadFromReader(path: path, size: book.byteCount, document: book.documentDigest) { result = $0 }
+        model.downloadFromReader(path: path, size: book.byteCount, document: book.documentDigest) { callbacks += 1; result = $0 }
         while result == nil {
             let current = model.readerDownload?.received ?? received
             if current != received { received = current; lastProgress = Date() }
@@ -246,6 +315,7 @@ final class ReaderInterfaceSuite {
             try await Task.sleep(for: .milliseconds(100))
         }
         try await drained()
+        try check(callbacks == 1, "Download callback must complete exactly once")
         let file = try XCTUnwrap(result).get()
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
         try check(FileManager.default.contentsEqual(atPath: original.path, andPath: file.path), "Downloaded EPUB bytes differ")

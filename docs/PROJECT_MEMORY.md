@@ -4,6 +4,24 @@ This is curated, repository-owned context for future work sessions. It is not a
 chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
+## Download completion and actual transfer outages — 2026-10-12
+
+- Downloads now complete exactly once even when admission fails or the reader
+  lane cancels before I/O starts. Identifier-free diagnostics retain phases,
+  bytes/requests, busy/restart counts and failed-stage/error evidence. These
+  fix confirmed silent completion paths; the earlier 120 s timeout's exact
+  trigger remains unconfirmed.
+- `--interface-suite --network-faults` passed on X3 in firmware run
+  `20261011T173129-98ca79`: real Wi-Fi association loss for 8.979 s while receiving
+  resumed at 65536 B; 9.020 s loss after publication recovered the receipt.
+  Both jobs completed on the initial app send, with one publication each and
+  exact 853319 B download comparison. All 10 interface cases and inventory
+  restoration passed; all six downloads delivered one terminal callback.
+- Mac 100 passed/3 opt-in skipped, firmware host 920 and Python 131 passed;
+  iOS device-SDK build, strict cppcheck, default and standby builds passed.
+  Installed developer firmware: `89d8310c-ble-standby-w079b67ca`. No simulator,
+  user hardware intervention, router reboot/DHCP-change or iPhone/X4 acceptance.
+
 ## Foreground wake recovery and full regression — 2026-10-12
 
 - Foreground wake now cancels a stalled pending BLE connection once after 8 s,

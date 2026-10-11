@@ -318,3 +318,70 @@ final class ReaderFilePieceRequestTests: XCTestCase {
         catch { XCTAssertEqual(error as? ReaderDownloadError, .malformedPiece) }
     }
 }
+
+@MainActor
+final class ReaderDownloadOperationTests: XCTestCase {
+    func testCancelledBeforeBodyCompletesExactlyOnce() {
+        var callbacks = 0
+        let operation = ReaderDownloadOperation(size: 20) { result in
+            callbacks += 1
+            guard case .failure(let error) = result else { return XCTFail("Unexpected success") }
+            XCTAssertEqual(error as? ReaderDownloadError, .interrupted)
+        }
+        operation.drained()
+        operation.drained()
+        operation.finish(.success(URL(fileURLWithPath: "/unused")), phase: .completed)
+        XCTAssertEqual(callbacks, 1)
+        XCTAssertEqual(operation.phase, .cancelled)
+        XCTAssertEqual(operation.requests, 0)
+    }
+
+    func testProgressDistinguishesBusyRestartAndCompletedDownload() {
+        var callbacks = 0
+        let operation = ReaderDownloadOperation(size: 20) { _ in callbacks += 1 }
+        operation.note(.request); operation.note(.busy)
+        XCTAssertEqual(operation.phase, .waitingForReader)
+        operation.note(.request); operation.note(.received(10)); operation.note(.restart)
+        XCTAssertEqual(operation.received, 0)
+        operation.note(.request); operation.note(.received(20)); operation.note(.saving)
+        XCTAssertEqual(operation.phase, .saving)
+        operation.note(.verifying)
+        operation.finish(.success(URL(fileURLWithPath: "/unused")), phase: .completed)
+        operation.drained(); operation.note(.busy)
+        XCTAssertEqual(callbacks, 1)
+        XCTAssertEqual(operation.requests, 3)
+        XCTAssertEqual(operation.busyReplies, 1)
+        XCTAssertEqual(operation.restarts, 1)
+        XCTAssertEqual(operation.received, 20)
+        XCTAssertEqual(operation.phase, .completed)
+    }
+
+    func testNetworkTimeoutRetainsFailedStageAndBytes() {
+        let operation = ReaderDownloadOperation(size: 20) { _ in }
+        operation.note(.request); operation.note(.received(10)); operation.note(.request)
+        operation.finish(.failure(URLError(.timedOut)), phase: .failed)
+        XCTAssertEqual(operation.failurePhase, .fetching)
+        XCTAssertEqual(operation.errorCode, URLError.timedOut.rawValue)
+        XCTAssertEqual(operation.received, 10)
+        operation.drained()
+        XCTAssertEqual(operation.phase, .failed)
+    }
+
+    func testRejectedDownloadAlwaysCompletes() throws {
+        let name = "Pocket.download-rejection." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = PocketModel(sessionStorage: ReaderSessionStorage(root: folder, defaults: defaults))
+        defer { model.pauseForBackground() }
+        var callbacks = 0
+        model.downloadFromReader(path: "/unused.epub", size: 20, document: nil) { result in
+            callbacks += 1
+            guard case .failure(let error) = result else { return XCTFail("Unexpected success") }
+            XCTAssertEqual(error as? ReaderDownloadError, .unavailable)
+        }
+        XCTAssertEqual(callbacks, 1)
+        XCTAssertEqual(model.readerDownloadOperation?.phase, .rejected)
+    }
+}

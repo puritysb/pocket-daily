@@ -316,10 +316,14 @@ final class ReaderHardwareTests: XCTestCase {
                 do { try await suite.runAll() }
                 catch {
                     evidence["interfaceCases"] = suite.results
+                    evidence["downloads"] = suite.downloadEvidence
+                    evidence["networkFaults"] = suite.networkEvidence
                     evidence["interfaceRecoveryArtifacts"] = suite.root.path
                     throw error
                 }
                 evidence["interfaceCases"] = suite.results
+                evidence["downloads"] = suite.downloadEvidence
+                evidence["networkFaults"] = suite.networkEvidence
             }
 #if os(macOS)
             if env["POCKET_HARDWARE_SCREENS"] == "1" {

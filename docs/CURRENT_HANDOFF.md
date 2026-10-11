@@ -1,5 +1,34 @@
 # 현재 인수인계 — 2026-10-12
 
+## 다운로드 완료 보장 및 실제 전송 Wi-Fi 단절 — 2026-10-12
+
+- 다운로드 시작 불가 및 reader lane에서 실행 전 취소되는 경로가 completion
+  없이 끝날 수 있음을 코드에서 확인했다. 요청별 완료를 한 번으로 보장하고
+  queued/fetching/busy/saving/verifying/terminal 단계, 바이트·요청 수·오류 코드,
+  실패 직전 단계와 경과 시간을 기록한다. 원래 120초 사건과의 인과관계는 아직
+  확정하지 않는다. 파일명·본문·네트워크 주소·기기 ID는 진단 카운터에 없다.
+- 개발 펌웨어 one-shot `dev/network-fault`와 runner `--network-faults` 추가.
+  Mac 네트워크/공유기를 건드리지 않고 X3의 실제 Wi-Fi association을 해제,
+  5초 뒤 저장된 네트워크로 복귀시킨다. 60초 arm 만료, 크기/실행 ID/주입 지점
+  검증, 중복 arm 거부, production 제외. default 정적 RAM 증가 40B, 별도 지속 힙 없음.
+- 실제 run `20261011T173129-98ca79` PASS. 설치 확인 버전
+  `0.1.0-dev-main-89d8310c-ble-standby-w079b67ca`.
+  수신 중: 65536B에서 끊김, 실제 offline/복귀 8979ms, 동일 prefix에서 resume.
+  저장·receipt 완료 후: 성공 응답 직전 끊김, offline/복귀 9020ms.
+  두 경우 모두 appSendAttempts 1, 첫 job 상태 completed, publications 1.
+  사용자/하네스 재시도 없이 shipping app의 복구 경로로 완료했다.
+- 853319B 원본과 다운로드를 바이트 비교했고 단절 후 다운로드는 각각
+  16.38/16.26초였다. 6개 다운로드 모두 requests/bytes/terminal 증거와
+  callbacks 1을 확인. 기존 인터페이스 10개 및 최종 inventory 보존 통과.
+- 펌웨어 host 920, Python 131, strict cppcheck, default/ble_standby 빌드 통과.
+  default RAM 69760B/flash 6396851B, standby RAM 69976B/flash 6408039B.
+  Mac 다운로드 집중 테스트 10개, 전체 Mac 100 PASS/3 opt-in skip 및
+  iOS device-SDK 빌드 통과. 양쪽 diff 검사 통과.
+  원본 증거는 형제 `build/dev-pipeline-runs/20261011T173129-98ca79/`,
+  앱 `.build/network-recovery/`에 보관. 기기/케이블 조작 요청 없음.
+- 이 결과는 X3 association loss와 commit ACK loss의 수용이다. 공유기 재부팅,
+  단절 중 DHCP 주소 변경, SD 물리 고장, 장시간 대기·전류, iPhone/X4는 별도다.
+
 ## 전체 회귀 점검 — BLE 원인 반복 시험 중단 후
 
 - 시뮬레이터 없이 Mac 전체 타깃 96 PASS/3 opt-in skip, 펌웨어 host 916 PASS,

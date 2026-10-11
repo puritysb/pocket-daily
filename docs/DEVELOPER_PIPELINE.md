@@ -165,3 +165,27 @@ failure/recovery scenario. It sends a unique nonexistent SSID, checks the
 matching failure receipt and old-network return, and does not read or log real
 credentials. See [READER_WIFI_SETUP.md](READER_WIFI_SETUP.md) for positive-test
 requirements and the protocol boundary.
+
+## Transfer network-loss acceptance
+
+`--interface-suite --network-faults` opts into two one-shot faults in compatible
+X3 developer firmware. It runs the shipping app model, first losing real reader
+Wi-Fi association after at least 64 KiB of an owned upload, then losing the commit
+reply after publication and its receipt have reached SD. The reader waits five
+seconds before reconnecting to its saved network. No Mac Wi-Fi change or router
+administration is involved; this is not proof of router reboot/DHCP reassignment.
+
+The suite requires run-bound firmware evidence of actual offline observation,
+network return, a resumed prefix for the first case and exactly one publication
+for each. If the job needs foreground recovery, the harness invokes the normal
+Connect/retry actions on the same persisted job. Both recovered files must match
+the original byte for byte; original inventory and settings must be preserved.
+A missing fault, early reconnect, restart from zero, repeated publication or
+unconfirmed job fails the test. Use the firmware runner's separately authorized
+`--build-firmware ble_standby --flash` only to install the required developer build.
+
+Download evidence now records admission/queue, request, busy backoff, saving,
+verification and terminal phases, byte/request counts, elapsed/progress age and
+error code. Each request must complete once even when rejected or cancelled
+before I/O. Counters contain no filename, contents, network address or identity.
+The test report retains failed-stage evidence as well as successful downloads.

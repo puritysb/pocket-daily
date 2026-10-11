@@ -1759,6 +1759,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         var received: Int64
     }
     @Published private(set) var readerDownload: ReaderDownload?
+    private(set) var readerDownloadOperation: ReaderDownloadOperation?
 
     var canDownloadFromReader: Bool {
         device.capabilities.contains(.fileDownload) && !isWorking && !hasReaderWork && !isInBackground
@@ -1770,7 +1771,13 @@ final class PocketModel: ObservableObject, DeviceSession {
     /// copy. `completion` gets the file to import and then remove with its folder.
     func downloadFromReader(path: String, size: Int64, document: String?,
                             completion: @escaping @MainActor (Result<URL, Error>) -> Void) {
-        guard canDownloadFromReader, let identity = readerStatus?.deviceID else { return }
+        let operation = ReaderDownloadOperation(size: size, completion: completion)
+        guard canDownloadFromReader, let identity = readerStatus?.deviceID else {
+            operation.finish(.failure(ReaderDownloadError.unavailable), phase: .rejected)
+            if readerDownload == nil { readerDownloadOperation = operation }
+            return
+        }
+        readerDownloadOperation = operation
         let attempt = connectionAttempt, host = activeHost, port = activeHTTPPort
         readerDownload = ReaderDownload(path: path, size: size, received: 0)
         let started = startReaderWork(attempt: attempt, kind: .download) { [self] owner in
@@ -1782,18 +1789,30 @@ final class PocketModel: ObservableObject, DeviceSession {
                 try await ReaderFileDownloader().download(size: size, to: file, fetch: { [client] offset in
                     try await client.readerFilePiece(identity: identity, path: path, size: size, offset: offset,
                                                      host: host, port: port)
-                }, progress: { [weak self] received in self?.readerDownload?.received = received })
+                }, observe: { operation.note($0) }, progress: { [weak self] received in self?.readerDownload?.received = received })
                 guard ownsReaderWork(owner, attempt: attempt) else { throw CancellationError() }
+                operation.note(.verifying)
                 try ReaderFileDownloader.verify(file, document: document)
                 readerDownload = nil
-                completion(.success(file))
+                operation.finish(.success(file), phase: .completed)
             } catch {
                 try? FileManager.default.removeItem(at: folder)
                 readerDownload = nil
-                if !(error is CancellationError), !Task.isCancelled { completion(.failure(error)) }
+                let cancelled = error is CancellationError || Task.isCancelled
+                operation.finish(.failure(cancelled ? ReaderDownloadError.interrupted : error),
+                                 phase: cancelled ? .cancelled : .failed)
             }
         }
-        if started == nil { readerDownload = nil }
+        guard let started else {
+            readerDownload = nil
+            operation.finish(.failure(ReaderDownloadError.unavailable), phase: .rejected)
+            return
+        }
+        Task { @MainActor [weak self] in
+            await started.value
+            if self?.readerDownloadOperation === operation { self?.readerDownload = nil }
+            operation.drained()
+        }
     }
 
     func cancelReaderDownload() { if readerWorkKind == .download { readerWorkTask?.cancel() } }
