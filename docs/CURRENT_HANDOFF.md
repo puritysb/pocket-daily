@@ -1,5 +1,57 @@
 # 현재 인수인계 — 2026-10-11
 
+## X3 30분 무통신 대기·BLE 깨우기 완료 — 2026-10-11 20:30 KST
+
+- 실제 Mac/X3 PASS: 형제 저장소
+  `build/dev-pipeline-runs/20261011T105840-d292e9/report.json`.
+  실행: `python3 ../pocket-daily-firmware/scripts/dev_pipeline.py run --app "$PWD" --standby --standby-seconds 1800`.
+  새 Wi-Fi에서 기존 리더 신원을 확인하고 로컬 시험 설정을 갱신했다.
+- 앱 LAN monitoring과 자동 BLE 독서 교환을 중단한 채 1800초 기다린 뒤
+  정상 Connect 경로로 깨웠다. 사용자 리더 조작 없이 대기→깨우기→LAN 복귀,
+  파일 목록과 생성 EPUB 2856바이트 왕복 원본 비교·삭제·전송 상태 복귀 통과.
+- 기기 실측: standby 1,807,465ms, light sleep 1,472,430ms/63,766회,
+  BLE 연결 1회, READ_LIST 0회, 종료 `app-wifi`, gate `open`.
+  앱 재연결 12.223초. 마지막 체크포인트 배터리 19%, 충전 확인 true.
+  최소 free heap 64,504B, 최대 연속 블록의 최솟값 55,284B,
+  framebuffer 52,272B 회수 확인. 대기 중 앱 교환 시각 불변·phase off도 검사했다.
+  단일 30분 시험이며 밤샘·소비전류·물리 케이블 분리 시험으로 확대 해석하지 않는다.
+- 이전 실패 당시 사용자가 충전 케이블이 빠져 있었다고 확인했고 마지막
+  보존된 배터리 샘플은 10%였다. 비충전 BLE 허용 조건은 **10% 초과**이므로
+  배터리 보호에 따른 deep sleep이 가장 유력하다. 당시 종료 사유 기록이 없어
+  역사적 원인을 확정하지 않는다. 보호 기준은 변경하지 않았다.
+- 개선: 펌웨어의 저배터리 종료를 `time-up`과 구분한 `low-battery`로 기록하고,
+  개발 체크포인트에 충전 여부·요청별 복구 제한을 보존한다. 앱 진단과 BLE
+  깨우기 실패 안내에는 충전 후 전원 버튼으로 한 번 깨우는 복구 방법을 추가했다.
+  시험 시간 90..1800초, 복구는 요청 시간+90초. 단기 기록·잘못된 복구 제한·
+  자동 교환 중단 증거 누락은 장시간 시험 PASS가 될 수 없다.
+- 설치 펌웨어: `0.1.0-dev-main-c2290a4a-ble-standby-w7d1b869f`, SHA-256
+  `77a296f88ec8c6b43d65abb099ecd49861e065538d8c3319864a5c67f1db3ba5`.
+  host renderer `build/apple-host-1so4z9xs` 반영. 펌웨어 915 host tests,
+  runner 16 tests, 라우트/업로드, cppcheck, default/ble_standby 빌드 통과.
+  변경 함수 스택 64/176/208바이트.
+- Mac 회귀는 `.build/long-standby-regression.xcresult`와
+  `.build/long-standby-resume-regression.xcresult`를 중복 없이 합산해 84 PASS.
+  초기 EPUB 샘플 skip은 환경변수를 지정한 재시험으로 해소했다. 파일 목록·
+  다운로드 3개 테스트 클래스도 `verify_reader_interface.py`에 추가했다.
+  iOS 기기 SDK 앱 빌드 및 공유 시험 코드 build-for-testing 성공
+  (`.build/long-standby-ios-harness-confirm.log`). 시뮬레이터/물리 iPhone 실행 없음.
+  기존 URLProtocol Sendable 등 컴파일 경고는 이번 수정 범위 밖이다.
+- 테스트 실행 파일과 SHA가 같은 sandboxed Mac 앱을 서명 검증 후
+  `/Users/puritysb/Applications/Pocket Daily.app`에 설치·실행했다. 실제 UI에서
+  Same Wi-Fi 연결, 최신 목록, 저장 편집, 기존 일시정지 작업 보존을 확인했다.
+  이전 앱은 `.build/app-backups/long-standby-20261011/`에 보존했다.
+- 중단 이력: `20261011T070704-572970`은 매분 BLE 교환 때문에 진정한 무통신
+  시험이 아님을 발견해 중단했고, 일반 앱으로 자동 복귀했다.
+  `20261011T071654-83efd0`은 사용자의 Mac 잠자기 요청으로 약 5분에 중단했다.
+  둘 다 장시간 PASS로 인용하지 않는다. 최신 기준은 위 완료 실행이다.
+- 커밋 정리: 펌웨어 변경을 `99e3d6a7`에 고정하고 host renderer를
+  `build/apple-host-r7ve89gq`로 재생성·반영했다. 장시간 실기기 검증 당시의
+  설치 아티팩트와 원래 기록은 위에 그대로 보존한다. SDK 자동 적용분은
+  `scripts/storage_sdk.patch`와 일치함을 확인한 뒤 역적용해 서브모듈을 정리했다.
+  최종 렌더러 반영 후 `.build/long-standby-commit-regression.xcresult`에서
+  Mac 84개 전부 재통과했고 iOS 기기 SDK 빌드도 통과했다.
+  iPhone/X4 확대와 출시 준비는 사용자 지시대로 보류한다.
+
 ## X3 실제 화면·독서·잠자기 자동 검증 — 2026-10-11
 
 - 최종 전체 PASS: 형제 저장소

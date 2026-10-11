@@ -96,7 +96,11 @@ struct ReaderSyncDiagnostics: Codable, Equatable {
         case "no-bond": return "The reader has no saved Bluetooth pairing. Pair it again to enable automatic exchange."
         case "disabled": return "Automatic reading sync is switched off on the reader."
         default:
-            return lastClose == "low-memory" ? "The reader ended its last Bluetooth window to preserve memory." : nil
+            if lastClose == "low-memory" { return "The reader ended its last Bluetooth window to preserve memory." }
+            if lastClose == "low-battery" {
+                return "The reader ended Bluetooth standby because its battery or charging state no longer met the power requirement. Charge it and wake it once to reconnect."
+            }
+            return nil
         }
     }
 }

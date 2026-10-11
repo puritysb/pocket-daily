@@ -2,6 +2,11 @@ import XCTest
 @testable import Pocket
 
 final class DeviceSnapshotTests: XCTestCase {
+    func testLowBatteryStandbyExitExplainsWhyBluetoothCannotWake() {
+        let report = ReaderSyncDiagnostics(lastGate: "open", lastClose: "low-battery")
+        XCTAssertTrue(report.explanation?.contains("Charge it and wake it once") == true)
+    }
+
     private func status(_ extra: String = "", deviceID: String? = "1234ABCD") throws -> CrossPointStatus {
         let id = deviceID.map { #","deviceID":"\#($0)""# } ?? ""
         return try JSONDecoder().decode(CrossPointStatus.self, from: Data(

@@ -1248,7 +1248,9 @@ final class PocketModel: ObservableObject, DeviceSession {
                 _ = await bonjourTask.value
                 await discoverReader(attempt: attempt, retryIfMissing: false)
             } else {
-                post("No Pocket reader was visible. Open Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware). Without a router, choose Direct connection on the reader and Connect Directly here.", tone: .failure)
+                let wakeRecovery = lastWakeFailure == nil ? "" :
+                    "Bluetooth could not wake the reader. If its battery is low or charging was disconnected, charge it and press its power button once. "
+                post("No Pocket reader was visible. \(wakeRecovery)Open Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware). Without a router, choose Direct connection on the reader and Connect Directly here.", tone: .failure)
             }
         }
     }

@@ -1,18 +1,18 @@
 {
   "abi": 1,
   "artifactFiles": {
-    "Info.plist": "22563e7aff66b9577f448db8c6531bf2273a324e7d8b4a9b00761c183ef7ee5b",
+    "Info.plist": "61ff43dbc9b39b022e7afede82745b29598fcc2a04ec0afbcbb0f9928f4194af",
     "ios-arm64/Headers/PocketUIHost.h": "4d919ee39dff798ade3eaeefdcc706c63f5388b2b7c54033426aa6cb494d7608",
     "ios-arm64/Headers/module.modulemap": "a420c54741587252aa49b911f7471ae947fe47e381ba0f13b73fef6a075ae62d",
-    "ios-arm64/libpdui_host.a": "bf9b2d8dad18ee4ed98f8149938b0cef2faa8f8e6dea5ae6340522ddd07526e1",
+    "ios-arm64/libpdui_host.a": "082da84a19c2f4c9302e884890377b2841e236feb726dfe4c5fb54554afd669e",
     "ios-arm64_x86_64-simulator/Headers/PocketUIHost.h": "4d919ee39dff798ade3eaeefdcc706c63f5388b2b7c54033426aa6cb494d7608",
     "ios-arm64_x86_64-simulator/Headers/module.modulemap": "a420c54741587252aa49b911f7471ae947fe47e381ba0f13b73fef6a075ae62d",
-    "ios-arm64_x86_64-simulator/libpdui_host.a": "4bfe644b98fc97d187d2a1b59663bdc95f9e93a49edf9d2a11e6ec9e0397e39e",
+    "ios-arm64_x86_64-simulator/libpdui_host.a": "b95bff80cd19880ae3adedea76a2a6f6c5ce7ab023d40bc72c6bf5edc4383951",
     "macos-arm64_x86_64/Headers/PocketUIHost.h": "4d919ee39dff798ade3eaeefdcc706c63f5388b2b7c54033426aa6cb494d7608",
     "macos-arm64_x86_64/Headers/module.modulemap": "a420c54741587252aa49b911f7471ae947fe47e381ba0f13b73fef6a075ae62d",
-    "macos-arm64_x86_64/libpdui_host.a": "393ce301110bd7bc1cf821f5c32254aeb2a0a9cedde2a3a4d2525a457a51e616"
+    "macos-arm64_x86_64/libpdui_host.a": "1646893c2ca842a8e4391cad33d8759f04bc6c4968910bae74ef6ce02ce6b7d4"
   },
-  "artifactSHA256": "c673a07e03bd6c07fc0015a708e162e2a16041f6d3caf8270b72ce983487b0e2",
+  "artifactSHA256": "f24556a3ea9f34bcf2e60942db3e586373c41422944dbb04fa5b1d6ea5cbe243",
   "cmake": "cmake version 4.4.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
   "compiler": "Apple clang version 21.0.0 (clang-2100.3.34.2)\nTarget: arm64-apple-darwin27.0.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
   "platforms": {
@@ -45,7 +45,7 @@
   },
   "schema": 1,
   "source": {
-    "commit": "c2290a4a690b61cd589f16ad44a6c5387509e488",
+    "commit": "99e3d6a746a46729bf6ca81b7308088ce1db2884",
     "files": {
       "freeink-sdk/libs/display/FreeInkDisplay/include/EInkDisplay.h": "b0ac1ecd267abeb3a18f545399eeb68b99cff3c34237d11859b311a9a1d4160d",
       "freeink-sdk/libs/display/FreeInkDisplay/include/FreeInkDisplay.h": "fdff6bac2385111247ebff35f69660ebff20c60f0c842a6791cd2dd52cd4ca1f",
@@ -259,14 +259,14 @@
       "src/pocket_daily/live_studio/StackReport.cpp": "40ba1d1284766dafaf7600ea6e2564388fb29ae7da03448968a6e67ddca12f75",
       "src/pocket_daily/live_studio/StackReport.h": "8037a278f5b76336b72cc0b354e6d308d49842aff1869cc044dbbbd07cf74b37",
       "src/pocket_daily/models.h": "2e5cc319d6e2820d8536d158ed764f642891c66fb01e1b30581b93bb9e94756e",
-      "src/pocket_daily/nearby_sync/DevSleepCycle.cpp": "ea4cb2ec00f02c49fec80a06ab315e474e7b22fb9aca88f2d3f0fd3ef2e39c3f",
-      "src/pocket_daily/nearby_sync/DevSleepCycle.h": "1141911f66f0ec81b43f86ce71f19148f454783495e386ec7d57dbe206a7b5f3",
-      "src/pocket_daily/nearby_sync/ExchangeWindow.cpp": "3d8d9419860c35c1b1de06062b0a06819d0170a8d505363893c79b4e48f322d2",
+      "src/pocket_daily/nearby_sync/DevSleepCycle.cpp": "d67872977b8c94b5c4ecdc561f84d26ed39464e25c11302e051bb586a33ef081",
+      "src/pocket_daily/nearby_sync/DevSleepCycle.h": "6fcb29cb6f37080fde264ea8b9d763f96b85d338675696b580d24f28bd40c23f",
+      "src/pocket_daily/nearby_sync/ExchangeWindow.cpp": "d349d99f93bb83d5f2b44cf917e30f47332e9018cd01908a8d162b100b288867",
       "src/pocket_daily/nearby_sync/ExchangeWindow.h": "819f32d5aeb3d3dbb4a8713dc5f5899d44042b29b5d4afce0b4d798d4fa78bc0",
       "src/pocket_daily/nearby_sync/ExchangeWindowMemory.cpp": "43b7eafaf4d85c0176b93f21dcbee265dd53935d67b3d2ed8befbb67a669bdaf",
       "src/pocket_daily/nearby_sync/ExchangeWindowMemory.h": "e0b643fc9c1072f24b1819ee93af007a3c8d2392c3ad8015512e5338176d2f91",
-      "src/pocket_daily/nearby_sync/ExchangeWindowPolicy.cpp": "1c19049468eb2f967d4808ffa83c00e315ca5c34daa97ef3275ad250d0f017be",
-      "src/pocket_daily/nearby_sync/ExchangeWindowPolicy.h": "888f6cf2c5f98e867d0386729437f5f0a9e5aac7505da79a02f4ac863171f774",
+      "src/pocket_daily/nearby_sync/ExchangeWindowPolicy.cpp": "d8415692b824baf6f535753ae1c0c2e150f1128d818612bac135b0b35d81ca0d",
+      "src/pocket_daily/nearby_sync/ExchangeWindowPolicy.h": "27d2dc97e87984b4d3c7529914a2de2627577e93f4d300735442a88348ca7ccc",
       "src/pocket_daily/nearby_sync/NearbySyncRecords.cpp": "fe9febd2df04acfcf947661cbd630a7908204d06d3b589a2fa864a62961ccb20",
       "src/pocket_daily/nearby_sync/NearbySyncService.cpp": "73c2ce71504ef347a2da0d679ade0de487eeeb30f59c0c43bb0dcf288b524a6f",
       "src/pocket_daily/nearby_sync/NearbySyncService.h": "fe1593f37369ec79c5c40cf8220c8ff5064c26d51f53ede3bf71d100ca88fff3",
@@ -293,7 +293,7 @@
       "src/pocket_daily/web/LegacyFontSize.h": "cbd3254fafed8b5744171f19dea464c57b3217883f6302975332fafd92be600d",
       "src/pocket_daily/web/LiveStudioService.cpp": "e1d70771cb93dad8b90981a99327b7fea3041c03cdee43d1f2de82b7adb63d7c",
       "src/pocket_daily/web/LiveStudioService.h": "407050894178c08a477312dcc9b185ab2f862e0f958d4ace00fac7951f04fb74",
-      "src/pocket_daily/web/PocketEndpoints.cpp": "2eef5de2e7ab6e849fc049ef9d617f2f15de5052f52d11fc4283e6c7541b514a",
+      "src/pocket_daily/web/PocketEndpoints.cpp": "941c7fc71d2b006b09c74a6110e452fd695bb90274f52d74ccde48ff0a35d94b",
       "src/pocket_daily/web/PocketEndpoints.h": "06f544383d4c1003dfe00bf8736b34bc44996debaa47e158f9d4e5baa45f4194",
       "src/pocket_daily/web/PocketStatus.cpp": "ef581f7bb7e0567bf6f895edef36ef088b74ca9efc72817e063c43ead6a65789",
       "src/pocket_daily/web/PocketStatus.h": "0ce7c1f2a02a5c4777d3a9b09be3d2f2061331a44ae88b8670676d039e5026e2",
@@ -323,7 +323,7 @@
       "src/util/PowerWakeCue.h": "e77960d47511517dad3af6a1fd4ea6b27140482cea979bb2365aad29f5032e25",
       "test/gfx_host/HostAbiSwiftCheck.swift": "988911c7bd435699d53548f0d59afaabc6f4c559f67af25dec4b400c55777fae"
     },
-    "sha256": "d1a0840a9d69d313595a1d3d913321a1704c4f26accb0c29a783e17d58757012"
+    "sha256": "175b4dcb2d42d5fb6712b7dcece52872398fd51fcfee2fcf604a2c4b3ef1a5e9"
   },
   "xcode": "Xcode 27.0\nBuild version 27A266a"
 }

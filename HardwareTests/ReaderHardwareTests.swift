@@ -41,6 +41,8 @@ final class ReaderHardwareTests: XCTestCase {
             let runText = try required("POCKET_HARDWARE_RUN", env)
             guard let run = UInt32(runText), run != 0 else { throw Failure.reason("Invalid cycle ID") }
             let standby = env["POCKET_HARDWARE_STANDBY"] == "1"
+            guard let standbySeconds = Int(env["POCKET_HARDWARE_STANDBY_SECONDS"] ?? "90"),
+                  (90...1800).contains(standbySeconds) else { throw Failure.reason("Invalid standby duration") }
             let client = CrossPointClient()
             let preflight = try await client.status(host: host)
             try verify(preflight, identity: identity, version: version)
@@ -81,22 +83,40 @@ final class ReaderHardwareTests: XCTestCase {
             if standby {
                 try require(ReaderBluetoothLink.shared.rememberedReader?.readerID == identity,
                             "Pair this Debug app with the reader before the standby trial.")
-                var request = URLRequest(url: try XCTUnwrap(URL(string:
-                    "http://\(host)/api/pocket/v1/dev/ble-cycle?run=\(run)&sleep=standby")))
-                request.httpMethod = "POST"
-                request.httpBody = Data()
-                request.timeoutInterval = 8
-                // Exactly one mutation. A lost reply is observed, never replayed.
+                // Reserve the existing BLE ownership gate and suspend LAN
+                // monitoring without changing the user's reading-sync setting.
+                // Otherwise the foreground app exchanges positions every minute,
+                // which cannot establish wake after an uninterrupted idle period.
+                let link = model.bluetoothLink
+                let priorOwnership = link.nearbySessionActive
+                link.nearbySessionActive = true
+                model.pauseForBackground()
+                let exchangeBeforeIdle = link.rememberedReader?.lastExchangeAt
                 do {
-                    let (_, response) = try await URLSession.shared.data(for: request)
-                    try require((response as? HTTPURLResponse)?.statusCode == 202, "Standby trial rejected")
-                } catch let failure as Failure { throw failure }
-                catch { evidence["cycleReplyLost"] = true }
-                // Cross the firmware's first 60-second battery/eligibility check
-                // after reboot and Wi-Fi teardown, while staying inside its
-                // 180-second recovery limit. A short wake misses this idle path.
-                evidence["standbyWaitSeconds"] = 90
-                try await Task.sleep(for: .seconds(90))
+                    defer {
+                        model.resumeForForeground()
+                        link.nearbySessionActive = priorOwnership
+                    }
+                    var request = URLRequest(url: try XCTUnwrap(URL(string:
+                        "http://\(host)/api/pocket/v1/dev/ble-cycle?run=\(run)&sleep=standby&standbySeconds=\(standbySeconds)")))
+                    request.httpMethod = "POST"
+                    request.httpBody = Data()
+                    request.timeoutInterval = 8
+                    // Exactly one mutation. A lost reply is observed, never replayed.
+                    do {
+                        let (_, response) = try await URLSession.shared.data(for: request)
+                        try require((response as? HTTPURLResponse)?.statusCode == 202, "Standby trial rejected")
+                    } catch let failure as Failure { throw failure }
+                    catch { evidence["cycleReplyLost"] = true }
+                    // Firmware recovery is this wait plus 90 seconds. Both LAN
+                    // monitoring and automatic BLE exchange are held until wake.
+                    evidence["standbyWaitSeconds"] = standbySeconds
+                    try await Task.sleep(for: .seconds(standbySeconds))
+                    try require(link.phase == .off && link.nearbySessionActive
+                                && link.rememberedReader?.lastExchangeAt == exchangeBeforeIdle,
+                                "Automatic Bluetooth exchange disturbed the idle interval")
+                    evidence["idleAppTrafficSuspended"] = true
+                }
                 let online = try? await client.status(host: host, timeout: 2)
                 try require(online == nil, "Reader did not enter offline standby")
                 try await until("reader lane before wake", timeout: 20) { !busy && !model.isWorking }
@@ -116,6 +136,12 @@ final class ReaderHardwareTests: XCTestCase {
                 try require((response as? HTTPURLResponse)?.statusCode == 200, "Missing cycle evidence")
                 let cycle = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
                 evidence["cycle"] = cycle
+                try require((cycle["standbyMs"] as? Int ?? 0) >= (standbySeconds - 30) * 1000,
+                            "Reader did not remain in standby for the requested duration")
+                if standbySeconds > 90 {
+                    try require(cycle["standbyLimitMs"] as? Int == (standbySeconds + 90) * 1000,
+                                "Firmware did not arm the requested long-standby recovery limit")
+                }
                 try require((cycle["run"] as? NSNumber)?.uint32Value == run, "Stale cycle evidence")
                 try require(cycle["state"] as? Int == 3 && cycle["close"] as? String == "app-wifi"
                             && cycle["fromWifi"] as? Bool == true, "App wake did not complete")

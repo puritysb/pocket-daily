@@ -6,6 +6,25 @@ with a dated note below.
 
 ## X3 interface and unattended verification — 2026-10-11
 
+- Committed firmware dependency is `99e3d6a7`; the Apple host renderer was rebuilt
+  and verified against that revision (`apple-host-r7ve89gq`). The physical trial
+  below retains its original pre-commit artifact identity rather than claiming
+  a reflash of the new Git label.
+- Latest idle/wake acceptance: sibling `build/dev-pipeline-runs/20261011T105840-d292e9/report.json`.
+  The app suspended automatic BLE/LAN traffic for 1800 s, then its normal Connect
+  woke X3 and reconnected in 12.223 s. Firmware recorded 1807.465 s standby,
+  1472.430 s light sleep, one connection, zero READ_LISTs and `app-wifi` close;
+  last checkpoint 19% charging. Inventory and generated EPUB round trip/cleanup passed.
+  This is one 30-minute run; previous interrupted trials are not passes.
+- Low-battery firmware exits and app recovery guidance now distinguish battery
+  protection from timeout. The prior unplugged 10% failure is consistent with
+  protection, not proven retrospectively. Battery thresholds remain unchanged.
+  The bounded long-run harness rejects missing idle/deadline/duration evidence.
+- Final affected Mac regression: 84 unique tests passed; iOS device-SDK app and
+  test-bundle builds passed without simulator execution. Missing inventory/download
+  classes now run in the physical-only aggregate. The tested sandboxed Mac binary
+  was installed, and normal Same Wi-Fi connection and saved user state were verified.
+
 - App Wi-Fi setup uses an existing encrypted BLE bond; only a matching reader
   association/persistence receipt confirms success. Current SSID lookup is
   explicit; Mac saved-password lookup stays in the OS keychain permission flow.

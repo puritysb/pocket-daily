@@ -43,6 +43,15 @@ python3 ../pocket-daily-firmware/scripts/dev_pipeline.py run \
   --app "$PWD" --standby --cycles 2
 ```
 
+For a bounded 30-minute idle/wake regression against matching development
+firmware, add `--standby-seconds 1800`. The harness temporarily suspends model
+LAN monitoring and reserves BLE ownership, so ordinary minute-by-minute reading
+exchanges cannot keep the connection active. It restores both in a `defer`,
+without changing saved sync preferences, before using the app's normal Connect
+path. The result requires unchanged BLE exchange history during the wait, matching
+firmware recovery deadline and measured standby duration. See the firmware guide
+for the 90..1800-second range and wait-plus-90-second recovery boundary.
+
 When the user's developer iteration includes firmware installation:
 
 ```sh
