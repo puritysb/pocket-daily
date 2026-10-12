@@ -5,6 +5,33 @@ chat transcript. Prefer current code and release manifests when they conflict
 with a dated note below.
 
 
+
+## First-install rehearsal — 2026-10-13
+
+- The verified EPUB/usability baseline was pushed as app `fc037a2` and firmware
+  `4f679ba3`. Explicit developer reset paths now archive settings and preserve
+  book bytes; they are excluded from shipping builds. See DEVELOPER_PIPELINE.md.
+- Firmware run `20261012T162829-45b595` passed host 926, Python 134, strict
+  cppcheck, default/standby builds, exact installation, and the physical Mac/X3
+  EPUB transfer/download/cleanup scenario. Installed version:
+  `0.1.0-dev-main-4f679ba3-ble-standby-w5723cd7c`, SHA-256
+  `7263c247f9e1d1b0459f8725c05af548f56bc565ec4150e8c5668d014cd07e3e`.
+- User-authorized X3 reset returned archived/bondsCleared/rebooting true;
+  wrong identity and missing acknowledgement were rejected (409/400).
+  HTTP became unavailable as expected after removing saved Wi-Fi. The physical
+  panel was not observed after reset, and no automatic reconnection was attempted.
+- Mac reset regression: 2 passed; Release build passed and contains no reset
+  command. An initial main-domain-as-suite failure occurred before book mutation;
+  standard defaults routing fixed it and is now covered by a regression.
+  Native first launch was observed: only Welcome to Pocket Daily, Your Reader
+  not connected, no old inventory/task. Existing local data was archived inside
+  its sandbox; macOS permission decisions for this app were separately reset.
+- Evidence: app `.build/first-install/report.json` and reader-reset-receipt.json.
+  This prepares Mac/X3 setup, not a blank SD card: root books/fonts remain.
+  iPhone, iCloud and OS Bluetooth records were not erased. Re-pairing or providing
+  Wi-Fi now consumes the prepared first-install state; do not run old enrollment
+  automatically. Animation/remote-frame playback has not been implemented.
+
 ## Real EPUB continuity and short X3 acceptance — 2026-10-13
 
 - Physical run `20261012T153747-86b9c6` passed all 10 interface cases,

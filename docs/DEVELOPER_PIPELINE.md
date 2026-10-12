@@ -246,3 +246,20 @@ It does not mistake the preceding DOM boundary for an invisible character.
 Text-node offsets still require that exact point; other chapters, off-page
 paragraphs and inexact paths fail. The Mac chapter-boundary regression covers
 these positive and negative cases without hardware.
+
+## Rehearse first app installation (Mac Debug only)
+
+With explicit authorization to reset local settings, stop every companion
+instance and launch the signed Debug app binary once with
+`--developer-fresh-start`. Before constructing the fleet, this archives the
+app's `Application Support/Pocket` and the main/current reader preference domains
+under `Application Support/PocketFirstInstallBackups/<UUID>` in its own sandbox.
+Only then are those preference domains cleared. Backup failure stops launch;
+book bytes remain recoverable. The app then starts its ordinary welcome/library
+flow without demo mode or remembered readers. Subsequent launches omit the flag.
+The command is compiled out of Release and iOS. It does not erase iCloud,
+other applications, OS Bluetooth records or permission decisions.
+
+For a reader-side fresh start, use the firmware guide's explicitly acknowledged
+`dev/fresh-start` operation. Reconnecting or pairing after the reset consumes the
+initial-setup state; leave both sides unpaired for the person rehearsing it.

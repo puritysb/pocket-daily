@@ -315,3 +315,41 @@ private final class LoadDelegate: NSObject, WKNavigationDelegate {
     init(_ done: @escaping () -> Void) { self.done = done }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { done() }
 }
+
+final class DeveloperFreshStartTests: XCTestCase {
+    func testMainBundleUsesStandardPreferencesRatherThanInvalidSuite() throws {
+        let domain = try XCTUnwrap(Bundle.main.bundleIdentifier)
+        XCTAssertTrue(try DeveloperFreshStart.defaults(for: domain) === UserDefaults.standard)
+    }
+
+    func testArchivesBooksAndPreferencesWithoutResettingOtherDomains() throws {
+        let manager = FileManager.default
+        let temporary = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let root = temporary.appendingPathComponent("Pocket")
+        let domain = "fresh-start-test." + UUID().uuidString
+        let untouched = "fresh-start-other." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        let other = try XCTUnwrap(UserDefaults(suiteName: untouched))
+        defer {
+            defaults.removePersistentDomain(forName: domain)
+            other.removePersistentDomain(forName: untouched)
+            try? manager.removeItem(at: temporary)
+        }
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+        let bytes = Data("unchanged book bytes".utf8)
+        try bytes.write(to: root.appendingPathComponent("book.epub"))
+        defaults.set("remembered", forKey: "reader")
+        other.set("keep", forKey: "reader")
+        let backup = try DeveloperFreshStart.reset(root: root, domains: [domain])
+        XCTAssertFalse(manager.fileExists(atPath: root.path))
+        XCTAssertEqual(try Data(contentsOf: backup.appendingPathComponent("Pocket/book.epub")), bytes)
+        let archived = try XCTUnwrap(try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: backup.appendingPathComponent(domain + ".plist")), format: nil) as? [String: String])
+        XCTAssertEqual(archived["reader"], "remembered")
+        XCTAssertNil(defaults.string(forKey: "reader"))
+        XCTAssertEqual(other.string(forKey: "reader"), "keep")
+        // A repeat keeps the earlier backup intact, including the book bytes.
+        _ = try DeveloperFreshStart.reset(root: root, domains: [domain])
+        XCTAssertEqual(try Data(contentsOf: backup.appendingPathComponent("Pocket/book.epub")), bytes)
+    }
+}
