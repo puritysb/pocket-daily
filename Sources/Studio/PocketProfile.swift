@@ -18,9 +18,9 @@ struct PocketProfile: Equatable, Sendable, Codable {
         }
         var detail: String {
             switch self {
-            case .reading: "The open book, when there is one"
+            case .reading: "Your current book, or a place to start your next one"
             case .study: "Your shared cards, with their images"
-            case .word: "A new word each day from the reader or an SD learning pack"
+            case .word: "Optional Japanese vocabulary with Korean meanings, or your SD learning pack"
             case .provider: "Retired: cards from the AgentDeck daemon"
             case .monitor: "Retired: agent usage from the AgentDeck daemon"
             }
@@ -81,8 +81,8 @@ struct PocketProfile: Equatable, Sendable, Codable {
     /// What a reader without a stored profile shows (its provider item, fed
     /// only by the retired daemon, never appears).
     static let defaults = PocketProfile(
-        home: .init(items: [.reading, .study], dailyWord: true, weather: .bottom, nextEvent: true),
-        sleep: .init(mode: .brief, sections: [.reading, .study, .weather, .today]))
+        home: .init(items: [.reading, .study], dailyWord: false, weather: .off, nextEvent: false),
+        sleep: .init(mode: .brief, sections: [.reading]))
 
     /// Without the retired daemon items; never empty.
     var withoutRetiredItems: PocketProfile {

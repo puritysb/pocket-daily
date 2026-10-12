@@ -52,6 +52,7 @@ final class NearbySyncController: NSObject, ObservableObject {
     private var eventNotificationsReady = false
     private var pendingHotspotRequestID: String?
     private var scanTimeout: Task<Void, Never>?
+    private var connectionTimeout: Task<Void, Never>?
 
     private let ownershipChanged: ((Bool) -> Void)?
 
@@ -141,6 +142,8 @@ final class NearbySyncController: NSObject, ObservableObject {
 
     func disconnect() {
         scanRequested = false
+        connectionTimeout?.cancel()
+        connectionTimeout = nil
         central?.stopScan()
         scanTimeout?.cancel()
         scanTimeout = nil
@@ -190,6 +193,10 @@ final class NearbySyncController: NSObject, ObservableObject {
         if let error = error as? CBError, error.code == .peerRemovedPairingInformation {
             return staleBondMessage
         }
+        if let error = error as? CBATTError,
+           error.code == .insufficientEncryption || error.code == .insufficientAuthentication {
+            return "Bluetooth pairing did not finish. Keep the reader’s setup screen open, choose Pair Reader and enter its code in the system prompt. If this reader was reset, forget its old pairing in Bluetooth settings first."
+        }
         return error.localizedDescription
     }
 
@@ -236,6 +243,8 @@ final class NearbySyncController: NSObject, ObservableObject {
             // A registration may reject this identity and disconnect synchronously.
             guard peripheral?.identifier == identifier else { return }
         }
+        connectionTimeout?.cancel()
+        connectionTimeout = nil
         state = .connected(pendingStatus)
     }
 }
@@ -283,6 +292,15 @@ extension NearbySyncController: CBCentralManagerDelegate {
             peripheral.delegate = self
             state = .connecting(name ?? "Pocket")
             central.connect(peripheral)
+            connectionTimeout?.cancel()
+            connectionTimeout = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(90))
+                guard !Task.isCancelled, let self, self.peripheral == peripheral,
+                      case .connecting = self.state else { return }
+                self.record("BLE connection or pairing exceeded its deadline")
+                self.disconnect()
+                self.state = .failed("Bluetooth pairing timed out. Keep the reader’s setup screen open and choose Pair Reader again. Complete the system pairing prompt when it appears.")
+            }
         }
     }
 

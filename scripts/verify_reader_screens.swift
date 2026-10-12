@@ -40,6 +40,32 @@ func forecastY(_ rows: [RecognizedLine]) throws -> Double {
     guard positions.count >= 2 else { throw ScreenCheckError(description: "Forecast weekday row is missing or unreadable") }
     return positions.reduce(0, +) / Double(positions.count)
 }
+// An explicit empty explanation is valid after first-install reset. Never use
+// a generic Weather header as evidence: a blank/failed forecast must still fail.
+func weatherY(_ rows: [RecognizedLine]) throws -> Double {
+    if let empty = rows.first(where: { $0.normalized.contains("nosavedweather") || $0.normalized.contains("저장된날씨없음") }) {
+        guard rows.contains(where: { $0.normalized.contains("setupweatherintheappthensync") || $0.normalized.contains("앱에서날씨를설정하고동기화하세요") }) else {
+            throw ScreenCheckError(description: "Empty weather has no setup guidance")
+        }
+        return empty.y
+    }
+    return try forecastY(rows)
+}
+if CommandLine.arguments.dropFirst().first == "--self-test" {
+    do {
+        let empty = [RecognizedLine(text: "No saved weather", y: 0.7), RecognizedLine(text: "Set up weather in the app, then sync", y: 0.75)]
+        guard try weatherY(empty) == 0.7,
+              try weatherY([RecognizedLine(text: "저장된 날씨 없음", y: 0.7), RecognizedLine(text: "앱에서 날씨를 설정하고 동기화하세요", y: 0.75)]) == 0.7,
+              abs(try weatherY([RecognizedLine(text: "Mon Tue Wed", y: 0.4)]) - 0.4) < 0.0001 else {
+            throw ScreenCheckError(description: "Weather position regression")
+        }
+        for invalid in [[], [RecognizedLine(text: "Weather", y: 0.2)], [empty[0]], [RecognizedLine(text: "Mon", y: 0.3)]] {
+            if (try? weatherY(invalid)) != nil { throw ScreenCheckError(description: "Invalid weather accepted") }
+        }
+        print("Weather OCR positive and negative controls passed")
+        exit(0)
+    } catch { print(error); exit(1) }
+}
 let directory = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "")
 var results: [String: Bool] = [:]
 var failure: String?
@@ -49,11 +75,14 @@ do {
     results["home-word-label"] = true
     let bottom = try read(directory, "04-home-weather-bottom")
     let top = try read(directory, "05-home-weather-top")
-    guard try forecastY(bottom) > wordY(bottom) + 0.1,
-          try forecastY(top) + 0.1 < wordY(top) else {
+    guard try weatherY(bottom) > wordY(bottom) + 0.1,
+          try weatherY(top) + 0.1 < wordY(top) else {
         throw ScreenCheckError(description: "Weather is not on the requested side of the Home card")
     }
     results["weather-position"] = true
+    _ = try weatherY(read(directory, "06-brief-weather"))
+    _ = try weatherY(read(directory, "08-brief-weather-restored"))
+    results["brief-weather-content"] = true
     let today = try read(directory, "07-brief-today").filter { $0.y > 0.12 && $0.y < 0.9 }
     let explained = today.contains { row in
         row.normalized.contains("nosavedevents") || row.normalized.contains("저장된일정이없습니다")

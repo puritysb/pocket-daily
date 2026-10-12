@@ -27,6 +27,13 @@ enum WelcomeBook {
                     "A book you send from the Library is the same file you read here, so both devices recognize it as the same book.",
                     "No reader yet? That is fine. Everything in the Library works on its own.",
                 ]),
+                .init(title: "Make your reader your own", paragraphs: [
+                    "The reader starts with your current book. If you have not opened one, choose Library to find a book on its SD card. Home is the reader’s own menu for its Library, File Transfer and Settings; the companion app is optional.",
+                    "To add books without the app, copy DRM-free EPUB files to the SD card, or open File Transfer from the reader’s Home menu and follow its connection instructions. With the app, add a book to your Library, connect My Reader and send it.",
+                    "Home and Sleep show reading by default. Cards, daily vocabulary, weather and events are optional. Start with one card that matters to you, such as a reading question or a reminder, then preview it before sending it. The sample text in previews is an example, not your saved content.",
+                    "Daily word is an optional Japanese vocabulary deck with Korean meanings. It is not a required setup step. You can turn it on in Reader Settings or use a compatible learning pack on the reader’s SD card.",
+                    "A retained page while sleeping is normal for e-paper. Use the reader’s power button to wake it. Firmware updates belong to the reader’s system settings and always need confirmation on the reader; sending an update file does not install it.",
+                ]),
                 .init(title: "Keep your place everywhere", paragraphs: [
                     "Pocket Daily keeps your place with no Pocket Daily account or server to set up. Your iPhone, iPad and Mac stay in step through your own iCloud, and a connected X3 or X4 reader exchanges positions over the same local connection that sends books. Each device needs the same book file; share it from the Library.",
                     "Only a fingerprint of the book and your place in it are shared. The book itself never leaves your devices.",

@@ -128,9 +128,11 @@ Debug app. Simulator success does not establish physical radio behavior.
 For the full unattended app regression and 10-case physical interface suite, see
 [READER_INTERFACE_VALIDATION.md](READER_INTERFACE_VALIDATION.md). The focused
 runner option is `--interface-suite`; it requires every case and cleanup to pass.
-Add `--screen-suite` for 13 actual X3 Home/Brief/card/EPUB/sleep captures, local
+Add `--screen-suite` for 14 actual X3 Home/Brief/card/EPUB/sleep/wake captures, local
 image/OCR checks, timer deep sleep and automatic Same Wi-Fi return. This requires
-the matching development firmware; it never flashes implicitly.
+the matching development firmware; it never flashes implicitly. Wake evidence
+requires a matching run, an unchanged body, a changed cue and a measured
+1..1500 ms refresh. Physical button timing and optical quality remain separate.
 
 - [HardwareTests/ReaderHardwareTests.swift](../HardwareTests/ReaderHardwareTests.swift)
   is shared by `PocketTests` and `PocketMacTests`. It uses the running app's

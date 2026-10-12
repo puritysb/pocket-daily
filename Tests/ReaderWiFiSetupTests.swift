@@ -1,8 +1,22 @@
+import CoreBluetooth
 import XCTest
 @testable import Pocket
 
 @MainActor
 final class ReaderWiFiSetupTests: XCTestCase {
+    func testPairingEncryptionFailuresExplainRecoveryWithoutHidingOtherFailures() {
+        for code in [CBATTError.Code.insufficientEncryption, .insufficientAuthentication] {
+            let message = NearbySyncController.failureMessage(for: CBATTError(code))
+            XCTAssertTrue(message.contains("Pair Reader"))
+            XCTAssertTrue(message.contains("system prompt"))
+            XCTAssertTrue(message.contains("old pairing"))
+        }
+        let other = CBATTError(.invalidHandle)
+        XCTAssertEqual(NearbySyncController.failureMessage(for: other), other.localizedDescription)
+        XCTAssertEqual(NearbySyncController.failureMessage(for: CBError(.peerRemovedPairingInformation)),
+                       NearbySyncController.staleBondMessage)
+    }
+
     func testCurrentWiFiLookupIsExplicitAndPreservesSSIDExactly() async {
         var calls = 0
         let lookup = CurrentWiFiName(fetch: { calls += 1; return " 카페 WiFi " })

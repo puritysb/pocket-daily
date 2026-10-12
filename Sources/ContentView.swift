@@ -1443,8 +1443,30 @@ struct ConnectionInspector: View {
         } else if model.isCancellingConnection {
             Text("Stopping connection…").font(.callout).foregroundStyle(.secondary)
         }
+        if model.readerStatus == nil && !model.isDemoMode {
+            DisclosureGroup("Check Reader Compatibility") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Pocket Daily firmware").fontWeight(.semibold)
+                    Text("Choose Set Up Reader for Bluetooth Wi-Fi setup. A new X3 opens setup automatically. On X4, or if setup was skipped, open Sync → Direct connection first.")
+                    Text("CrossPoint firmware").fontWeight(.semibold)
+                    Text("Open File Transfer → Join a Network on the reader, then choose Find on Same Wi-Fi. Available features depend on the installed version; Bluetooth setup requires Pocket Daily support.")
+                    Text("Xteink factory firmware or unsure?").fontWeight(.semibold)
+                    Text("Direct connection to factory firmware is not supported. You can read in this app now. Check the exact reader model and firmware before considering a compatible installation; X4 Classic and X4 Pro are different devices.")
+                    Text("Some readers restrict firmware installation. Do not use a third-party unlocker to install Pocket Daily: that installation path has not been verified.")
+                    if let url = URL(string: "https://www.xteink.com/pages/user-guide") {
+                        Link("Manufacturer Guides", destination: url)
+                    }
+                    if let url = URL(string: "https://github.com/crosspoint-reader/crosspoint-reader#install-firmware") {
+                        Link("CrossPoint Installation Guidance", destination: url)
+                    }
+                }
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityIdentifier("reader-compatibility-guide")
+        }
         actions
-        if !model.isDemoMode && !model.hasDirectSession {
+        if !model.isDemoMode && !model.hasDirectSession && (readerLink.rememberedReader != nil || isConnected) {
             Button("Set Up Reader Wi-Fi…", systemImage: "wifi") { showingWiFiSetup = true }
                 .buttonStyle(.borderless).font(.callout)
                 .accessibilityIdentifier("reader-wifi-setup")
@@ -1494,11 +1516,20 @@ struct ConnectionInspector: View {
                 .disabled(model.isWorking)
         } else if model.readerStatus == nil {
             VStack(alignment: .leading, spacing: 8) {
-                Button(readerLink.rememberedReader == nil ? "Find on Same Wi-Fi" : "Connect Reader", systemImage: "wifi", action: onConnect)
-                    .buttonStyle(.borderedProminent).tint(PocketPalette.accent)
-                    .disabled(model.isWorking)
+                if readerLink.rememberedReader == nil {
+                    Button("Set Up Reader", systemImage: "antenna.radiowaves.left.and.right") { showingWiFiSetup = true }
+                        .buttonStyle(.borderedProminent).tint(PocketPalette.accent)
+                        .disabled(!model.canConfigureReaderWiFi)
+                        .accessibilityIdentifier("reader-first-setup")
+                    Button("Find on Same Wi-Fi", systemImage: "wifi", action: onConnect)
+                        .disabled(model.isWorking)
+                } else {
+                    Button("Connect Reader", systemImage: "wifi", action: onConnect)
+                        .buttonStyle(.borderedProminent).tint(PocketPalette.accent)
+                        .disabled(model.isWorking)
+                }
                 Text(readerLink.rememberedReader == nil
-                     ? "On the reader: Pocket Daily → Sync → Same Wi-Fi."
+                     ? "Pocket Daily firmware: set up over Bluetooth and enter Wi-Fi details here. CrossPoint: open File Transfer and find your reader on the same Wi-Fi."
                      : "Keep your reader nearby. Supported standby mode can wake over Bluetooth. Otherwise, open Sync → Same Wi-Fi on the reader.")
                     .font(.caption).foregroundStyle(.secondary)
             }

@@ -245,6 +245,7 @@ targets:
       - path: Tests/ReadingSyncBLETests.swift
       - path: Tests/ReaderWakeConnectorTests.swift
       - path: Tests/ReaderWiFiSetupTests.swift
+      - path: Tests/PocketProfileTests.swift
     dependencies:
       - target: PocketMac
     settings:

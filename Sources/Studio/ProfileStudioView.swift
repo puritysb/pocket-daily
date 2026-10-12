@@ -1382,7 +1382,7 @@ struct PocketLayoutSchematic: View {
                 block(section.title, height: height(of: section), filled: false)
             }
             Spacer(minLength: 0)
-            Text("Powered off").font(.system(size: 13, weight: .semibold))
+            Text("Sleeping").font(.system(size: 13, weight: .semibold))
         }
     }
 

@@ -34,8 +34,13 @@ struct MyCardsEditor: View {
             if let index = selectedIndex {
                 fields(index)
             } else {
-                Text("Write a short note, a question, or add a QR code. Cards appear as Home pages.")
+                Text("Cards are optional. Start with a reading prompt, or write your own note. Preview and apply when ready.")
                     .font(.caption).foregroundStyle(.secondary)
+                Button("Add Reading Prompt", systemImage: "book") {
+                    addCard(title: "After reading", question: "What is one idea you want to remember from today’s reading?")
+                }
+                .disabled(locked || editor.isBusy)
+                .accessibilityIdentifier("cards-reading-prompt")
             }
             if let removed = lastRemoved {
                 HStack {
@@ -113,7 +118,7 @@ struct MyCardsEditor: View {
                 cardRow(index, card)
                 Divider().padding(.leading, 10)
             }
-            Button(action: addCard) {
+            Button { addCard() } label: {
                 Label(cards.count >= 3 ? "Up to three cards" : "Add Card", systemImage: "plus")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 7)
@@ -292,11 +297,11 @@ struct MyCardsEditor: View {
         do { try await editor.save() } catch { /* lastError drives the recovery affordance */ }
     }
 
-    private func addCard() {
-        guard cards.count < 3 else { return }
+    private func addCard(title: String = "", question: String = "") {
+        guard !locked, !editor.isBusy, cards.count < 3 else { return }
         var draft = editor.draft
         let id = String(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "").prefix(32))
-        draft.cards.append(.init(id: id, title: "", question: ""))
+        draft.cards.append(.init(id: id, title: title, question: question))
         editor.edit(draft)
         selectedID = id
         onEdit()

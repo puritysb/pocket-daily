@@ -8,13 +8,13 @@ final class PocketProfileTests: XCTestCase {
 
     func testDefaultsShowWhatAReaderWithoutAProfileShows() {
         let d = PocketProfile.defaults
-        // The firmware default also lists provider, which only the retired daemon fed.
+        // Match a freshly installed firmware profile; optional content is opt-in.
         XCTAssertEqual(d.home.items, [.reading, .study])
-        XCTAssertTrue(d.home.dailyWord)
-        XCTAssertEqual(d.home.weather, .bottom)
-        XCTAssertTrue(d.home.nextEvent)
+        XCTAssertFalse(d.home.dailyWord)
+        XCTAssertEqual(d.home.weather, .off)
+        XCTAssertFalse(d.home.nextEvent)
         XCTAssertEqual(d.sleep.mode, .brief)
-        XCTAssertEqual(d.sleep.sections, [.reading, .study, .weather, .today])
+        XCTAssertEqual(d.sleep.sections, [.reading])
         XCTAssertNil(d.validationError)
     }
 
@@ -26,7 +26,7 @@ final class PocketProfileTests: XCTestCase {
         XCTAssertEqual(Set((json["home"] as? [String: Any])?.keys ?? [:].keys), ["items", "dailyWord", "weather", "nextEvent"])
         XCTAssertEqual(Set((json["sleep"] as? [String: Any])?.keys ?? [:].keys), ["mode", "sections"])
         XCTAssertEqual(String(decoding: body, as: UTF8.self),
-                       #"{"home":{"dailyWord":true,"items":["reading","study"],"nextEvent":true,"weather":"bottom"},"schema":1,"sleep":{"mode":"brief","sections":["reading","study","weather","today"]}}"#)
+                       #"{"home":{"dailyWord":false,"items":["reading","study"],"nextEvent":false,"weather":"off"},"schema":1,"sleep":{"mode":"brief","sections":["reading"]}}"#)
     }
 
     func testValidationMirrorsTheFirmwareRules() {

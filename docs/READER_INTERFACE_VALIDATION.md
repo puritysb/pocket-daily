@@ -119,6 +119,10 @@ and stale generations, and rejects frames with only a header/footer before check
   reconnect without user input. Require the matching completed cycle,
   `returnMode=1`, `timerArmed=true` and `timerWake=true`; a restart or merely
   drawing the Brief is not a pass. OCR checks the retained Today content.
+- Wake transition: the same timer cycle captures the actual wake framebuffer.
+  Require a matching run, a 1..1500 ms refresh, an unchanged body and more than
+  100 changed cue pixels. This does not establish physical button timing or
+  optical panel quality.
 - Home and Daily Brief must differ. Clock/header and button footer are excluded
   from pixel equality, so a minute tick cannot stand in for a layout change.
 
@@ -127,7 +131,7 @@ runner exports XCTest attachments into its private run directory and verifies th
 hashes; it does not require access to the app sandbox directory.
 Missing images, a skipped case, restoration failure, or stale evidence fails the
 run. Original profiles and failed captures remain locally for recovery; successful
-captures and the owned EPUB are removed from the reader, original cards are restored, and the original profile is presented again. The suite exports 13 BMP/PNG pairs. Reader captures retain the configured reading orientation in native panel coordinates.
+captures and the owned EPUB are removed from the reader, original cards are restored, and the original profile is presented again. The suite exports 14 BMP/PNG pairs and restores the original wake-indicator preference. Reader captures retain the configured reading orientation in native panel coordinates.
 Inventory restoration compares every path and size, except the byte count of the
 existing firmware-owned `/agentdeck.log`, which changes during boot/sleep. Removing
 that log, adding files, or changing any other file size still fails the run.

@@ -1,5 +1,65 @@
 # 현재 인수인계 — 2026-10-13
 
+## Active first-use acceptance — 2026-10-13
+
+- Run `20261012T230749-c2f495` passed host 934, Python 134, strict analysis,
+  default/standby builds, exact developer installation and Mac/X3 EPUB round trip.
+  Installed version: `0.1.0-dev-main-582f9a66-ble-standby-w0a4f01d3`.
+- Explicit repeat reset now supports a nonzero archiveRun, preserves older
+  backups, rejects reuse and rolls partial renames back. Root books/fonts remain.
+- X3 settings/Wi-Fi/bonds reset; fresh Mac app showed only Welcome and no reader.
+  Automatic BLE discovery succeeded. Old macOS bond was removed through System
+  Settings; the user entered the new system pairing code and the app registered
+  the reader. Private receipts: firmware `build/first-ble-onboarding/`.
+- User approved macOS keychain access. Shipping app filled the saved password,
+  sent credentials over BLE, automatically rediscovered X3, and displayed saved
+  success. HTTP independently matched the paired identity and saved receipt.
+  Welcome EPUB was then sent through Library and shown Saved on reader.
+- With the normal Mac app closed, the user opened Welcome on X3, slept and woke
+  while holding OK: cue skipped and the same body returned. On a second trial,
+  the cue ended before a mid-transition press. Held-button skip is physically
+  observed; input specifically during the panel BUSY waveform is not established.
+  Do not reset either side or repeat the completed credential flow.
+- Firmware-specific guidance is in READER_FIRST_USE.md and the connection sheet.
+  Bluetooth encryption errors now explain recovery; discovery-to-pairing is
+  bounded to 90 seconds. The misleading password-required hint after a successful
+  send is suppressed and stale autofill text cleared. Final Mac regression:
+  132 passed, 4 explicit hardware skips, 0 failed; iOS device SDK build, six Mac
+  screenshots and package validation passed. No simulator ran. Current signed
+  app is `.build/onboarding-mac/Build/Products/Debug/Pocket.app`; normal app left
+  closed so the standalone reader remains undisturbed.
+
+
+
+## Reading-first setup and X3 wake — 2026-10-13
+
+- New profiles retain a Reading slot and default Sleep to Reading Brief; weather,
+  events and vocabulary are opt-in. Empty Library/Weather states explain the next
+  action. Cards offer an original editable reading prompt; no automatic pack
+  publication. See the app `docs/READER_FIRST_USE.md` for product boundaries.
+- Fresh X3 boots without settings offer authenticated BLE setup once, with
+  Read offline and a five-minute idle exit. The app makes Set Up Reader primary
+  and starts discovery on opening it; existing credential provisioning is reused.
+  Fresh-settings BLE onboarding subsequently passed (see the newer acceptance
+  entry). Physical button-during-wake timing remains separate from LAN tests.
+- Local closed/open-book wake cue replaces the old refresh, with no animation
+  dwell. Held/input-during-BUSY requests the book; an active panel waveform cannot
+  be cancelled. X3 timer-wake refresh measured 878 ms; body difference 0 pixels.
+- Physical run `20261012T221752-b3c959` passed connection, EPUB byte round trip,
+  14 captures, real timer sleep/return and profile/cards/preferences restoration.
+  Original aggregate failed on an OCR assumption of existing weather. After
+  adding explicit empty-weather checks and positive/negative controls, preserved
+  hardware evidence and all 14 BMP hashes passed offline audit in that firmware
+  run's `final-audit.json`. The original failed report remains unchanged.
+- A real blank-weather defect discovered on the preceding run was fixed in both
+  device and host renderer; this run uses the rebuilt/imported host framework.
+  Host 932 and Python 134 tests passed, strict cppcheck and default/standby builds
+  passed; Mac full suite 131 executed (4 hardware skips), no failures; iOS physical
+  SDK build and Mac screenshot/package checks passed. No simulator was run.
+- Installed version `0.1.0-dev-main-582f9a66-ble-standby-w8d3ef566`, SHA-256
+  `d7dcd201f657666531d4e0237be239c8ac0241f2b1a83672b8cd3b59f2d8e323`.
+  Optical panel quality, input during the panel waveform, X4, expanded iPhone and
+  long-duration tests remain separate. Fresh BLE setup is covered above.
 
 ## First-install rehearsal — 2026-10-13
 
@@ -24,8 +84,9 @@
 - Evidence: app `.build/first-install/report.json` and reader-reset-receipt.json.
   This prepares Mac/X3 setup, not a blank SD card: root books/fonts remain.
   iPhone, iCloud and OS Bluetooth records were not erased. Re-pairing or providing
-  Wi-Fi now consumes the prepared first-install state; do not run old enrollment
-  automatically. Animation/remote-frame playback has not been implemented.
+  Wi-Fi consumed the prepared reader first-install state when the user reconnected
+  it for the wake/setup work above. Existing reset archives remain; do not repeat
+  reset blindly. Remote-frame playback is not implemented.
 
 ## 실제 EPUB과 짧은 전체 X3 검증 — 2026-10-13
 

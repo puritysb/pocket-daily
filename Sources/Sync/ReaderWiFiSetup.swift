@@ -76,6 +76,19 @@ struct ReaderWiFiSetupView: View {
             }
             Text("Enter the same Wi-Fi name this device uses. Pocket Daily sends it securely over Bluetooth and saves it on the reader only after it connects.")
                 .font(.callout).foregroundStyle(.secondary)
+            if link.rememberedReader == nil {
+                Text("A new X3 running Pocket Daily shows its pairing code automatically. Enter that code in the system prompt. On X4, or if setup was skipped, open Sync → Direct connection on the reader. Other firmware may not support this Bluetooth setup. Wi-Fi details are entered here.")
+                    .font(.callout)
+                Button("Pair Reader") { nearby.scan() }
+                    .disabled(model.isDemoMode || model.isWorking || nearby.ownsBluetooth)
+                if nearby.ownsBluetooth {
+                    ProgressView("Finding and pairing your reader…").font(.caption)
+                }
+                if let failure = nearby.state.failureMessage { Text(failure).foregroundStyle(.red) }
+            } else {
+                Text("Keep the reader nearby on its setup screen or in Bluetooth standby. If it is already connected over Wi-Fi, the app opens Bluetooth setup for you.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             HStack {
                 Button("Use Current Wi-Fi") { isFillingWiFi = true; lookupID += 1 }
                     .accessibilityIdentifier("reader-wifi-use-current")
@@ -114,17 +127,9 @@ struct ReaderWiFiSetupView: View {
                 .onChange(of: openNetwork) { _, _ in password = "" }
             Text("Use a 2.4 GHz personal Wi-Fi network. Networks requiring a browser sign-in or enterprise account are not supported. Your Mac or iPhone stays on its current Wi-Fi.")
                 .font(.caption).foregroundStyle(.secondary)
-            if link.rememberedReader == nil {
-                Text("Pair once: open Sync → Direct connection on the reader, then enter its pairing code in the system prompt. You do not need to type Wi-Fi details on the reader.")
-                    .font(.callout)
-                Button("Pair Reader") { nearby.scan() }
-                    .disabled(model.isDemoMode || model.isWorking || nearby.ownsBluetooth)
-                if let failure = nearby.state.failureMessage { Text(failure).foregroundStyle(.red) }
-            } else {
-                Text("Keep the paired reader nearby in Bluetooth standby or Direct connection. If it is already connected here over Wi-Fi, the app opens Bluetooth setup for you.")
-                    .font(.caption).foregroundStyle(.secondary)
+            if let validation, !ssid.isEmpty, !submitted, !model.isConfiguringReaderWiFi {
+                Text(validation).font(.caption).foregroundStyle(.secondary)
             }
-            if let validation, !ssid.isEmpty { Text(validation).font(.caption).foregroundStyle(.secondary) }
             if submitted || model.isConfiguringReaderWiFi {
                 Text(model.readerWiFiSetupMessage).font(.callout)
                     .accessibilityIdentifier("reader-wifi-result")
@@ -134,6 +139,7 @@ struct ReaderWiFiSetupView: View {
                 Button("Save and Connect") {
                     let value = credentials
                     password = ""
+                    autofillMessage = nil
                     submitted = true
                     nearby.disconnect()
                     model.configureReaderWiFi(value)
@@ -148,6 +154,13 @@ struct ReaderWiFiSetupView: View {
         }
         .frame(idealWidth: 460, idealHeight: 620)
         .interactiveDismissDisabled(model.isWorking)
+        .task {
+            // Opening Set Up Reader is the user's request to discover/pair.
+            // No automatic Wi-Fi switch or credential transmission follows it.
+            guard link.rememberedReader == nil, !model.isDemoMode,
+                  model.canConfigureReaderWiFi, !nearby.ownsBluetooth else { return }
+            nearby.scan()
+        }
         .task(id: lookupID) {
             guard lookupID > 0, !model.isDemoMode else { return }
             isFillingWiFi = true

@@ -29,6 +29,9 @@ extension ReaderInterfaceSuite {
         } else { savedCards = ContentDraft() }
         try JSONEncoder().encode(savedCards).write(to: root.appendingPathComponent("original-cards.json"), options: .atomic)
         let originalReading = try await client.readingProgress(identity: identity, host: host, port: 80)
+        let originalPreferences = try await client.preferences(host: host, port: 80)
+        try JSONEncoder().encode(originalPreferences).write(to: root.appendingPathComponent("screen-original-preferences.json"), options: .atomic)
+        var preferencesChanged = false
         var cardsChanged = false
         var sleepEvidence: [String: Any] = [:]
         var captures: [[String: Any]] = []
@@ -66,12 +69,13 @@ extension ReaderInterfaceSuite {
             _ = try await request("POST", query, expected: 204)
             return try await download(name, surface: screen.rawValue, generation: generation, captureRun: captureRun)
         }
-        func download(_ name: String, surface: String, generation: UInt32, captureRun: UInt32) async throws -> ReaderCapturedPixels {
-            _ = try await request("GET", ["run": String(captureRun &+ 1), "offset": "0"], expected: 409)
+        func download(_ name: String, surface: String, generation: UInt32, captureRun: UInt32, wake: Bool = false) async throws -> ReaderCapturedPixels {
+            let frameQuery = wake ? ["frame": "wake"] : [:]
+            _ = try await request("GET", frameQuery.merging(["run": String(captureRun &+ 1), "offset": "0"]) { _, b in b }, expected: 409)
             var bytes = Data()
             var total: Int?
             repeat {
-                let (piece, http) = try await request("GET", ["run": String(captureRun), "offset": String(bytes.count)])
+                let (piece, http) = try await request("GET", frameQuery.merging(["run": String(captureRun), "offset": String(bytes.count)]) { _, b in b })
                 let size = try XCTUnwrap(Int(http.value(forHTTPHeaderField: "X-Capture-Size") ?? ""))
                 try check(size > 62 && size <= 100_000 && (total == nil || total == size), "Invalid or changed capture size")
                 try check(http.value(forHTTPHeaderField: "X-Capture-Run") == String(captureRun), "Stale capture response")
@@ -99,7 +103,7 @@ extension ReaderInterfaceSuite {
             captures.append(["name": name, "surface": surface, "generation": generation,
                              "run": captureRun, "sha256": SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
                              "width": pixels.width, "height": pixels.height, "inkPixels": pixels.ink, "contentInkPixels": pixels.contentInk])
-            _ = try await request("DELETE", ["run": String(captureRun)], expected: 204)
+            _ = try await request("DELETE", frameQuery.merging(["run": String(captureRun)]) { _, b in b }, expected: 204)
             activeRun = nil
             return pixels
         }
@@ -153,6 +157,14 @@ extension ReaderInterfaceSuite {
                 try await cleanupFiles()
                 if !jobs.isEmpty { try check(Self.sameVisualInventory(try await fileMap(), baseline), "Reader inventory changed after visual fixture cleanup") }
             }
+            await attempt("wake preference restoration") {
+                if preferencesChanged {
+                    try await client.save(preferences: originalPreferences, host: host, port: 80, expectedDeviceID: identity)
+                    let observed = try await client.preferences(host: host, port: 80)
+                    try check(observed == originalPreferences, "Wake test did not restore reader settings")
+                    preferencesChanged = false
+                }
+            }
             await attempt("profile restoration") { _ = try await apply(original.profile, screen: .home) }
             await attempt("reading preservation") {
                 let reading = try await client.readingProgress(identity: identity, host: host, port: 80)
@@ -161,6 +173,12 @@ extension ReaderInterfaceSuite {
             try check(failures.isEmpty, failures.joined(separator: "; "))
         }
         do {
+            if originalPreferences.sleepWakeIndicator == false {
+                var enabled = originalPreferences
+                enabled.sleepWakeIndicator = true
+                preferencesChanged = true // also restore after an ambiguous reply
+                try await client.save(preferences: enabled, host: host, port: 80, expectedDeviceID: identity)
+            }
             var base = original.profile
             base.home = .init(items: [.reading], dailyWord: false, weather: .off, nextEvent: false)
             base.sleep = .init(mode: .brief, sections: [.weather])
@@ -277,6 +295,15 @@ extension ReaderInterfaceSuite {
             let asleep = try await download("13-actual-sleep", surface: "sleep", generation: 0, captureRun: sleepRun)
             differences["sleepContentRetained"] = briefToday.difference(asleep)
             try check(briefToday.difference(asleep) == 0, "Actual sleep did not retain the selected Brief body")
+            try check((cycle["wakeCaptureRun"] as? NSNumber)?.uint32Value == sleepRun &&
+                      cycle["wakeSkipped"] as? Bool == false, "Wake transition was not captured for this sleep")
+            let refreshMs = try XCTUnwrap(cycle["wakeRefreshMs"] as? Int)
+            try check(refreshMs > 0 && refreshMs <= 1500, "Wake refresh exceeded the short-transition budget")
+            let awake = try await download("14-wake-transition", surface: "wake", generation: 0, captureRun: sleepRun, wake: true)
+            differences["wakeBodyRetained"] = asleep.difference(awake)
+            differences["wakeTransition"] = zip(asleep.pixels, awake.pixels).filter { $0 != $1 }.count
+            try check(asleep.difference(awake) == 0 && differences["wakeTransition", default: 0] > 100,
+                      "Wake must change its cue while preserving reading content")
             try await restore()
         } catch {
             let failure = error
@@ -286,7 +313,7 @@ extension ReaderInterfaceSuite {
         }
         let result: [String: Any] = ["passed": true, "captures": captures, "artifactDirectory": root.path,
                                     "restored": true, "staleCaptureRejected": true, "pixelDifferences": differences,
-                                    "sleepCycle": sleepEvidence, "cardsRestored": !cardsChanged, "readingPreserved": true,
+                                    "sleepCycle": sleepEvidence, "cardsRestored": !cardsChanged, "preferencesRestored": !preferencesChanged, "readingPreserved": true,
                                     "scope": "X3 Home/Brief/card/EPUB framebuffer and actual timer deep sleep; excludes optical panel"]
         try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
             .write(to: root.appendingPathComponent("screen-validation.json"), options: .atomic)
