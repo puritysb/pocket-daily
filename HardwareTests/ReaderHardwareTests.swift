@@ -326,6 +326,12 @@ final class ReaderHardwareTests: XCTestCase {
                 evidence["networkFaults"] = suite.networkEvidence
             }
 #if os(macOS)
+            if env["POCKET_HARDWARE_CONTINUITY"] == "1" {
+                let suite = ReaderInterfaceSuite(model: model, client: client, host: host,
+                    identity: identity, run: run, idle: { !busy })
+                evidence["continuityRecoveryArtifacts"] = suite.root.path
+                evidence["continuityValidation"] = try await suite.continuityChecks()
+            }
             if env["POCKET_HARDWARE_SCREENS"] == "1" {
                 let suite = ReaderInterfaceSuite(model: model, client: client, host: host,
                     identity: identity, run: run, idle: { !busy })

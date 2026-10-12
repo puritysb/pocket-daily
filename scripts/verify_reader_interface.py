@@ -32,11 +32,16 @@ def main():
     parser.add_argument('--firmware-repo', type=Path, default=ROOT.parent / 'pocket-daily-firmware')
     parser.add_argument('--physical-only', action='store_true', help='never invoke a simulator or simulator screenshots')
     parser.add_argument('--screen-suite', action='store_true', help='capture and validate physical X3 Home/Brief pixels')
+    parser.add_argument('--real-epub', action='store_true', help='use the published Frankenstein EPUB text fixture; requires --continuity-suite')
+    parser.add_argument('--continuity-suite', action='store_true', help='accept real reading offers in both directions on Mac/X3')
+    parser.add_argument('--network-faults', action='store_true', help='verify transfer recovery through actual X3 Wi-Fi outages')
     parser.add_argument('--simulator', help='iPhone simulator UDID; defaults to an available iPhone')
     parser.add_argument('--ios-device', help='also run all supported cases on this physical iPhone UDID')
     parser.add_argument('--standby', action='store_true', help='also verify X3 experimental BLE standby/wake')
     parser.add_argument('--screenshots', action='store_true', help='regenerate iPhone/iPad/Mac UI captures')
     args = parser.parse_args()
+    if args.real_epub and not args.continuity_suite:
+        parser.error('--real-epub requires --continuity-suite')
     if args.physical_only and (args.simulator or args.screenshots):
         parser.error('--physical-only cannot be combined with simulator or app screenshot options')
     firmware = args.firmware_repo.resolve()
@@ -55,7 +60,9 @@ def main():
         job.report['scope'] = 'Automated regression and enrolled-reader Same Wi-Fi interfaces'
         job.report['notEstablished'] = ['X4 hardware (unless enrolled)', 'iCloud between physical Apple devices',
             'Direct Wi-Fi association and OS permission dialogs', 'physical SD mount and removal',
-            'reader button/display optics and accepting a reading-position offer', 'App Store release readiness']
+            'reader physical buttons/display optics', 'BLE-only reading-position acceptance', 'App Store release readiness']
+        if not args.continuity_suite:
+            job.report['notEstablished'].append('accepting a reading-position offer')
         job.report['appSources'] = pipeline.source_state(ROOT)
         try:
             job.stage('exclusive-app-preflight', pipeline.require_companion_stopped)
@@ -72,11 +79,15 @@ def main():
                 '-scheme', 'PocketMac', '-destination', 'platform=macOS,arch=arm64',
                 '-derivedDataPath', str(ROOT / '.build/interface-mac'), 'CODE_SIGNING_ALLOWED=YES',
                 '-only-testing:PocketMacTests/PocketMacReaderTests',
+                '-only-testing:PocketMacTests/ReadingSyncTests',
+                '-only-testing:PocketMacTests/ReaderEngineTests',
+                '-only-testing:PocketMacTests/ReaderSuggestionTests',
                 '-only-testing:PocketMacTests/DeviceSnapshotTests',
                 '-only-testing:PocketMacTests/ReaderShelfTests',
                 '-only-testing:PocketMacTests/ReaderInventoryModelTests',
                 '-only-testing:PocketMacTests/ReaderFileDownloaderTests',
                 '-only-testing:PocketMacTests/ReaderFilePieceRequestTests',
+                '-only-testing:PocketMacTests/ReaderDownloadOperationTests',
                 '-only-testing:PocketMacTests/ReaderBluetoothLinkTests',
                 '-only-testing:PocketMacTests/ReadingSyncBLEProtocolTests',
                 '-only-testing:PocketMacTests/ReaderWakeConnectorTests',
@@ -88,6 +99,12 @@ def main():
             command = [sys.executable, str(runner), 'run', '--app', str(ROOT), '--interface-suite']
             if args.screen_suite:
                 command.append('--screen-suite')
+            if args.continuity_suite:
+                command.append('--continuity-suite')
+            if args.real_epub:
+                command.append('--real-epub')
+            if args.network_faults:
+                command.append('--network-faults')
             if args.standby:
                 command.append('--standby')
             if args.ios_device:

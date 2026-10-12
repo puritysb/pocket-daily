@@ -262,6 +262,26 @@ struct BookReaderView: View {
     }
 
     private func suggestionBanner(_ suggestion: ReadingSync.Suggestion) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                suggestionMessage(suggestion)
+                Spacer(minLength: 8)
+                suggestionActions(suggestion)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                suggestionMessage(suggestion)
+                HStack {
+                    Spacer(minLength: 0)
+                    suggestionActions(suggestion)
+                }
+            }
+        }
+        .padding(PocketDesign.cardInset)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
+        .foregroundStyle(.primary)
+    }
+
+    private func suggestionMessage(_ suggestion: ReadingSync.Suggestion) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "arrow.triangle.2.circlepath")
             VStack(alignment: .leading, spacing: 2) {
@@ -272,7 +292,12 @@ struct BookReaderView: View {
                 Text("You're at \(percent(session.position?.fraction ?? book.progress)) here.")
                     .font(.caption)
             }
-            Spacer()
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func suggestionActions(_ suggestion: ReadingSync.Suggestion) -> some View {
+        HStack(spacing: 12) {
             Button("Go to \(percent(suggestion.position.fraction))") {
                 session.go(to: suggestion.position)
                 self.suggestion = nil
@@ -286,9 +311,7 @@ struct BookReaderView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stay Here")
         }
-        .padding(PocketDesign.cardInset)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: PocketDesign.cardRadius))
-        .foregroundStyle(.primary)
+        .fixedSize()
     }
 
     // MARK: Actions

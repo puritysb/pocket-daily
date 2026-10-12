@@ -90,6 +90,18 @@ final class ReaderInventoryModelTests: XCTestCase {
 }
 
 final class ReaderShelfTests: XCTestCase {
+    func testFirmwareDiagnosticsDoNotAppearAsBooksOrEraseInventory() {
+        let paths = ["/crash_report.txt", "/CRASH_REPORT.1.TXT", "/crash_report.2.txt",
+                     "/crash_report.3.txt", "/nearby_ap_log.txt", "/Books/crash_report.txt",
+                     "/crash_report_notes.txt", "/Notes.txt"]
+        let inventory = ReaderInventory(deviceID: "1234ABCD", model: "X3",
+            files: paths.map { .init(path: $0, size: 100) },
+            reading: [entry("/crash_report.txt", digestA, 0.5)], readAt: Date())
+        let shelf = ReaderShelf(inventory: inventory, books: [])
+        XCTAssertEqual(Set(shelf.items.map(\.path)), Set(paths.suffix(3)))
+        XCTAssertEqual(inventory.files.map(\.path), paths, "Browse Files must retain every diagnostic")
+    }
+
     func testReaderBooksFolderIsListedAndMixedCaseRecentPathKeepsDownloadMetadata() {
         XCTAssertTrue(ReaderInventory.folders.contains("/Books"))
         let inventory = ReaderInventory(deviceID: "1234ABCD", model: "X3", files: [

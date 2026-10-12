@@ -27,6 +27,14 @@ struct ReaderInventoryView: View {
                         .accessibilityIdentifier("inventory-error")
                 }
                 if let shelf {
+                    if model.device.isConnected, model.device.capabilities.contains(.fileDownload),
+                       !model.canDownloadFromReader {
+                        Text(model.readerDownload == nil
+                             ? "Wait for the current reader task to finish before copying a book."
+                             : "Copying a book into your Library. You can cancel beside that book.")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     HStack {
                         Text("\(shelf.readerModel ?? "Reader") · checked \(shelf.readAt.formatted(.relative(presentation: .named)))")
                             .font(.caption).foregroundStyle(.secondary)
@@ -81,6 +89,8 @@ struct ReaderInventoryView: View {
                         .accessibilityIdentifier("inventory-book-\(item.name)")
                         if let download = model.readerDownload, download.path == item.path, download.size > 0 {
                             ProgressView(value: Double(download.received), total: Double(download.size)).progressViewStyle(.pocketBar)
+                            Text("\(ByteCountFormatter.string(fromByteCount: download.received, countStyle: .file)) of \(ByteCountFormatter.string(fromByteCount: download.size, countStyle: .file)) copied")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 } else if model.device.isConnected {
@@ -121,7 +131,16 @@ struct ReaderInventoryView: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 if let error = library.error {
-                    PocketStatusLabel(error, tone: .failure).font(.caption)
+                    VStack(alignment: .leading, spacing: 8) {
+                        PocketStatusLabel(error, tone: .failure).font(.caption)
+                        Button("Dismiss") { library.error = nil }.buttonStyle(.borderless)
+                    }
+                }
+                if let notice = library.notice {
+                    VStack(alignment: .leading, spacing: 8) {
+                        PocketStatusLabel(notice, tone: .success).font(.caption)
+                        Button("Dismiss") { library.notice = nil }.buttonStyle(.borderless)
+                    }
                 }
             }
             if model.readerStatus != nil && (model.isDemoMode || canObserveInventory) {

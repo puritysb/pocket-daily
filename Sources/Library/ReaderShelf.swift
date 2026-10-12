@@ -20,6 +20,13 @@ struct ReaderInventory: Equatable, Sendable {
     static let folders = ["/", "/Books", "/Articles"]
     /// Book files a reader shelf shows; XTC is the reader's own pre-rendered format.
     static let bookExtensions: Set<String> = ["epub", "txt", "md", "xtc"]
+
+    /// Firmware-owned root diagnostics remain available in Browse Files.
+    /// Do not hide similarly named user books in other folders.
+    static func isDiagnosticPath(_ path: String) -> Bool {
+        ["/crash_report.txt", "/crash_report.1.txt", "/crash_report.2.txt",
+         "/crash_report.3.txt", "/nearby_ap_log.txt"].contains(path.lowercased())
+    }
 }
 
 /// The inventory matched against the Library. A reader book matches a Library
@@ -57,12 +64,14 @@ struct ReaderShelf: Equatable {
         }
         var items: [String: Item] = [:]
         for file in inventory.files {
+            guard !ReaderInventory.isDiagnosticPath(file.path) else { continue }
             let name = (file.path as NSString).lastPathComponent
             guard ReaderInventory.bookExtensions.contains((name as NSString).pathExtension.lowercased()) else { continue }
             let book = books.first { $0.fileName == name && $0.byteCount == file.size }
             items[file.path.lowercased()] = Item(path: file.path, size: file.size, percentage: nil, bookID: book?.id)
         }
         for entry in inventory.reading {
+            if let path = entry.path, ReaderInventory.isDiagnosticPath(path) { continue }
             let book = byDigest[entry.document.lowercased()]
             guard let key = entry.path ?? book.map({ "#" + $0.documentDigest }) else { continue }
             // FAT paths are case-insensitive. Recent-reading paths may use

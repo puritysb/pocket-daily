@@ -96,7 +96,7 @@ struct LibraryView: View {
                     Text(shared.title).font(.headline)
                     Text("Send this exact file to your other devices and open it there with Pocket Daily. The same file is recognized as the same book, so you can continue where you left off.")
                         .font(.callout).foregroundStyle(.secondary)
-                    ShareLink(item: shared.url) { Label("Share book file", systemImage: "square.and.arrow.up") }
+                    ShareLink(item: shared.url) { Label("Share Book File", systemImage: "square.and.arrow.up") }
                         .buttonStyle(.borderedProminent)
                     Button("Done") { sharing = nil }
                 }

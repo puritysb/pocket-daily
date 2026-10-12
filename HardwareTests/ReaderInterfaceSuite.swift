@@ -289,7 +289,9 @@ final class ReaderInterfaceSuite {
         }
     }
     func download(path: String, book: LibraryBook, original: URL, library: LibraryModel) async throws {
-
+        // Reading the source URL yields to inventory/heartbeat work. Mirror the
+        // enabled Add to Library button, then submit without another suspension.
+        try await wait("download action enabled") { model.canDownloadFromReader }
         var result: Result<URL, Error>?
         var callbacks = 0
         defer {

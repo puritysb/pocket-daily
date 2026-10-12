@@ -240,6 +240,8 @@ targets:
       - path: HardwareTests
       - path: Tests/DeviceSnapshotTests.swift
       - path: Tests/ReaderShelfTests.swift
+      - path: Tests/ReadingSyncTests.swift
+      - path: Tests/ReaderEngineTests.swift
       - path: Tests/ReadingSyncBLETests.swift
       - path: Tests/ReaderWakeConnectorTests.swift
       - path: Tests/ReaderWiFiSetupTests.swift

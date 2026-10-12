@@ -6,6 +6,24 @@ transactions, and acceptance that needs additional hardware or OS facilities.
 
 ## Repeatable unattended run
 
+For short X3 acceptance with a published EPUB, transfer outages, reading-offer
+acceptance, framebuffer checks and brief timer deep sleep, use:
+
+```sh
+python3 scripts/verify_reader_interface.py --physical-only --screen-suite --continuity-suite --real-epub --network-faults
+```
+
+This runs on the Mac and enrolled X3, without a simulator, firmware installation
+or X4 test. It combines the existing cases in one hardware session and keeps
+the per-case evidence and restoration checks. `--continuity-suite` includes the
+real Mac suggestion-button regression, forward and backward X3 round trips;
+`--real-epub` selects the 38-section Frankenstein text fixture and requires
+unchanged upload/download/library bytes. Its images are placeholders. Add
+`--standby` separately for BLE idle/wake acceptance; it is omitted here.
+`--network-faults` includes the two actual reader Wi-Fi outages. Physical display
+optics, extended battery endurance, BLE-only continuation and iCloud remain
+separate acceptance items. A passing run is not a claim of exhaustive coverage.
+
 From this checkout:
 
 ```sh
@@ -210,3 +228,28 @@ the harness does not erase user history or unrelated pending tasks.
 Keep current measured results in `CURRENT_HANDOFF.md`. These automated results
 are evidence for the named scenarios, not an App Store or whole-product release
 approval.
+
+## Bidirectional continuation acceptance
+
+Run the sibling pipeline with `--continuity-suite` on matching developer firmware.
+The generated EPUB is separate from the user's library and reader books.
+
+| Case | Required evidence |
+| --- | --- |
+| App → X3 | Shipping reading exchange proposes the app position; posting leaves the recorded reader page unchanged; the actual X3 reading confirmation is rendered and accepted; captured text matches the source paragraph (numeric checkpoint boundaries are checked). |
+| X3 → app | A real page turn followed by EPUB exit records a new XPointer and sequence; the Mac shows its shipping suggestion; receiving it does not navigate; OCR-locating the Go-to button and sending native window mouse events lands with the exact offered character inside the visible page. |
+| Re-reading | Repeat the round trip with an earlier app position so a newer backward proposal must be honored. |
+| Preservation | Remove the owned book/trial visibility; compare original positions, recent order and file inventory. |
+
+Each direction is required in both rounds. X3 captures are saved, decoded from
+disk, OCR-checked locally, attached to XCTest and hash-verified on export. A
+missing offer, unaccepted dialog, missing exit record or cleanup error fails the
+run. This coverage is Mac/X3 over HTTP; iCloud, BLE-only exchange, iPhone/X4 and
+optical e-paper quality require separate evidence.
+
+Physical acceptance on 2026-10-12: firmware run `20261012T135615-aea4c3`
+passed both rounds, five framebuffer captures and restoration in 208.494 seconds.
+Each incoming reader offer began in a different chapter from the app's current
+page. Both exact-character visibility checks passed after the actual Go-to
+button events. The second round accepted a newer earlier position. See
+`CURRENT_HANDOFF.md` for artifact locations and the precise verification limits.

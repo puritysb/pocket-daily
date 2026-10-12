@@ -274,7 +274,9 @@ extension ReaderInterfaceSuite {
                       cycle["returnMode"] as? Int == 1 && cycle["timerArmed"] as? Bool == true &&
                       cycle["timerWake"] as? Bool == true, "No matching actual deep sleep and timer wake evidence")
             sleepEvidence = cycle
-            _ = try await download("13-actual-sleep", surface: "sleep", generation: 0, captureRun: sleepRun)
+            let asleep = try await download("13-actual-sleep", surface: "sleep", generation: 0, captureRun: sleepRun)
+            differences["sleepContentRetained"] = briefToday.difference(asleep)
+            try check(briefToday.difference(asleep) == 0, "Actual sleep did not retain the selected Brief body")
             try await restore()
         } catch {
             let failure = error

@@ -1,4 +1,108 @@
-# 현재 인수인계 — 2026-10-12
+# 현재 인수인계 — 2026-10-13
+
+## 실제 EPUB과 짧은 전체 X3 검증 — 2026-10-13
+
+- 장시간 대기·소비전력, X4, 실기기 범위 확대는 제외하고 자동 검증했다.
+  재실행: `python3 scripts/verify_reader_interface.py --physical-only --screen-suite --continuity-suite --real-epub --network-faults`.
+- 실제 책은 sibling의 Standard Ebooks Frankenstein fixture: 226309 B, 38개 섹션,
+  원문 XHTML 유지·이미지는 1×1 대체. 원본 해시와 이 재패키징 fixture 해시는 다르다.
+  이번 fixture SHA-256은 `d09a9d94bd1076edd07a9204989ed2917bef73ad28cbd855d758641fb2e5eeb0`.
+  앱 import→X3 전송→다운로드→별도 보관함 재저장까지 원본 바이트 일치.
+- 실제 X3 실행 `20261012T153747-86b9c6` XCTest는 750.004초 PASS:
+  인터페이스 10개, 실제 전송 Wi-Fi 단절 2개, 소설 양방향 이어 읽기 2왕복,
+  X3 캡처 18개(화면 13+이어 읽기 5), timer deep sleep/복귀, 원래 데이터 복원.
+  두 단절은 9.017/8.993초, 각각 앱 send 1회·publication 1회;
+  수신 중 단절은 65536 B부터 재개, 최종 853319 B 원본 일치.
+  슬립은 Today Brief 본문과 실제 잠자기 화면의 차이 0 픽셀(헤더/푸터 제외).
+- 원래 aggregate `.build/interface-runs/20261012T153718-497253/report.json`은
+  기기 실행 후 기대 fixture 해시를 원본 EPUB 메타데이터 값으로 둔 검사 오류 때문에
+  실패로 보존했다. 실제 파일은 Git HEAD와 일치했다. 기대 값을 고치고 실제 fixture
+  해시/크기를 대조하는 회귀를 추가했다. 기기 동작을 반복하지 않고 원래 xcresult,
+  실행 로그, 18개 BMP 해시, PNG OCR을 오프라인으로 다시 검사한 최종 결과:
+  `.build/x3-real-epub/final-audit/report.json` PASS. 같은 폴더 `captures/`에 이미지가 있다.
+  재검증 절차는 `.build/x3-real-epub/audit.py`에 보존했다. 원래 실패 기록은 수정하지 않았다.
+- 추가 보완: 개발 reader-capture의 SD 파일 한도를 64 KiB→4 MiB로 확대(새 버퍼 없음).
+  가로 책 화면의 OCR 자동 회전 오독은 명시적 4방향 판독으로 해결하고 각 결과를
+  독립적으로 정확한 원문과 비교한다. 근사 일치나 후보 이어붙이기는 사용하지 않는다.
+  `/body` 장 경계는 첫 실제 문자의 가시성을 검사한다. 다른 장·화면 밖 문단·
+  부정확한 경로는 거절하는 Mac 회귀를 추가했다. 실제 shipping 이동 오류는 없었다.
+- Mac 회귀 115 PASS/0 skip, 마지막 장 경계 회귀 1 PASS;
+  firmware host 922, Python 최종 134 PASS; strict cppcheck 및 default/ble 빌드
+  경고 0, iOS device-SDK test build, 패키지/차이 검사 PASS. 시뮬레이터 실행 없음.
+- 설치 확인: `0.1.0-dev-main-e7b1ee22-ble-standby-w75bfcee3`, SHA-256
+  `b78e3ff3d97336a96789605fb6c7e76a86b8433d91d4e17fe893d9e904d15480`.
+  빌드·설치 증거는 firmware run `20261012T151741-3e9f50`(이후 첫 OCR 시험은 실패).
+- 이 결과는 Mac↔X3 Same Wi-Fi의 현재 기능 검증이다. iCloud, BLE-only 위치 수락,
+  실제 패널 광학 촬영, 이미지가 많은 EPUB 전반, 장시간 배터리, X4 및 출시 수용은
+  포함하지 않는다. 사용자 기기 조작 없이 실행했으며 커밋·푸시는 하지 않았다.
+  마지막에 signed Debug 일반 앱을 다시 열어 My Reader의 X3 Same Wi-Fi 연결,
+  최신 파일 목록, 기존 보류 전송/설정 초안 보존을 실제 UI로 확인했다.
+
+## X3·앱 사용성 마감 — 2026-10-12
+
+- 사용자 우선순위: X4 실기기 검증은 후속으로 미루고 X3와 앱의 현재 기능·사용성을
+  먼저 마무리한다. 신규 백로그 기능, 출시 준비, 시뮬레이터 실행은 추가하지 않는다.
+- 기기 보관함에 복사 대기 이유, 받은/전체 용량, 완료 알림과 오류/알림 Dismiss를
+  표시한다. 이어 읽기 제안은 좁은 화면에서 행동을 다음 줄로 내리고 버튼 폭을
+  보존한다. 320pt·긴 기기 이름 및 620pt 실제 창 버튼 시험과 이미지 확인 통과.
+  Share Book File의 제목 표기도 디자인 규칙에 맞췄다.
+- 전체 검증 명령에 `--continuity-suite`, `--network-faults`를 연결하고,
+  ReadingSync/ReaderEngine/ReaderSuggestion/ReaderDownloadOperation 회귀를 포함했다.
+  명령은 `docs/READER_INTERFACE_VALIDATION.md` 첫 절에 있다.
+- 첫 통합 run `20261012T142110-6a40f8`은 pause-resume 후 다운로드 admission에서
+  실패했다. 원본 fileURL을 await하는 사이 리더 작업이 재개될 수 있는데 시험은
+  버튼 활성 여부를 다시 보지 않았다. 실제 UI와 동일하게 canDownloadFromReader를
+  기다린 직후 요청하도록 수정했다. 거절·단절을 재시도해 숨기는 변경은 없다.
+- 최종 통합 `.build/interface-runs/20261012T142550-275352/report.json` PASS.
+  Mac 회귀 113 PASS, firmware hardware run `20261012T142627-a28ac2`:
+  인터페이스 10개, 실제 Wi-Fi 단절 복구 2개, 양방향 이어 읽기 2왕복,
+  X3 화면 13개와 이어 읽기 5개 캡처, timer deep sleep/복귀 및 모든 복원 통과.
+  BLE standby 후 재연결 12.444초. pause-resume 다운로드 853319 B 원본 일치.
+  iOS device-SDK build-for-testing 및 패키지/차이 검사 통과.
+- Mac 캡처 6장 재생성·패키지 검사 통과. 해당 전체 Mac 실행은 119 PASS/4 skip
+  (`.build/screenshots/capture-reports/20261012T144114-87028/mac-16x10.json`).
+  화면 검사 후 발견한 추가 문제: root crash_report.txt 및 .1/.2/.3,
+  nearby_ap_log.txt가 TXT 책으로 노출됐다. ReaderShelf에서 정확한 경로만
+  제외했다. 다른 폴더의 동명 책·일반 TXT와 원본 inventory는 유지한다.
+  후속 shelf/inventory 9 PASS(`.build/x3-finish/shelf.xcresult`), iOS 빌드 통과.
+  이 마지막 목록 필터 변경 뒤 긴 통합 무선 시험을 반복하지 않았으며,
+  최종 signed Debug 앱을 실행해 실제 X3 목록에서 제외되고 Browse Files에는
+  그대로 남는 것을 UI로 확인했다. X3 Same Wi-Fi 연결 상태로 앱을 열어 두었다.
+- 이 결과는 현재 기능의 Mac/X3 통합 기준이다. iPhone 실기기 확대, BLE-only
+  이어 읽기·iCloud, 다양한 실제 EPUB의 X3 장기 독서, 밤샘 소비전력·광학 패널
+  및 X4 수용을 대신하지 않는다. 전체 환경의 검증 완료나 출시 승인이 아니다.
+
+## 양방향 이어 읽기 자동 검증 — 실기기 통과
+
+- `--continuity-suite`가 Mac/X3에서 전체 통과했다:
+  firmware `build/dev-pipeline-runs/20261012T135615-aea4c3/report.json`.
+  사용자가 Same Wi-Fi에 연결한 뒤 IP 입력 없이 앱 자동 검색으로 발견했고,
+  이후 두 왕복/다섯 캡처/정리까지 기기 수동 조작 없이 완료했다(208.494초).
+- 앱→X3: shipping reading exchange와 실제 X3 확인 팝업을 사용해
+  Silver meadow checkpoint 11, 이어 이전 장 Amber orchard checkpoint 11을
+  제안·수락했다. X3 framebuffer BMP를 저장·재독출·OCR하여 본문 일치를 확인했다.
+- X3→앱: 실제 다음 페이지 넘김과 EPUB 종료가 새 위치/sequence를 기록했다.
+  두 장의 checkpoint 13 본문과 저장 위치 이후 문자를 X3 캡처에서 확인했다.
+  앱을 다른 장에 둔 뒤 실제 Go-to 버튼에 로컬 창 마우스 이벤트를 보내,
+  제안한 정확한 XPointer 문자가 앱의 visible range 안에 들어왔음을 검사했다.
+  양쪽 모두 수락 전 위치 불변, 최신 뒤 방향 제안 수락까지 통과했다.
+- 원래 독서 위치·recent 순서·파일 inventory 복원, 테스트 책 제거 통과.
+  다섯 X3 BMP/PNG와 앱 수락 화면은 위 run의 `macOS-hardware-1-continuity/`에
+  export했고 BMP SHA-256도 대조했다. 광학 패널 촬영을 뜻하지 않는다.
+- 시험 경로에서 발견한 문제를 수정했다: HTTP_ANY 미지원에 따른 개발 endpoint
+  404를 명시적 POST/GET/DELETE 등록으로 해결, 실패 시 독립적인 정리 시도,
+  off-screen SwiftUI AX children 부재를 실제 화면 OCR/창 이벤트로 해결했다.
+  페이지 시작 비율과 목표 비율 차이, 문단 중간 페이지 시작을 고려해 검증했다.
+  이번 범위에서 shipping 앱의 이어 읽기 오류는 발견하지 않았다.
+- 설치 확인 버전: `0.1.0-dev-main-e7b1ee22-ble-standby-w65c15eca`.
+  소스는 두 저장소 main의 미커밋 변경이다. 재실행:
+  `python3 ../pocket-daily-firmware/scripts/dev_pipeline.py run --app "$PWD" --continuity-suite`.
+- Mac 전체 `.build/continuity/mac-final.xcresult`: 119 PASS, opt-in 3 skip.
+  ReaderSuggestionTests 단독 1 PASS; firmware XPointer 430개 본문 교차 확인.
+  iOS device SDK build-for-testing 통과, 시뮬레이터 사용 없음.
+  펌웨어 host 921, Python 133, strict cppcheck, default/ble_standby 빌드 통과.
+- iCloud, BLE-only 이어 읽기, iPhone/X4, 다양한 실제 EPUB 및 광학 패널은 별도다.
+  이번 결과는 생성 EPUB 두 왕복의 Mac/X3 HTTP 경로 검증이며 출시 승인이 아니다.
 
 ## 다운로드 완료 보장 및 실제 전송 Wi-Fi 단절 — 2026-10-12
 

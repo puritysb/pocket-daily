@@ -189,3 +189,60 @@ verification and terminal phases, byte/request counts, elapsed/progress age and
 error code. Each request must complete once even when rejected or cancelled
 before I/O. Counters contain no filename, contents, network address or identity.
 The test report retains failed-stage evidence as well as successful downloads.
+
+### Bidirectional reading acceptance
+
+`--continuity-suite` runs on the physical Mac and X3, using the matching developer
+firmware. It uploads an isolated, run-named EPUB, opens the shipping Mac reader,
+and exercises forward and backward app offers. X3 accepts through its rendered
+reading confirmation dialog, closes the actual EPUB activity to record its page,
+and returns to Same Wi-Fi. A subsequent real X3 page turn is offered back to the
+Mac; the harness locates the shipping Go-to button in its rendered banner with local
+OCR and dispatches mouse events to that test window. A Mac UI test guards this
+route (off-screen SwiftUI hosting views do not expose AX children).
+Receiving an offer must not move either reader before acceptance.
+
+Each round requires matching text after the XPointer in the saved X3 framebuffer (offline
+Vision OCR), a unique subsequent checkpoint, and the exact target character in
+the Mac's visible page range, plus a changed X3 exit sequence.
+BMP/PNG attachments are exported and hash-checked by the firmware runner. The
+original reader progress list, recent-book order and file inventory must be
+restored; failures preserve recovery artifact paths. No simulator, router change
+or manual page turn is involved. This checks HTTP position exchange and actual
+acceptance; it does not establish iCloud or BLE-only continuation, optical panel
+quality, or layout parity for every EPUB.
+
+```sh
+python3 ../pocket-daily-firmware/scripts/dev_pipeline.py run --app "$PWD" \
+  --build-firmware ble_standby --flash --continuity-suite
+```
+
+Omit build/flash when the matching developer firmware is already installed.
+
+`--continuity-suite --real-epub` substitutes the sibling's public-domain
+Standard Ebooks Frankenstein fixture (226309 bytes, 38 spine sections) for the
+small generated checkpoint book. Its original spine XHTML is retained; images
+are 1×1 placeholders, so this is not image-rich EPUB acceptance. The test imports
+its unchanged bytes, sends them through the app, downloads/reimports into a
+separate library, then checks forward/backward offers using source-character
+anchors and the actual visible Mac range. A preexisting matching reader-history
+digest is refused. The developer capture admission is now 1 byte..4 MiB on SD;
+this does not allocate a file-sized buffer or change shipping reader limits.
+The runner requires the fixture SHA-256 and both byte-preservation results.
+
+For short comprehensive acceptance without an extended standby trial:
+
+```sh
+python3 scripts/verify_reader_interface.py --physical-only --screen-suite --continuity-suite --real-epub --network-faults
+```
+
+The screen suite still enters real timer deep sleep briefly and returns on its
+own. Its retained body must exactly match the selected Brief preview (header
+and footer are excluded because wake hints and power state change there).
+
+For an element-boundary XPointer (for example a chapter's `/body`), acceptance
+checks the first following non-whitespace source character in the visible page.
+It does not mistake the preceding DOM boundary for an invisible character.
+Text-node offsets still require that exact point; other chapters, off-page
+paragraphs and inexact paths fail. The Mac chapter-boundary regression covers
+these positive and negative cases without hardware.

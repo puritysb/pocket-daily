@@ -221,6 +221,37 @@ final class PocketMacReaderTests: XCTestCase {
         _ = delegate
     }
 
+    /// A chapter-start XPointer is a DOM boundary before its visible heading.
+    @MainActor
+    func testChapterBoundaryContinuationShowsItsFirstCharacter() async throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("pocket-daily-firmware/test/reading_progress/fixtures/frankenstein-se.epub")
+        guard FileManager.default.fileExists(atPath: fixture.path) else {
+            throw XCTSkip("The sibling firmware checkout with the published EPUB fixture is not present.")
+        }
+        let (session, window) = open(fixture)
+        defer { window.orderOut(nil) }
+        try await waitUntil("published book") { session.phase == .ready && session.position != nil }
+        let pointer = "/body/DocFragment[23]/body"
+        func visible(_ pointer: String) async throws -> Bool {
+            try await session.webView.callAsyncJavaScript(ReaderContinuityPosition.visibleCharacter,
+                arguments: ["pointer": pointer], contentWorld: .page) as? Bool == true
+        }
+        let before = try await visible(pointer)
+        XCTAssertFalse(before, "A different chapter must not match")
+        session.go(to: ReadingPosition(fraction: 0.9, xpointer: pointer, cfi: nil, chapter: nil, updatedAt: Date()))
+        try await waitUntil("chapter XII") { session.position?.xpointer?.contains("DocFragment[23]") == true }
+        let after = try await visible(pointer)
+        XCTAssertTrue(after, "The first source character after the chapter boundary must be visible")
+        let outside = try await visible("/body/DocFragment[23]/body/section/p[12]/text().0")
+        XCTAssertFalse(outside, "A later paragraph outside the displayed page must fail")
+        let malformed = try await visible("/body/DocFragment[23]/body/doesnotexist")
+        XCTAssertFalse(malformed, "An inexact fallback must fail")
+        let text = try await session.webView.evaluateJavaScript("document.querySelector('foliate-view').lastLocation.range.toString()") as? String
+        XCTAssertTrue(text?.contains("lay on my straw") == true, "Actual accepted page must contain the published body")
+        attach(try await session.webView.takeSnapshot(configuration: nil), "chapter-boundary-accepted")
+    }
+
     private static func spine(_ archive: ZIPArchive) throws -> [String] {
         let container = String(decoding: try archive.data(for: XCTUnwrap(archive.entry("META-INF/container.xml")), limit: 1 << 20), as: UTF8.self)
         let opfPath = try XCTUnwrap(container.firstMatch(of: /full-path="([^"]+)"/)).1
