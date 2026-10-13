@@ -252,7 +252,7 @@ P0는 기반 품질, P1은 우선 기능 후보, P2는 후속 후보, 보류는 
   대기열 복사 확인 후 임시 파일 정리까지 구현했다. 네트워크 수집은 추가하지 않았다.
 - 펌웨어 담당 하위 에이전트가 남은 Sync Home/Sleep 구현을 검토·보완했다.
   상세 실기기 수용 목록은
-  [펌웨어 인수 문서](../../pocket-daily-firmware/docs/SCREEN_PRESENTATION_HANDOFF.md)에 둔다.
+  [펌웨어 인수 문서](../../pocket-daily-firmware/docs/history/SCREEN_PRESENTATION_HANDOFF.md)에 둔다.
 - 이 인수 작업은 커밋·푸시·릴리스·기기 설치를 수행하지 않는다. 실제 기기에 새
   펌웨어가 설치되기 전에는 새 Home/Sleep 표시 기능의 실기기 완료를 표시하지 않는다.
 

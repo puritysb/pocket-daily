@@ -33,7 +33,10 @@ Current, changeable state lives in `docs/PROJECT_MEMORY.md`.
    not load the whole repository, and treat generated build output separately
    from source.
 3. `docs/PROJECT_MEMORY.md` when the task depends on history, repository
-   boundaries, release state, or hardware constraints.
+   boundaries, release state, or hardware constraints, and
+   `docs/CURRENT_HANDOFF.md` when continuing in-progress work (latest installed
+   artifacts, what passed, open gaps). `docs/history/` is a dated archive; read
+   it only when tracing why something changed.
 4. For submission work, `APP_STORE_REVIEW.md` and `appstore/README.md`.
 5. For live-studio work (status and preference push; UI packs, live frames and
    saved screen previews were removed from the firmware on 2026-10-01),
@@ -274,3 +277,9 @@ sessions. Keep entries short, dated, and evidence-based; replace stale notes
 instead of appending contradictions. Do not paste chat transcripts, transient
 debugging logs, or firmware-only memories into it, and commit an entry together
 with the change it describes so memory never gets ahead of the tree.
+
+Both shared files are read by every agent, so size costs every session. Keep
+`docs/PROJECT_MEMORY.md` to current state under about 300 lines, organized by
+topic rather than by date. `docs/CURRENT_HANDOFF.md` holds only the latest
+hand-off (under about 150 lines); replace it at each hand-off. Move superseded
+entries to `docs/history/` instead of appending.

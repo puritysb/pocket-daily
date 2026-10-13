@@ -150,6 +150,9 @@ requires a matching run, an unchanged body, a changed cue and a measured
   older firmware is explicitly reported as unsupported for that check.
 - Normal unit tests skip hardware without I/O. The runner explicitly opts in;
   enabled simulator hardware tests fail. Skipped or stale evidence is not a pass.
+- `pkill -x Pocket` during `xcodebuild test` kills the test host (also named
+  Pocket) and fails the run with "Early unexpected exit"; wait for test runs to
+  finish before relaunching or reinstalling the app.
 - Reports and `.xcresult` bundles are in the firmware checkout's ignored
   `build/dev-pipeline-runs/<run>/`. Read `report.json` and the failed stage log,
   fix the owning repository, then rerun the same scenario. A lost flash or sleep

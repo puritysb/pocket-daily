@@ -1,7 +1,7 @@
 # Pocket Sync sessions
 
 Implementation update: 2026-09-24. Local verification is recorded in
-PROJECT_MEMORY.md; physical X3/X4 acceptance is not implied.
+`history/PROJECT_MEMORY-to-2026-10-13.md`; physical X3/X4 acceptance is not implied.
 
 ## One editor, two explicitly selected connections
 

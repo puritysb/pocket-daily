@@ -35,7 +35,7 @@ EPUB 실기기 읽기 수용은 남아 있다. 추가 성능 튜닝은 별도 �
 
 중단된 Sync Home/Sleep 구현을 검토·보완했다. 코드와 인수 문서는
 `../pocket-daily-firmware`에 남아 있다. 세부 내용은
-[SCREEN_PRESENTATION_HANDOFF.md](../../pocket-daily-firmware/docs/SCREEN_PRESENTATION_HANDOFF.md).
+[SCREEN_PRESENTATION_HANDOFF.md](../../pocket-daily-firmware/docs/history/SCREEN_PRESENTATION_HANDOFF.md).
 
 - 호스트 429개, route 경계 11개, 엄격 cppcheck, 서식/공백 검사 통과.
 - default 빌드 성공. 모델 감지로 X3/X4를 지원하는 공용 이미지다.
@@ -148,7 +148,7 @@ ContentViewState는 active revision 검증 중 해독한 카드를 재사용하�
 
 펌웨어 host 433/433, content-store 56/56, route 11/11, 엄격 cppcheck 결함 0,
 default 빌드 오류·경고 0. 상세는
-[CONTENT_LOAD_HANDOFF.md](../../pocket-daily-firmware/docs/CONTENT_LOAD_HANDOFF.md).
+[CONTENT_LOAD_HANDOFF.md](../../pocket-daily-firmware/docs/history/CONTENT_LOAD_HANDOFF.md).
 소스 지문을 검증한 Apple host artifact를 다시 빌드해 앱 두 작업 폴더에 반영했다.
 앱 Apply 성공 문구에 Sync에서는 책 표지를 placeholder로 표시한다는 안내를
 추가했다. 화면 표시 시험 6/6 및 새 renderer 시험 10/10, macOS 빌드 통과.
