@@ -32,9 +32,8 @@ they conflict with a dated note below. Per-session evidence lives in
   defaults to Reading Brief; weather, events and vocabulary are opt-in. First-use
   boundaries and firmware-specific guidance: `docs/READER_FIRST_USE.md`. Do not
   recommend Pocket Daily via CrossPoint's unlocker on locked units.
-- 2026-10-03 (user): compatibility with pre-0.x firmware (old "Nearby Sync" /
-  "Join a Network" names, removed status keys) need not be kept. Legacy branches
-  and "on older firmware" copy may be removed; not yet done.
+- 2026-10-03 (user): pre-0.x firmware compatibility dropped (done 2026-10-14).
+  Kept on purpose: the lineage-1 → 0.x update offer and CrossPoint guidance.
 - 2026-10-12 (user): finish X3 + app usability before X4; no new backlog
   features or release work until asked. 2026-10-10 (user): verify on real
   Mac/iPhone/reader rather than simulators where hardware behavior matters.
@@ -75,7 +74,7 @@ they conflict with a dated note below. Per-session evidence lives in
 - 2026-10-02: firmware removed UI packs, live frames and the saved screen
   preview. The app decodes only `liveStudio.mode` (required) and `wsPort`,
   subscribes with `{"subscribe":{}}`; there is no frame/pack state in
-  `DeviceCore`. Older design notes about `.uipack`/frame streaming are history.
+  `DeviceCore`.
 - Status `deviceID` (eight hex digits, same as BLE) is a routing/consistency
   check, not cryptographic HTTP authentication. Registration IDs are pinned per
   reader; additional unidentified readers are refused.
@@ -220,14 +219,21 @@ they conflict with a dated note below. Per-session evidence lives in
 - Developer reset paths archive settings, preserve book bytes and are excluded
   from shipping builds. Existing reset archives remain; do not repeat a reset
   blindly. `--onboarding` is Mac/X3 only.
-- Latest physical baseline (2026-10-13, Mac/X3 Same Wi-Fi): aggregate
-  `.build/interface-runs/20261013T131302-494933/report.json`, firmware run
-  `20261013T131358-21d2ed`: BLE failed-network rollback, 10 interface cases,
-  two bidirectional reading rounds, 14 screen/sleep/wake captures, restoration.
-  Installed firmware `0.1.0-dev-main-e6eb88d5-ble-standby-wdc00da92`.
-  App `efef528`, firmware `95be13f6` (both pushed to `origin/main`).
+- Latest physical baseline (2026-10-14, Mac/X3 Same Wi-Fi, firmware
+  `0.1.0-dev-main-14bf9624-ble-standby-w8e68d8a9`): aggregate
+  `.build/interface-runs/20261013T171707-939866/report.json` (firmware run
+  `20261013T171736-315400`): 10 interface cases, two real Wi-Fi outages, 14
+  screen/sleep/wake captures, real-EPUB bidirectional reading, BLE standby wake.
+  BLE-only reading acceptance `20261013T170240-a41674` (see below). Onboarding
+  rollback last passed 2026-10-13 (`20261013T131358-21d2ed`).
+- BLE-only reading acceptance (2026-10-14): `--continuity-suite --ble-continuity`
+  runs every exchange in X3 developer standby through a test-owned
+  `ReaderBluetoothLink` (shipping state machine/transport, isolated sync); the
+  production Connect wakes the reader back. 8 run-bound legs incl. an unarmed
+  control (0 lists/offers); BLE window min heap ~62.7 KB, block 55,284 B.
 - Not established by that baseline: X4, expanded physical iPhone, iCloud between
-  physical devices, BLE-only position acceptance, optical panel quality,
+  physical devices, BLE-only exchange outside developer standby (book close,
+  wake, pre-sleep windows; iPhone background), optical panel quality,
   image-rich EPUBs, overnight/battery-only standby and current draw, router
   reboot/DHCP change during transfer, two simultaneous physical readers.
 - The installed Mac copy at `~/Applications/Pocket Daily.app` is the signed
@@ -249,7 +255,8 @@ they conflict with a dated note below. Per-session evidence lives in
   the visible frame; hosted sheets need their own background. The validator
   rejects byte-identical images within a device class.
 - `project.yml` declares both schemes explicitly (the macOS target ships as
-  `Pocket.app`, so `TEST_HOST` cannot be derived).
+  `Pocket.app`, so `TEST_HOST` cannot be derived); PocketMac needs
+  `productName: Pocket` or regeneration flips the scheme's product name.
 - Testing Release needs `ENABLE_TESTABILITY=YES` (`@testable import Pocket`).
 - `scripts/package_app_store.sh` runs `-only-testing:PocketTests`; UI tests must
   not gate distribution builds (a wedged simulator hung packaging for 30+ min).

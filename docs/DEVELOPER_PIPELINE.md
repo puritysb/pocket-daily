@@ -235,6 +235,34 @@ digest is refused. The developer capture admission is now 1 byte..4 MiB on SD;
 this does not allocate a file-sized buffer or change shipping reader limits.
 The runner requires the fixture SHA-256 and both byte-preservation results.
 
+### Bluetooth-only reading acceptance (X3 standby)
+
+`--continuity-suite --ble-continuity` runs the same rounds, but every position
+exchange travels over the bonded BLE reading-sync channel. Each exchange asks the
+reader (`dev/ble-cycle?sleep=standby`) to restart into X3 standby, where its
+reading-sync window stays open. A `ReaderBluetoothLink` owned by the test, bound to
+the isolated test library and `ReadingSync`, uses the shipping state machine and
+CoreBluetooth transport. The app's own link and LAN monitoring stand down, so no
+position can travel over HTTP. The production foreground Connect then wakes the
+reader back onto Same Wi-Fi over BLE. HTTP only drives the developer fixture,
+captures and evidence reads.
+
+The runner requires eight run-bound reader records, in order: seed, an unarmed
+negative control (the same pending offer with no link listening), then per round
+the app offer, post-acceptance list and reader offer. Each must show an open gate,
+`app-wifi` return from Wi-Fi standby, and window memory above 50 KiB / 8 KiB. The
+reader's BLE offer count must equal what the app sent (zero for the control). An
+armed leg needs at least one BLE list; the control needs none. The existing
+checks still apply: no movement before acceptance, the OCR paragraph, and the
+visible Go-to target. Requires X3 `ble_standby` developer firmware and a
+paired app. It does not cover X4, iPhone background delivery or BLE windows
+outside developer standby (book close, wake, pre-sleep).
+
+```sh
+python3 ../pocket-daily-firmware/scripts/dev_pipeline.py run --app "$PWD" \
+  --continuity-suite --ble-continuity
+```
+
 For short comprehensive acceptance without an extended standby trial:
 
 ```sh

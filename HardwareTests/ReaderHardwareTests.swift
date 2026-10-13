@@ -328,6 +328,11 @@ final class ReaderHardwareTests: XCTestCase {
                 evidence["networkFaults"] = suite.networkEvidence
             }
 #if os(macOS)
+            if env["POCKET_HARDWARE_BLE_CONTINUITY"] == "1" {
+                // Bluetooth-only exchange runs in X3 standby; the app wakes it back.
+                try require(env["POCKET_HARDWARE_CONTINUITY"] == "1" && version.contains("ble-standby"),
+                            "Bluetooth continuity requires the continuity suite on X3 ble_standby firmware")
+            }
             if env["POCKET_HARDWARE_CONTINUITY"] == "1" {
                 let suite = ReaderInterfaceSuite(model: model, client: client, host: host,
                     identity: identity, run: run, idle: { !busy })

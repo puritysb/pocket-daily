@@ -49,6 +49,7 @@ def main():
     parser.add_argument('--screen-suite', action='store_true', help='capture and validate physical X3 Home/Brief pixels')
     parser.add_argument('--real-epub', action='store_true', help='use the published Frankenstein EPUB text fixture; requires --continuity-suite')
     parser.add_argument('--continuity-suite', action='store_true', help='accept real reading offers in both directions on Mac/X3')
+    parser.add_argument('--ble-continuity', action='store_true', help='exchange every reading position over the bonded X3 BLE standby window only; requires --continuity-suite')
     parser.add_argument('--network-faults', action='store_true', help='verify transfer recovery through actual X3 Wi-Fi outages')
     parser.add_argument('--simulator', help='iPhone simulator UDID; defaults to an available iPhone')
     parser.add_argument('--ios-device', help='also run all supported cases on this physical iPhone UDID')
@@ -63,6 +64,8 @@ def main():
         args.continuity_suite = True
     if args.real_epub and not args.continuity_suite:
         parser.error('--real-epub requires --continuity-suite')
+    if args.ble_continuity and not args.continuity_suite:
+        parser.error('--ble-continuity requires --continuity-suite')
     if args.physical_only and (args.simulator or args.screenshots):
         parser.error('--physical-only cannot be combined with simulator or app screenshot options')
     firmware = args.firmware_repo.resolve()
@@ -84,6 +87,9 @@ def main():
             'reader physical buttons/display optics', 'BLE-only reading-position acceptance', 'App Store release readiness']
         if not args.continuity_suite:
             job.report['notEstablished'].append('accepting a reading-position offer')
+        if args.ble_continuity:
+            job.report['notEstablished'].remove('BLE-only reading-position acceptance')
+            job.report['notEstablished'].append('BLE-only acceptance outside X3 developer standby (X4, iPhone background)')
         job.report['appSources'] = pipeline.source_state(ROOT)
         try:
             job.stage('exclusive-app-preflight', pipeline.require_companion_stopped)
@@ -128,13 +134,15 @@ def main():
                 command.append('--continuity-suite')
             if args.real_epub:
                 command.append('--real-epub')
+            if args.ble_continuity:
+                command.append('--ble-continuity')
             if args.network_faults:
                 command.append('--network-faults')
             if args.standby:
                 command.append('--standby')
             if args.ios_device:
                 command += ['--ios-device', args.ios_device]
-            log = job.command('physical-interface', command, cwd=ROOT, timeout=2400)
+            log = job.command('physical-interface', command, cwd=ROOT, timeout=2400 + (900 if args.ble_continuity else 0))
             reports = [line.removeprefix('Report: ') for line in log.read_text().splitlines()
                        if line.startswith('Report: ')]
             if len(reports) != 1:

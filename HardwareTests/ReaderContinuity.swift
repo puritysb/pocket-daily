@@ -11,7 +11,12 @@ import XCTest
 @MainActor
 extension ReaderInterfaceSuite {
     /// Real EPUB, offer transport, confirmation actions, rendered pages and exit records.
+    /// With `POCKET_HARDWARE_BLE_CONTINUITY=1` every position exchange runs over the
+    /// bonded Bluetooth reading-sync channel during X3 standby; HTTP only controls
+    /// the developer fixture and reads evidence.
     func continuityChecks() async throws -> [String: Any] {
+        let bluetoothOnly = ProcessInfo.processInfo.environment["POCKET_HARDWARE_BLE_CONTINUITY"] == "1"
+        var bluetoothCycles: [[String: Any]] = []
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         baseline = try await fileMap()
         let original = try await client.readingProgress(identity: identity, host: host, port: 80)
@@ -63,7 +68,7 @@ extension ReaderInterfaceSuite {
         var captures: [[String: Any]] = []
         var cases: [[String: Any]] = []
         defer {
-            if let data = try? JSONSerialization.data(withJSONObject: ["cases": cases, "captures": captures], options: [.sortedKeys]) {
+            if let data = try? JSONSerialization.data(withJSONObject: ["cases": cases, "captures": captures, "bluetoothCycles": bluetoothCycles], options: [.sortedKeys]) {
                 let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
                 attachment.name = "continuity-checkpoints"; attachment.lifetime = .keepAlways; XCTContext.runActivity(named: "Continuity checkpoints") { $0.add(attachment) }
             }
@@ -227,7 +232,94 @@ extension ReaderInterfaceSuite {
                 """, arguments: ["pointer": pointer], contentWorld: .page)
             return try XCTUnwrap(value as? String)
         }
-        func exchange(expectedSent: Int) async throws {
+        /// One Bluetooth-only exchange: the reader restarts into X3 standby with its
+        /// reading-sync window open, a link owned by this test (isolated library and
+        /// sync, the shipping state machine and transport) exchanges positions, and
+        /// the production foreground Connect wakes the reader back onto Same Wi-Fi.
+        /// `armed: false` is the negative control: the same pending offer must not
+        /// reach the reader when no link is listening.
+        func bluetoothExchange(expectedSent: Int, leg: String, armed: Bool = true) async throws {
+            try await drained()
+            let shared = model.bluetoothLink
+            let remembered = try XCTUnwrap(shared.rememberedReader, "Pair this Debug app with the reader before the Bluetooth trial")
+            try check(remembered.readerID == identity, "Paired Bluetooth reader differs from the enrolled reader")
+            let cycleRun = bookRun &+ 100 &+ UInt32(bluetoothCycles.count + 1)
+            try check(cycleRun != 0, "Invalid Bluetooth cycle run")
+            let linkDomain = "Pocket.ble-continuity." + UUID().uuidString
+            let linkDefaults = try XCTUnwrap(UserDefaults(suiteName: linkDomain))
+            defer { linkDefaults.removePersistentDomain(forName: linkDomain) }
+            let store = RememberedBluetoothReaderStore(defaults: linkDefaults)
+            store.reader = remembered
+            let link = ReaderBluetoothLink(transport: CoreBluetoothReaderTransport(restoresState: false), store: store,
+                                           sync: sync, books: { library.books }, scheduler: TaskReaderLinkScheduler())
+            let before = sync.lastReaderExchange
+            let started = Date()
+            var cycle: [String: Any] = ["leg": leg, "run": cycleRun, "armed": armed, "expectedSent": expectedSent]
+            // The app's own link and LAN monitoring stand down so the reader serves
+            // only this link and no position can travel over HTTP meanwhile.
+            let priorOwnership = shared.nearbySessionActive
+            shared.nearbySessionActive = true
+            defer { shared.nearbySessionActive = priorOwnership }
+            model.pauseForBackground()
+            do {
+                defer { link.nearbySessionActive = true }
+                if armed { link.start() }
+                var url = URLComponents()
+                url.scheme = "http"; url.host = host; url.path = "/api/pocket/v1/dev/ble-cycle"
+                url.queryItems = [URLQueryItem(name: "run", value: String(cycleRun)),
+                                  URLQueryItem(name: "sleep", value: "standby"),
+                                  URLQueryItem(name: "standbySeconds", value: "90")]
+                var post = URLRequest(url: try XCTUnwrap(url.url)); post.httpMethod = "POST"
+                post.httpBody = Data(); post.timeoutInterval = 8
+                // Exactly one mutation. A lost reply is observed, never replayed.
+                do {
+                    let (_, response) = try await URLSession.shared.data(for: post)
+                    try check((response as? HTTPURLResponse)?.statusCode == 202, "Bluetooth standby cycle rejected")
+                } catch let failure as Failure { throw failure }
+                catch { cycle["replyLost"] = true }
+                print("POCKET_CONTINUITY bluetooth \(leg) cycle \(cycleRun) requested")
+                if armed {
+                    try await wait("Bluetooth reading exchange (\(leg)); link \(link.phase), \(link.lastFailure ?? "no failure")", seconds: 150) {
+                        sync.lastReaderExchange != before
+                    }
+                    let result = try XCTUnwrap(sync.lastReaderExchange)
+                    try check(result.sent == expectedSent, "Bluetooth offers: \(result.sent), expected \(expectedSent) (\(leg))")
+                    try check(link.lastCompletedAt.map { $0 >= started } == true, "Test link did not complete its session")
+                    cycle["sent"] = result.sent
+                    cycle["received"] = result.received
+                    cycle["exchangeSeconds"] = Date().timeIntervalSince(started)
+                } else {
+                    // Long enough for the reader to boot into standby and advertise.
+                    try await Task.sleep(for: .seconds(40))
+                    try check(sync.lastReaderExchange == before, "Unarmed control exchanged positions")
+                }
+            }
+            try check(link.phase == .off, "Test link did not stand down before wake")
+            model.resumeForForeground()
+            try await drained()
+            model.startConnectionSearch()
+            try check(model.readerStatus == nil, "Connect did not start a fresh wake attempt (\(leg))")
+            try await wait("app Bluetooth wake and Same Wi-Fi return (\(leg))", seconds: 100) {
+                model.readerStatus?.deviceID == identity && idle() && !model.isWorking
+            }
+            let (data, _) = try await request("GET", "ble-cycle")
+            let record = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            cycle["reader"] = record
+            bluetoothCycles.append(cycle)
+            try check((record["run"] as? NSNumber)?.uint32Value == cycleRun, "Stale Bluetooth cycle evidence (\(leg))")
+            try check(record["state"] as? Int == 3 && record["close"] as? String == "app-wifi"
+                      && record["fromWifi"] as? Bool == true && record["gate"] as? String == "open",
+                      "Bluetooth standby window did not open and return through the app (\(leg)): \(record)")
+            try check(record["offers"] as? Int == (armed ? expectedSent : 0),
+                      "Reader stored \(record["offers"] ?? "nil") Bluetooth offers, expected \(armed ? expectedSent : 0) (\(leg))")
+            try check(armed ? (record["lists"] as? Int ?? 0) >= 1 : record["lists"] as? Int == 0,
+                      "Bluetooth reading list count does not match the armed link (\(leg)): \(record["lists"] ?? "nil")")
+            try check((record["minFree"] as? Int ?? 0) > 50 * 1024 && (record["minBlock"] as? Int ?? 0) >= 8 * 1024,
+                      "Bluetooth window memory requirements failed (\(leg))")
+            print("POCKET_CONTINUITY bluetooth \(leg) passed")
+        }
+        func exchange(expectedSent: Int, leg: String) async throws {
+            if bluetoothOnly { return try await bluetoothExchange(expectedSent: expectedSent, leg: leg) }
             try await drained()
             var completed = false
             var sent = -1
@@ -267,7 +359,7 @@ extension ReaderInterfaceSuite {
             try await download(path: "/" + fileName, book: book, original: file, library: library)
             let (seedList, _) = try await exercise("seed", name: "continuity-seed")
             let seed = try entry(seedList)
-            try await exchange(expectedSent: 0)
+            try await exchange(expectedSent: 0, leg: "seed")
             for (index, fraction) in [0.48, 0.16].enumerated() {
                 let expectedChapter = index == 0 ? 2 : 1
                 try await navigate(fraction: fraction, chapter: expectedChapter, paragraph: 17, label: "app source position")
@@ -283,14 +375,19 @@ extension ReaderInterfaceSuite {
                 }
                 try check(!expected.isEmpty, "No distinct source paragraph")
                 let before = try await client.readingProgress(identity: identity, host: host, port: 80)
-                try await exchange(expectedSent: 1)
+                if bluetoothOnly && index == 0 {
+                    try await bluetoothExchange(expectedSent: 0, leg: "control-unarmed", armed: false)
+                    let unchanged = try await client.readingProgress(identity: identity, host: host, port: 80)
+                    try check(try entry(unchanged) == entry(before), "Reader position changed without an armed Bluetooth link")
+                }
+                try await exchange(expectedSent: 1, leg: "app-to-x3-\(index)")
                 let pending = try await client.readingProgress(identity: identity, host: host, port: 80)
                 try check(try entry(pending) == entry(before), "Posting the offer moved the reader without consent")
                 let (accepted, rendered) = try await exercise("accept", name: "continuity-app-to-x3-\(index)")
                 let landed = try entry(accepted)
                 try check(rendered.contains { containsAnchor($0, expected) }, "X3 accepted a different paragraph: expected \(expected); OCR \(rendered)")
                 try check(landed.seq != (try entry(before)).seq && abs(landed.percentage - position.fraction) < 0.09, "X3 did not record its accepted page")
-                try await exchange(expectedSent: 0)
+                try await exchange(expectedSent: 0, leg: "after-accept-\(index)")
                 // Put the app in another chapter before the reader reads again.
                 // A target already on the Mac page cannot prove actual navigation.
                 let parkedChapter = index == 0 ? 1 : 3
@@ -316,7 +413,7 @@ extension ReaderInterfaceSuite {
                 let readerChapter = try XCTUnwrap(readerPlace.progress?.split(separator: "/").first { $0.hasPrefix("DocFragment[") })
                 try check(appBefore?.xpointer?.contains(String(readerChapter) + "/") == false,
                           "Reader offer must begin outside the app's current chapter")
-                try await exchange(expectedSent: 0)
+                try await exchange(expectedSent: 0, leg: "x3-to-app-\(index)")
                 let expectedLabel = "Go to " + readerPlace.percentage.formatted(.percent.precision(.fractionLength(0)))
                 let go = try await ReaderContinuityInput.locate(expectedLabel, in: hosting)
                 try check(session.position == appBefore, "Receiving reader position moved the app without consent")
@@ -332,6 +429,7 @@ extension ReaderInterfaceSuite {
                 let appText = try await pageText()
                 try check(normalize(appText).count > 50, "Accepted app page contains no readable body")
                 cases.append(["direction": "bidirectional", "round": index, "backwardOffer": index == 1,
+                              "transport": bluetoothOnly ? "bluetooth" : "http",
                               "passed": true, "appAnchor": expected, "readerAnchor": readerAnchor,
                               "readerSeq": readerPlace.seq ?? 0, "noMovementBeforeAcceptance": true, "acceptedCharacterVisible": true, "navigatedFromAnotherChapter": true])
                 print("POCKET_CONTINUITY round \(index) passed")
@@ -345,6 +443,7 @@ extension ReaderInterfaceSuite {
             throw failure
         }
         return ["passed": true, "restored": true, "cases": cases, "captures": captures, "artifactDirectory": root.path,
+                "transport": bluetoothOnly ? "bluetooth" : "http", "bluetoothCycles": bluetoothCycles,
                 "epub": ["kind": sourcePath == nil ? "generated" : "published-book", "sha256": sourceSHA,
                          "bytes": book.byteCount, "roundTripBytesMatch": true, "libraryReimportMatches": true],
                 "downloads": downloadEvidence]
