@@ -164,7 +164,7 @@ fields beside it (below it when stacked).
 - Preview inputs come from the reader (2026-09-25): `ReaderDisplayState` reads
   `GET /api/pocket/v1/display` once per connection, inside the sequential reader lane, and the canvas renders with
   its theme spacing, language, button labels and orientation. Without it
-  (demo, offline, older firmware) the canvas uses a labelled default-theme
+  (demo, offline, CrossPoint firmware) the canvas uses a labelled default-theme
   reference (Lyra 20/5/16). A caption under the canvas names the source.
   (The hardware pixel-parity test was removed with the firmware's screen
   capture on 2026-10-01.)

@@ -39,7 +39,7 @@ struct PocketDeviceStatus: Equatable {
     let firmware: String?
     let capabilities: Set<String>
     /// `WIN=1` while the reader is in a reading-sync exchange window, `WIN=0`
-    /// on its Nearby Sync screen; nil from readers without reading sync.
+    /// on its Direct connection screen; nil from readers without reading sync.
     let exchangeWindow: Bool?
 
     init(record: String) throws {
@@ -114,8 +114,8 @@ enum NearbySyncError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .bluetoothUnavailable: "Bluetooth is unavailable."
-        case .malformedRecord: "The reader sent an invalid Nearby Sync record."
-        case .missingCharacteristic: "This reader does not provide the required Nearby Sync service."
+        case .malformedRecord: "The reader sent an invalid Bluetooth record."
+        case .missingCharacteristic: "This reader does not provide the Pocket Daily Bluetooth service."
         case .notConnected: "No Pocket reader is connected."
         case let .rejected(code): "The reader rejected the request (\(code))."
         }

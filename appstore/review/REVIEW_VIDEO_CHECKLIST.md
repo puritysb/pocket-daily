@@ -3,7 +3,7 @@
 Record one continuous 60–90 second video with the iPhone/iPad or Mac screen and the physical reader visible together.
 
 1. Show the reader model and Pocket Daily firmware About/version screen.
-2. Enter Nearby Sync on the reader and show that a pairing code appears, while keeping the actual characters unreadable (camera angle, crop, or blur).
+2. Open Pocket Daily → Sync → Direct connection on the reader and show that a pairing code appears, while keeping the actual characters unreadable (camera angle, crop, or blur).
 3. Open My Reader → Reader Options (•••) → Manage Reader and choose the appropriate connection path; show successful pairing and the connected device/version row.
 4. Add the included original `Pocket-Daily-Review-Sample.epub` to Library and choose Send to Reader… so the reviewer can identify the exact selected content without a copyright or privacy concern.
 5. Show transfer progress completing in the app and the content appearing on the reader.

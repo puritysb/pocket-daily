@@ -86,7 +86,7 @@ final class DeviceCoreTests: XCTestCase {
             version: "1.4.1", ip: "192.168.68.10", mode: "STA", rssi: -55,
             freeHeap: freeHeap, uptime: 120, device: device,
             crashReportAvailable: false, crashReportBytes: 0,
-            uploadChunkBytes: nil, uploadStreamPort: 82, uploadStreamResume: true,
+            uploadStreamPort: 82, uploadStreamResume: true,
             diagnosticsAffordable: true, deviceID: deviceID, sessionEnd: false,
             liveStudio: liveStudio
         )

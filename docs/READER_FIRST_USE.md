@@ -27,9 +27,8 @@ In the app, **Set Up Reader** is the primary first-connection action:
 4. Add a DRM-free EPUB in Library and send it, or use existing books on the SD.
 
 No initial reader-side SSID/password entry or IP address is part of this path.
-System Bluetooth/pairing and Wi-Fi-name permissions are not bypassed. Readers
-with older firmware, or users who skipped first setup, can open Sync → Direct
-connection. **Find on Same Wi-Fi** and direct connection without a router remain
+System Bluetooth/pairing and Wi-Fi-name permissions are not bypassed. On X4,
+or if first setup was skipped, open Pocket Daily → Sync → Direct connection. **Find on Same Wi-Fi** and direct connection without a router remain
 available alternatives. No automatic firmware flashing is introduced.
 
 ## Defaults and optional content

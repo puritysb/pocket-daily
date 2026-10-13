@@ -89,7 +89,7 @@ enum SyncModePolicy {
     // Opening a second socket and enabling frame capture are optional work.
     static let minimumPushFreeHeap = 16 * 1024
     /// No reader (or demo mode) is offline. A reader without the
-    /// advertisement is a legacy firmware and stays on the heartbeat poll; a
+    /// advertisement (CrossPoint firmware) stays on the heartbeat poll; a
     /// non-push advertisement (private AP, low heap) also means polling.
     static func syncMode(status: CrossPointStatus?, isDemoMode: Bool = false) -> DeviceSyncMode {
         guard !isDemoMode, let status else { return .offline }

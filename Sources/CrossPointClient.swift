@@ -12,7 +12,6 @@ struct CrossPointStatus: Codable, Equatable {
     let device: String
     let crashReportAvailable: Bool?
     let crashReportBytes: Int?
-    let uploadChunkBytes: Int?
     let uploadStreamPort: Int?
     let uploadStreamResume: Bool?
     let diagnosticsAffordable: Bool?
@@ -47,11 +46,10 @@ struct CrossPointStatus: Codable, Equatable {
     /// sibling docs/reading-progress-v1.md).
     var readingProgress: Int? = nil
     var readSync: ReaderSyncDiagnostics? = nil
-    /// These existing Pocket advertisements imply verified commit support.
+    /// These Pocket advertisements imply verified commit support.
     /// A generic CrossPoint status or browser /upload alone is insufficient.
     var supportsAtomicUpload: Bool {
         transferControl == 1 || uploadStreamPort.map { (1...65535).contains($0) } == true
-            || uploadChunkBytes.map { $0 > 0 } == true
     }
 }
 
@@ -1260,7 +1258,6 @@ actor CrossPointClient {
         destination: String = "/",
         host: String = "192.168.4.1",
         port: Int = 80,
-        uploadChunkBytes: Int? = nil,
         uploadStreamPort: Int? = nil,
         uploadStreamResume: Bool = false,
         uploadStreamWindow: Int? = nil,
@@ -1340,47 +1337,6 @@ actor CrossPointClient {
                     resume = uploadStreamResume
                 }
             }
-        } else if let advertisedChunk = uploadChunkBytes, advertisedChunk > 0, total > 0 {
-            let chunkSize = min(max(advertisedChunk, 1_024), 64 * 1_024)
-            let input = try FileHandle(forReadingFrom: fileURL)
-            defer { try? input.close() }
-            var crc = CRC32()
-            var offset: Int64 = 0
-            while let chunk = try input.read(upToCount: chunkSize), !chunk.isEmpty {
-                try Task.checkCancellation()
-                crc.update(chunk)
-                let boundary = "PocketBoundary-\(UUID().uuidString)"
-                let multipart = try Self.makeMultipartBody(
-                    data: chunk,
-                    uploadFilename: stagingName,
-                    boundary: boundary
-                )
-                defer { try? FileManager.default.removeItem(at: multipart) }
-                guard let chunkURL = Self.url(
-                    host: host,
-                    port: port,
-                    path: "/upload",
-                    query: ["path": normalizedDestination, "offset": String(offset)]
-                ) else { throw ClientError.invalidAddress }
-
-                var uploadRequest = URLRequest(url: chunkURL)
-                uploadRequest.httpMethod = "POST"
-                uploadRequest.timeoutInterval = 60
-                uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-                let chunkStart = offset
-                let chunkCount = Int64(chunk.count)
-                let uploader = HTTPUploadDelegate { sent, expected in
-                    let payloadSent = expected > 0 ? min(chunkCount, chunkCount * sent / expected) : 0
-                    progress(chunkStart + payloadSent, total)
-                }
-                let (uploadData, uploadResponse) = try await uploader.upload(request: uploadRequest, bodyFile: multipart)
-                try Self.requireSuccess(uploadResponse, body: uploadData)
-                try? FileManager.default.removeItem(at: multipart)
-                offset += chunkCount
-                progress(offset, total)
-            }
-            guard offset == total else { throw ClientError.verificationFailed }
-            crc32 = crc.finalized
         } else {
             let boundary = "PocketBoundary-\(UUID().uuidString)"
             let multipart = try Self.makeMultipartBody(
@@ -1538,16 +1494,6 @@ actor CrossPointClient {
         }
         try output.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
         return (temp, crc.finalized)
-    }
-
-    private static func makeMultipartBody(data: Data, uploadFilename: String, boundary: String) throws -> URL {
-        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pocket-upload-\(UUID().uuidString)")
-        let prefix = "--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(uploadFilename)\"\r\nContent-Type: application/octet-stream\r\n\r\n"
-        var body = Data(prefix.utf8)
-        body.append(data)
-        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-        try body.write(to: temp, options: .atomic)
-        return temp
     }
 
     private static func normalizedDirectory(_ path: String) -> String {

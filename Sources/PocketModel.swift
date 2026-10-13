@@ -34,7 +34,7 @@ struct ConnectionHeartbeat {
 
 /// A no-PSRAM X3 keeps only ~6 KB of heap on its private hotspot. Large
 /// diagnostic reads there tripped the reader's task watchdog (crash breadcrumb
-/// `nearby:screen-preview` on older firmware). Below this floor the app skips
+/// `nearby:screen-preview`). Below this floor the app skips
 /// the crash report so the link stays available for the transfer itself.
 enum ReaderDiagnosticsPolicy {
     static let minimumFreeHeap = 10 * 1024
@@ -1190,8 +1190,8 @@ final class PocketModel: ObservableObject, DeviceSession {
             } catch is CancellationError { return }
             catch {
                 lastWakeFailure = error.localizedDescription
-                // Older firmware and a lost BLE acknowledgement can still be
-                // reachable on LAN. Inspect it; never repeat the wake command.
+                // A reader already on Wi-Fi or a lost BLE acknowledgement can
+                // still be reachable on LAN. Inspect it; never repeat the wake command.
             }
         }
 
@@ -1261,7 +1261,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             } else {
                 let wakeRecovery = lastWakeFailure == nil ? "" :
                     "Bluetooth could not wake the reader. If its battery is low or charging was disconnected, charge it and press its power button once. "
-                post("No Pocket reader was visible. \(wakeRecovery)Open Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware). If network permission was denied, allow Local Network access for Pocket Daily in Settings and try again. Without a router, choose Direct connection on the reader and Connect Directly here.", tone: .failure)
+                post("No Pocket reader was visible. \(wakeRecovery)On the reader, open Pocket Daily → Sync → Same Wi-Fi (CrossPoint: File Transfer → Join a Network). If network permission was denied, allow Local Network access for Pocket Daily in Settings and try again. Without a router, choose Direct connection on the reader and Connect Directly here.", tone: .failure)
             }
         }
     }
@@ -1292,7 +1292,6 @@ final class PocketModel: ObservableObject, DeviceSession {
             crashReportAvailable: false,
             crashReportBytes: 0,
 
-            uploadChunkBytes: nil,
             uploadStreamPort: nil,
             uploadStreamResume: nil,
             diagnosticsAffordable: nil,
@@ -2712,7 +2711,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                     let path = try await client.uploadAtomically(
                         fileURL: url, publishedFilename: isFirmware ? "update.bin" : nil,
                         destination: destination(for: url), host: host, port: port,
-                        uploadChunkBytes: status.uploadChunkBytes, uploadStreamPort: status.uploadStreamPort,
+                        uploadStreamPort: status.uploadStreamPort,
                         uploadStreamResume: status.uploadStreamResume ?? false,
                         uploadStreamWindow: status.uploadStreamWindow,
                         expectedDeviceID: status.deviceID,
@@ -2880,7 +2879,7 @@ final class PocketModel: ObservableObject, DeviceSession {
                         guard let bound = item.readerID, let status = readerStatus,
                               status.deviceID == bound, status.transferControl == 1 else {
                             throw CrossPointClient.ClientError.unexpectedMessage(
-                                "Reconnect to the same reader to clean up its temporary file. Older firmware cannot confirm cleanup; you can explicitly remove only the local copy.")
+                                "Reconnect to the same reader to clean up its temporary file, or explicitly remove only the local copy.")
                         }
                         let current = try await client.status(host: host, port: port)
                         guard current.deviceID == bound, current.transferControl == 1 else {
@@ -2947,7 +2946,7 @@ final class PocketModel: ObservableObject, DeviceSession {
         discoveryIO.stop()
         directConnectionRequested = true
         mirror.apply(.connection(.waitingForReader))
-        post("On the reader, open Pocket Daily → Sync → Direct connection (Nearby Sync on older firmware). Keep this app open during direct transfer.")
+        post("On the reader, open Pocket Daily → Sync → Direct connection. Keep this app open during direct transfer.")
     }
 
     /// BLE failed before handing over a lease. There is no Wi-Fi association
@@ -3119,7 +3118,6 @@ final class PocketModel: ObservableObject, DeviceSession {
         connectionAttempt += 1
         heartbeatTask?.cancel()
         discoveryIO.stop()
-        let legacyDirectSession = nearbyLease != nil && readerStatus?.sessionEnd != true
         var readerEnded = true
         if readerStatus?.sessionEnd == true {
             do { try await client.endDirectSession(host: activeHost, port: activeHTTPPort) }
@@ -3136,7 +3134,6 @@ final class PocketModel: ObservableObject, DeviceSession {
         stopLiveSync()
         mirror.apply(.connection(.disconnected))
         if !preserveMessage { post("Session ended. Check Wi-Fi settings if your usual connection has not returned.") }
-        if legacyDirectSession { post(message + " Close Sync on the reader when finished.", tone: messageTone) }
         if !readerEnded { post(message + " Close Sync on the reader; its session-end response was not received.", tone: .pending) }
     }
 

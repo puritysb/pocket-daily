@@ -131,7 +131,7 @@ final class NearbySyncController: NSObject, ObservableObject {
         }
     }
 
-    static let unauthorizedMessage = "Bluetooth access is off for Pocket Daily. Allow it in Settings, or choose Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware)."
+    static let unauthorizedMessage = "Bluetooth access is off for Pocket Daily. Allow it in Settings, or choose Pocket Daily → Sync → Same Wi-Fi on the reader."
 
     private func beginScan(_ central: CBCentralManager) {
         disconnect()
@@ -160,7 +160,7 @@ final class NearbySyncController: NSObject, ObservableObject {
             guard !Task.isCancelled, self.state == .scanning else { return }
             central.stopScan()
             self.record("BLE scan timed out after service and Pocket name searches")
-            self.state = .failed("No Pocket Sync signal. On the reader, open Pocket Daily → Sync → Direct connection (Nearby Sync on older firmware), then try again.")
+            self.state = .failed("No Pocket Sync signal. On the reader, open Pocket Daily → Sync → Direct connection, then try again.")
         }
     }
 

@@ -409,6 +409,7 @@
 		268C2440109B903279B4AB08 /* ReaderScreenCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreenCapture.swift; sourceTree = "<group>"; };
 		2703A1EDF6D2168144924903 /* NearbyOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyOnboardingTests.swift; sourceTree = "<group>"; };
 		28FC5BB6E5BAF17FBE651A95 /* ScreenPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPresentationTests.swift; sourceTree = "<group>"; };
+		2A490F16B34A066E27FC052F /* Pocket.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Pocket.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2C783315F5ED047FCCC49FD1 /* CoreBluetoothReaderTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBluetoothReaderTransport.swift; sourceTree = "<group>"; };
 		2CA7BFCB0841E604519208ED /* ReaderHardwareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHardwareTests.swift; sourceTree = "<group>"; };
 		337D1DEFD924E9B66409E868 /* ContentApplyAdmissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentApplyAdmissionTests.swift; sourceTree = "<group>"; };
@@ -508,7 +509,6 @@
 		B11D0FF030626566E51FE773 /* ContentCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentCardTests.swift; sourceTree = "<group>"; };
 		B442A0F0B747FF3D1F1500C3 /* BookTransferJobTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookTransferJobTests.swift; sourceTree = "<group>"; };
 		B548CA94B31B2E2454CC13CA /* TextDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDocument.swift; sourceTree = "<group>"; };
-		B694BA08A499E1FD67AE7104 /* PocketMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PocketMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B6A3EFDC948E33F6D7D82B42 /* LiveSyncClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSyncClient.swift; sourceTree = "<group>"; };
 		B6BED2281A376958C50FC7E2 /* ReaderWiFiSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderWiFiSetup.swift; sourceTree = "<group>"; };
 		B819B6D7C750AE06D702CF49 /* ArticleRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleRecord.swift; sourceTree = "<group>"; };
@@ -834,7 +834,7 @@
 			isa = PBXGroup;
 			children = (
 				EF248AD34F385ED9F2F09847 /* Pocket.app */,
-				B694BA08A499E1FD67AE7104 /* PocketMac.app */,
+				2A490F16B34A066E27FC052F /* Pocket.app */,
 				1C95F7B00987D244A5B7728F /* PocketMacTests.xctest */,
 				7627FFD7ED810F4685D869BE /* PocketShare.appex */,
 				FD7417C245B01C67AD37DDFB /* PocketTests.xctest */,
@@ -1062,7 +1062,7 @@
 			packageProductDependencies = (
 			);
 			productName = PocketMac;
-			productReference = B694BA08A499E1FD67AE7104 /* PocketMac.app */;
+			productReference = 2A490F16B34A066E27FC052F /* Pocket.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

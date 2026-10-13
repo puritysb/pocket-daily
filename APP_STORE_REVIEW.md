@@ -50,14 +50,13 @@ Live hardware actions require a compatible reader:
 1. In the Library, choose **Send to Reader…** for a book or saved article. The
    current-window task sheet keeps that content selected through connection.
    Other prepared books and firmware are not included in this task.
-2. For shared Wi-Fi, open File Transfer → Join a Network on the reader and
-   choose Find on Same Wi-Fi. Initial discovery requests local-network access
+2. For shared Wi-Fi, open Pocket Daily → Sync → Same Wi-Fi on the reader
+   (CrossPoint: File Transfer → Join a Network) and choose Find on Same Wi-Fi. Initial discovery requests local-network access
    without changing Wi-Fi. Explicit Connect may also wake a previously paired
    reader over Bluetooth when its firmware is in supported standby mode. Afterwards the app reconnects by itself whenever
    that reader answers again at its last address on the same Wi-Fi (Settings →
    Reconnect on the same Wi-Fi); it asks only that address and never changes networks.
-3. Away, open Nearby Sync on the reader (new firmware has a transport chooser),
-   expand the other connection methods, choose Connect Directly in the app,
+3. Away, open Pocket Daily → Sync → Direct connection on the reader, expand the other connection methods, choose Connect Directly in the app,
    and confirm the Wi-Fi transition. BLE
    pairing supplies the temporary credentials. No router or internet is required.
 4. Choose Send in the task sheet and keep the iPhone app open. Closing the sheet

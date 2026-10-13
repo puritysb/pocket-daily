@@ -194,6 +194,7 @@ final class HostRendererBridgeTests: XCTestCase {
     func testProfileMapsToTheFirmwareRecordIds() throws {
         var profile = PocketProfile.defaults
         profile.home.items = [.monitor, .reading]
+        profile.home.dailyWord = true
         profile.home.weather = .top
         profile.home.nextEvent = false
         profile.sleep.mode = .reader

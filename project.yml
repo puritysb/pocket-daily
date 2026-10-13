@@ -102,6 +102,8 @@ targets:
   PocketMac:
     type: application
     platform: macOS
+    # Ships as Pocket.app; without this XcodeGen names scheme products PocketMac.app.
+    productName: Pocket
     sources:
       - path: Sources
       - path: Support/PocketUIHost/PIN.json

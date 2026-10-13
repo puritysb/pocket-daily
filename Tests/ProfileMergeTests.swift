@@ -83,8 +83,8 @@ final class ProfileMergeTests: XCTestCase {
 
     func testPendingFieldsNameWhatApplyChanges() {
         var mine = base
-        mine.home.dailyWord = false
-        mine.sleep.sections = [.reading]
+        mine.home.dailyWord = true
+        mine.sleep.sections = [.today]
         XCTAssertEqual(ProfileMerge.pending(profile: mine, reader: base), [.dailyWord, .sleepSections])
         XCTAssertEqual(ProfileMerge.pending(profile: base, reader: base), [])
     }
@@ -110,25 +110,25 @@ final class ProfileMergeTests: XCTestCase {
         // Saved offline against generation 4; the reader is now at generation 5.
         var draft = base
         draft.home.weather = .top
-        draft.home.nextEvent = false
+        draft.home.nextEvent = true
         let editor = ProfileEditorState()
         editor.restore(ProfileEditSnapshot(draft: draft, base: base, baseGeneration: 4,
                                            reading: ReaderPreferences(), readingBase: ReaderPreferences(),
                                            savedAt: Date()))
         XCTAssertNotNil(editor.snapshot)
         var reader = base
-        reader.home.weather = .off                    // both changed
+        reader.home.weather = .bottom                 // both changed
         reader.sleep.mode = .reader                   // reader only
         editor.sync(with: ReaderProfileState(deviceID: "1234ABCD", generation: 5, profile: reader, maxHomeItems: 4))
         XCTAssertEqual(editor.draft.home.weather, .top)
         XCTAssertEqual(editor.draft.sleep.mode, .reader)
-        XCTAssertEqual(editor.draft.home.nextEvent, false)
+        XCTAssertEqual(editor.draft.home.nextEvent, true)
         XCTAssertEqual(editor.mergeReport?.fromReader, [.sleepMode])
         XCTAssertEqual(editor.mergeReport?.bothChanged, [.weather])
         XCTAssertEqual(editor.pendingFields, [.weather, .nextEvent])
 
         editor.useReaderForBothChanged()
-        XCTAssertEqual(editor.draft.home.weather, .off)
+        XCTAssertEqual(editor.draft.home.weather, .bottom)
         XCTAssertEqual(editor.pendingFields, [.nextEvent])
         XCTAssertNotNil(editor.mergeReport, "What came from the reader stays listed until dismissed")
         editor.dismissMergeReport()
@@ -176,7 +176,7 @@ final class ProfileMergeTests: XCTestCase {
     @MainActor
     func testGenericDraftRequiresApplyAndRemembersReviewedTargetAcrossDisconnect() throws {
         let editor = ProfileEditorState()
-        editor.draft.home.weather = .off
+        editor.draft.home.weather = .top
         editor.sync(with: .init(deviceID: "1234ABCD", generation: 1, profile: .defaults, maxHomeItems: 4))
         XCTAssertNil(editor.targetDeviceID)
         let saved = try XCTUnwrap(editor.snapshot)
@@ -220,7 +220,7 @@ final class ProfileMergeTests: XCTestCase {
         let editor = ProfileEditorState()
         editor.draft.home.weather = .top
         var incoming = PocketProfile.defaults
-        incoming.home.weather = .off
+        incoming.home.weather = .bottom
         editor.sync(with: .init(deviceID: "1234ABCD", generation: 1, profile: incoming, maxHomeItems: 4))
         XCTAssertEqual(editor.mergeReport?.bothChanged, [.weather])
         let recovered = ProfileEditSnapshot(draft: incoming, base: incoming, baseGeneration: 1, reading: ReaderPreferences(), readingBase: ReaderPreferences(), savedAt: Date(), targetDeviceID: "1234ABCD")

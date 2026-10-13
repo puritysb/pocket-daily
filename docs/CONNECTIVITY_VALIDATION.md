@@ -211,9 +211,9 @@ Use an actual iPhone and X3; simulator builds cannot verify radios, SD, or flash
 
 ## Transfer isolation and flow control — 2026-09-21 acceptance
 
-- Use Pocket Sync → Join a Network for the new app-only STA profile; confirm
+- Use Pocket Daily → Sync → Same Wi-Fi for the app-only STA profile; confirm
   preferences, content and UI packs on a clean SD card. File Transfer retains
-  browser functionality and is the bootstrap path for older firmware.
+  browser functionality and is the path for CrossPoint firmware.
 
 - On updated firmware, status must advertise `uploadStreamWindow:4096`.
   Send a 6 MB image and a UI pack from the updated app; verify final size/CRC,
@@ -236,8 +236,8 @@ Use an actual iPhone and X3; simulator builds cannot verify radios, SD, or flash
 
 ## Shared network
 
-- Reader: File Transfer → Join a Network, or Pocket Sync → Join a Network on
-  the updated firmware. Previously saved Wi-Fi credentials should reconnect.
+- Reader: Pocket Daily → Sync → Same Wi-Fi (CrossPoint: File Transfer → Join
+  a Network). Previously saved Wi-Fi credentials should reconnect.
 - App: Find & Connect must never start Bluetooth pairing or change Wi-Fi.
 - Prepare and send content, then firmware. The latter must remain staged until
   confirmed on the reader. Reconnect to check the identified reader's version.

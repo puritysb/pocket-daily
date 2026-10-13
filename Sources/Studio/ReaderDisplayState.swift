@@ -76,7 +76,7 @@ struct PreviewStyle: Equatable, Sendable {
     let orientation: HostRendererBridge.Orientation?
     let source: Source
 
-    /// Without a reader (demo, offline, older firmware): the default device
+    /// Without a reader style (demo, offline, CrossPoint firmware): the default device
     /// theme (Lyra: 20/5/16) with English strings, labelled as a reference.
     static let reference = PreviewStyle(
         options: .init(sidePadding: 20, topPadding: 5, spacing: 16, emptyTitle: "Pocket",

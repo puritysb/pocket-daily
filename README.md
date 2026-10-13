@@ -136,18 +136,18 @@ before every App Store Connect upload.
 1. Choose a book, study pack, or firmware while internet is available. The app
    copies it into its local prepared list; firmware requires acknowledgement and
    image validation. Add files one at a time; only one firmware image may be pending.
-2. At home, open File Transfer → Join a Network on the reader and choose Find
-   on same Wi-Fi under Reader in the app. New firmware also offers Join a Network
-   in the Pocket Sync menu and reuses saved reader Wi-Fi credentials.
-3. Away, open Nearby Sync on the reader (select Nearby Sync again in the new
-   transport chooser), then choose Connect directly in the app and approve the
+2. At home, open Pocket Daily → Sync → Same Wi-Fi on the reader (CrossPoint:
+   File Transfer → Join a Network) and choose Find on Same Wi-Fi in the app.
+   The reader reuses its saved Wi-Fi credentials.
+3. Away, open Pocket Daily → Sync → Direct connection on the reader, then
+   choose Connect directly in the app and approve the
    temporary Wi-Fi switch. No internet is required for prepared files.
 4. Choose Send under Ready to send. Keep the iPhone app in the foreground. A paused or failed
    file remains local across app relaunch; reconnect and send again. Identified
    readers reuse the staging ID. Resume requires the reader to retain its session;
    a reader restart safely restarts the file at zero.
 5. A completed direct batch releases the app's temporary Wi-Fi configuration.
-   New private-AP firmware also accepts session/end and returns to Pocket Daily.
+   The reader accepts session/end and returns to Pocket Daily.
    Older firmware requires exiting Sync on the reader or waiting for idle expiry.
    The OS controls reconnection to your usual network.
 6. Firmware is staged as /update.bin, never installed automatically. Confirm on

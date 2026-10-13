@@ -186,8 +186,9 @@ SpringBoard crash report appeared during this sequential simulator run.
 ## Publication confirmation and compatibility — 2026-09-29
 
 General file sends require an existing Pocket advertisement before any upload:
-`transferControl:1`, a valid `uploadStreamPort`, or positive `uploadChunkBytes`.
-These are compatibility evidence from the existing Pocket protocol; a generic
+`transferControl:1` or a valid `uploadStreamPort`. The chunked `/upload?offset`
+path for pre-0.x `uploadChunkBytes` readers was removed on 2026-10-14
+(compatibility decision of 2026-10-03). These are Pocket protocol evidence; a generic
 CrossPoint `/api/status` plus browser `/upload` is insufficient. No new firmware
 capability or route is assumed. Unrecognized firmware is rejected before staging;
 use supported Pocket firmware or the Mac SD-copy path.

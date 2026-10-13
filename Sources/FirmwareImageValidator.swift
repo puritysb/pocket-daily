@@ -34,7 +34,7 @@ enum FirmwareValidationError: LocalizedError, Equatable {
         case .digestMismatch:
             "This firmware failed its SHA-256 integrity check. The file may be damaged or incomplete."
         case .incompatibleProduct:
-            "This ESP32-C3 image does not identify itself as Pocket Daily firmware with Nearby Sync support."
+            "This ESP32-C3 image does not identify itself as Pocket Daily firmware with Bluetooth connection support."
         case let .unsupportedReader(device):
             "Firmware staging is disabled for the unrecognized reader profile \(device). Connect an X3/X4-compatible reader."
         }
