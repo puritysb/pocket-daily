@@ -27,9 +27,24 @@ def simulator_id():
     return phones[0]['udid']
 
 
+def validate_onboarding_hardware(records):
+    if not records:
+        raise RuntimeError('Onboarding requires nonempty physical evidence')
+    for row in records:
+        if (row.get('platform') != 'macOS' or row.get('passed') is not True
+                or row.get('initialConnection') is not True
+                or row.get('wifiSetupRollback') != 'passed'
+                or row.get('screenValidation', {}).get('passed') is not True
+                or row.get('screenValidation', {}).get('restored') is not True
+                or row.get('continuityValidation', {}).get('passed') is not True
+                or row.get('continuityValidation', {}).get('restored') is not True):
+            raise RuntimeError('Onboarding requires verified provisioning rollback, reading and restoration')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--firmware-repo', type=Path, default=ROOT.parent / 'pocket-daily-firmware')
+    parser.add_argument('--onboarding', action='store_true', help='short Mac/X3 offline start, provisioning rollback and first-reading acceptance; no simulator or extended standby')
     parser.add_argument('--physical-only', action='store_true', help='never invoke a simulator or simulator screenshots')
     parser.add_argument('--screen-suite', action='store_true', help='capture and validate physical X3 Home/Brief pixels')
     parser.add_argument('--real-epub', action='store_true', help='use the published Frankenstein EPUB text fixture; requires --continuity-suite')
@@ -40,6 +55,12 @@ def main():
     parser.add_argument('--standby', action='store_true', help='also verify X3 experimental BLE standby/wake')
     parser.add_argument('--screenshots', action='store_true', help='regenerate iPhone/iPad/Mac UI captures')
     args = parser.parse_args()
+    if args.onboarding:
+        if args.standby or args.ios_device or args.simulator or args.screenshots:
+            parser.error('--onboarding is short Mac/X3 acceptance only')
+        args.physical_only = True
+        args.screen_suite = True
+        args.continuity_suite = True
     if args.real_epub and not args.continuity_suite:
         parser.error('--real-epub requires --continuity-suite')
     if args.physical_only and (args.simulator or args.screenshots):
@@ -92,11 +113,15 @@ def main():
                 '-only-testing:PocketMacTests/ReadingSyncBLEProtocolTests',
                 '-only-testing:PocketMacTests/ReaderWakeConnectorTests',
                 '-only-testing:PocketMacTests/ReaderWiFiSetupTests',
+                '-only-testing:PocketMacTests/NearbyOnboardingTests',
+                '-only-testing:PocketMacTests/PocketProfileTests',
                 '-only-testing:PocketMacTests/ReaderScreenCaptureTests',
                 '-resultBundlePath', str(output / 'reader.xcresult')], cwd=ROOT,
                 env={**os.environ, 'TEST_RUNNER_POCKET_EPUB_SAMPLES':
                      str(firmware / 'test/reading_progress/fixtures')})
             command = [sys.executable, str(runner), 'run', '--app', str(ROOT), '--interface-suite']
+            if args.onboarding:
+                command += ['--wifi-setup', '--x3-only']
             if args.screen_suite:
                 command.append('--screen-suite')
             if args.continuity_suite:
@@ -120,6 +145,16 @@ def main():
             job.report['hardwareReport'] = reports[0]
             job.report['hardware'] = evidence['hardware']
             job.report['iosPhysical'] = evidence['iosPhysical']
+            if args.onboarding:
+                validate_onboarding_hardware(evidence['hardware'])
+                job.report['onboarding'] = {
+                    'offlineStart': 'Mac shipping library/reader regression',
+                    'failureRecovery': 'deterministic permission/form tests and actual X3 failed association rollback',
+                    'firstReading': 'app preparation, transfer, byte comparison and actual X3 EPUB captures/position acceptance',
+                    'limits': ['OS permission dialogs are not automatically denied',
+                               'fresh first-boot Read offline physical button route is not exercised',
+                               'reader Library button navigation is not exercised by developer capture']}
+
             if args.screenshots:
                 # Full UI flows run on both simulator sizes before Mac capture.
                 job.command('screenshots', ['./scripts/capture_screenshots.sh'], cwd=ROOT, timeout=3600,

@@ -4,6 +4,23 @@ The interface is not considered complete merely because a build or a single
 upload passes. This matrix separates deterministic fault tests, actual app/X3
 transactions, and acceptance that needs additional hardware or OS facilities.
 
+## Short onboarding regression
+
+`python3 scripts/verify_reader_interface.py --onboarding` selects Mac/X3 only,
+without a simulator or extended standby. It includes injected Bluetooth denial,
+radio-loss/cancel/retry, Wi-Fi form/manual-entry recovery, local-network failure
+and cancellation, offline Welcome rendering/page turns/persistent resume,
+unsupported-file recovery, and an intentionally empty library. Physical stages
+require failed-association rollback over actual BLE, file transfer, actual EPUB
+captures, continuation and restoration. See DEVELOPER_PIPELINE.md for evidence
+boundaries and CURRENT_HANDOFF.md for the latest run. On 2026-10-13, aggregate
+`20261013T131302-494933` passed 139 Mac regressions and physical X3 run
+`20261013T131358-21d2ed`: BLE provisioning rollback, 10 interface cases, two
+continuation rounds with 5 captures, 14 screen/sleep/wake captures and restoration.
+The run also caught and drove fixes for early Wi-Fi confirmation timeout and
+missing developer capture storage after reset. Short generated-book navigation
+now verifies exact visible paragraph characters rather than a 5% tolerance.
+
 ## Repeatable unattended run
 
 For short X3 acceptance with a published EPUB, transfer outages, reading-offer

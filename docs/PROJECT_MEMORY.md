@@ -6,6 +6,27 @@ with a dated note below.
 
 
 
+## Short onboarding recovery acceptance — 2026-10-13
+
+- Mac/X3 aggregate `20261013T131302-494933` passed 139 Mac regressions and
+  physical run `20261013T131358-21d2ed`: BLE failed-network rollback, 10 file
+  interface cases, two bidirectional reading rounds (5 captures), 14 screen/
+  short-sleep/wake captures and original-state restoration. iOS device SDK build
+  and package validation passed; no simulator, X4 or long-duration trial ran.
+- App checks Bluetooth readiness before taking an online reader off Wi-Fi,
+  safely cancels/retries onboarding, clears stale form outcomes, and observes
+  a single Wi-Fi command's receipt for 90 seconds without replaying credentials.
+- Reset can remove `/.pocket`; firmware now recreates it before capture ticket
+  writes. The missing-parent regression fails when directory creation is removed.
+  Capture readiness diagnostics are developer-only; short-book tests verify
+  exact visible paragraph characters instead of a fixed progress tolerance.
+- Firmware gates: 935 host tests, 135 Python tests, strict analysis and both
+  default/standby builds passed. Installed/tested version:
+  `0.1.0-dev-main-e6eb88d5-ble-standby-wdc00da92`.
+- `--onboarding` selects Mac/X3 only. OS denial dialogs and physical first-boot
+  Read offline/Library buttons remain separate from injected-state tests and
+  developer-driven EPUB activity. Prior fresh BLE pairing evidence is separate.
+
 ## Fresh-settings BLE onboarding acceptance — 2026-10-13
 
 - Physical Mac/X3 first-use flow passed: reader settings/Wi-Fi/bonds archived and

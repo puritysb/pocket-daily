@@ -1029,6 +1029,9 @@ final class PocketModel: ObservableObject, DeviceSession {
 
     @Published private(set) var isConfiguringReaderWiFi = false
     @Published private(set) var readerWiFiSetupMessage = ""
+    var prepareReaderBluetooth: @MainActor () async throws -> Void = {
+        try await ReaderWakeConnector().ensureAvailable()
+    }
     var sendReaderWiFi: @MainActor (RememberedBluetoothReader, ReaderWiFiCredentials) async throws -> String = { reader, credentials in
         try await ReaderWakeConnector().configureWiFi(reader, credentials: credentials)
     }
@@ -1053,6 +1056,10 @@ final class PocketModel: ObservableObject, DeviceSession {
                         readerWiFiSetupMessage = "This reader needs firmware with app Wi-Fi setup support."
                         return
                     }
+                    // Do not strand the reader on its pairing screen when the
+                    // Apple radio/permission service has not become ready.
+                    try await prepareReaderBluetooth()
+                    try Task.checkCancellation()
                     try await client.prepareReaderWiFi(deviceID: reader.readerID, host: activeHost, port: activeHTTPPort)
                     readerStatus = nil
                     mirror.apply(.connection(.searching))
@@ -1066,19 +1073,23 @@ final class PocketModel: ObservableObject, DeviceSession {
                 expectedDeviceID = reader.readerID
                 // Command acceptance is not successful association or persistence.
                 // Observe the matching result once; never resend an ambiguous write.
-                for _ in 0..<3 {
-                    try await Task.sleep(for: .seconds(5))
+                let confirmation = try await ReaderWiFiConfirmation.observe {
                     guard attempt == connectionAttempt else { throw CancellationError() }
                     await discoverReader(attempt: attempt, retryIfMissing: false)
                     if let status = readerStatus, status.deviceID == reader.readerID,
                        let receipt = status.wifiSetupResult, let message = receipt.message(for: requestID) {
-                        readerWiFiSetupMessage = message
-                        return
+                        return message
                     }
+                    return nil
                 }
+                if let confirmation { readerWiFiSetupMessage = confirmation; return }
                 readerWiFiSetupMessage = "Wi-Fi setup could not be confirmed. Check the name, password and this device’s Wi-Fi, then retry. The reader may already have saved the network."
             } catch is CancellationError {
                 readerWiFiSetupMessage = "Verification stopped. The reader may still be connecting. Reconnect to check before retrying."
+            } catch ReaderWakeConnector.Failure.timedOut(.waiting) {
+                readerWiFiSetupMessage = "Bluetooth did not become ready on this device. Check Bluetooth and Pocket Daily’s Bluetooth permission in Settings, then retry. No Wi-Fi details were sent."
+            } catch ReaderWakeConnector.Failure.unavailable {
+                readerWiFiSetupMessage = "Bluetooth is unavailable on this device. Enable Bluetooth and allow Pocket Daily to use it in Settings, then retry. No Wi-Fi details were sent."
             } catch ReaderWakeConnector.Failure.unsupported {
                 readerWiFiSetupMessage = "This reader needs firmware with app Wi-Fi setup support. No Wi-Fi details were sent."
             } catch ReaderWakeConnector.Failure.wrongReader {
@@ -1250,7 +1261,7 @@ final class PocketModel: ObservableObject, DeviceSession {
             } else {
                 let wakeRecovery = lastWakeFailure == nil ? "" :
                     "Bluetooth could not wake the reader. If its battery is low or charging was disconnected, charge it and press its power button once. "
-                post("No Pocket reader was visible. \(wakeRecovery)Open Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware). Without a router, choose Direct connection on the reader and Connect Directly here.", tone: .failure)
+                post("No Pocket reader was visible. \(wakeRecovery)Open Pocket Daily → Sync → Same Wi-Fi on the reader (Join a Network on older firmware). If network permission was denied, allow Local Network access for Pocket Daily in Settings and try again. Without a router, choose Direct connection on the reader and Connect Directly here.", tone: .failure)
             }
         }
     }

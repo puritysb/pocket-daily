@@ -163,6 +163,8 @@ final class ReaderHardwareTests: XCTestCase {
                 model.configureReaderWiFi(ReaderWiFiCredentials(ssid: "Pocket-Test-\(run)", password: "test-only-123"))
                 try require(model.isConfiguringReaderWiFi, "Wi-Fi setup was not admitted")
                 try await until("Wi-Fi setup rollback", timeout: 150) { !model.isConfiguringReaderWiFi && !busy }
+                evidence["wifiSetupMessage"] = model.readerWiFiSetupMessage
+                try require(model.readerStatus != nil, "Wi-Fi rollback did not reconnect: " + model.readerWiFiSetupMessage)
                 let restored = try XCTUnwrap(model.readerStatus)
                 try verify(restored, identity: identity, version: version)
                 try require(restored.wifiSetupResult?.state == "failed", "Missing failed-association receipt")

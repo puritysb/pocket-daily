@@ -76,7 +76,12 @@ extension ReaderInterfaceSuite {
             var req = URLRequest(url: try XCTUnwrap(url.url)); req.httpMethod = method; req.timeoutInterval = 15
             let (data, response) = try await URLSession.shared.data(for: req)
             let http = try XCTUnwrap(response as? HTTPURLResponse)
-            try check(http.statusCode == expected, "Continuity \(method) \(endpoint): HTTP \(http.statusCode)")
+            let knownFailures = ["Another file transfer is active", "Reader identity mismatch",
+                                 "Missing reader fixture or request could not be saved",
+                                 "Reader memory is too low for content verification"]
+            let body = String(data: data, encoding: .utf8) ?? ""
+            let detail = knownFailures.contains(body) ? ": " + body : ""
+            try check(http.statusCode == expected, "Continuity \(method) \(endpoint): HTTP \(http.statusCode)\(detail)")
             return (data, http)
         }
         func pixels(_ name: String) async throws -> [String] {
@@ -120,6 +125,12 @@ extension ReaderInterfaceSuite {
         }
         func exercise(_ action: String, name: String) async throws -> (ReaderReadingList, [String]) {
             print("POCKET_CONTINUITY \(name) running")
+            let (readiness, _) = try await request("GET")
+            XCTContext.runActivity(named: name + " admission") { activity in
+                let attachment = XCTAttachment(data: readiness, uniformTypeIdentifier: "public.json")
+                attachment.name = name + "-admission"; attachment.lifetime = .keepAlways
+                activity.add(attachment)
+            }
             do {
                 _ = try await request("POST", query: ["action": action], expected: 202)
                 fixtureArmed = true
@@ -162,6 +173,30 @@ extension ReaderInterfaceSuite {
         func pageText() async throws -> String {
             let value = try await session.webView.evaluateJavaScript("document.querySelector('foliate-view').lastLocation.range.toString()")
             return try XCTUnwrap(value as? String)
+        }
+        func navigate(fraction: Double, chapter: Int, paragraph: Int, label: String) async throws {
+            let previous = session.position?.xpointer
+            let target = "/body/DocFragment[\(chapter)]/body/p[\(paragraph)]/text().0"
+            if sourcePath == nil {
+                // A short book's whole page can exceed 5% of its length.
+                // Select and verify a character instead of assuming progress
+                // rounds within an arbitrary percentage of the requested value.
+                session.go(to: ReadingPosition(fraction: fraction, xpointer: target, cfi: nil,
+                                               chapter: nil, updatedAt: Date()))
+            } else {
+                session.go(toFraction: fraction)
+            }
+            try await wait(label) {
+                guard let current = session.position, current.xpointer != previous else { return false }
+                return sourcePath == nil
+                    ? current.xpointer?.hasPrefix("/body/DocFragment[\(chapter)]/") == true
+                    : abs(current.fraction - fraction) < 0.05
+            }
+            if sourcePath == nil {
+                let visible = try await session.webView.callAsyncJavaScript(ReaderContinuityPosition.visibleCharacter,
+                    arguments: ["pointer": target], contentWorld: .page) as? Bool
+                try check(visible == true, "\(label): target paragraph is not on the visible page")
+            }
         }
         func textAfter(_ pointer: String) async throws -> String {
             let value = try await session.webView.callAsyncJavaScript("""
@@ -234,14 +269,8 @@ extension ReaderInterfaceSuite {
             let seed = try entry(seedList)
             try await exchange(expectedSent: 0)
             for (index, fraction) in [0.48, 0.16].enumerated() {
-                let previousPointer = session.position?.xpointer
                 let expectedChapter = index == 0 ? 2 : 1
-                session.go(toFraction: fraction)
-                try await wait("app source position") {
-                    guard let current = session.position, current.xpointer != previousPointer,
-                          abs(current.fraction - fraction) < 0.05 else { return false }
-                    return sourcePath != nil || current.xpointer?.hasPrefix("/body/DocFragment[\(expectedChapter)]/") == true
-                }
+                try await navigate(fraction: fraction, chapter: expectedChapter, paragraph: 17, label: "app source position")
                 print("POCKET_CONTINUITY app source fraction=\(session.position?.fraction ?? -1)")
                 await library.flushPositions()
                 let position = try XCTUnwrap(session.position)
@@ -266,12 +295,8 @@ extension ReaderInterfaceSuite {
                 // A target already on the Mac page cannot prove actual navigation.
                 let parkedChapter = index == 0 ? 1 : 3
                 let parkedFraction = index == 0 ? 0.0 : 0.9
-                session.go(toFraction: parkedFraction)
-                try await wait("app parked away from reader") {
-                    guard let current = session.position, current.xpointer != position.xpointer,
-                          abs(current.fraction - parkedFraction) < 0.05 else { return false }
-                    return sourcePath != nil || current.xpointer?.hasPrefix("/body/DocFragment[\(parkedChapter)]/") == true
-                }
+                try await navigate(fraction: parkedFraction, chapter: parkedChapter, paragraph: 1,
+                                   label: "app parked away from reader")
                 await library.flushPositions()
                 let (advanced, advancedText) = try await exercise("advance", name: "continuity-x3-to-app-\(index)")
                 let readerPlace = try entry(advanced)

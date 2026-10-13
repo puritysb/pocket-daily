@@ -60,10 +60,22 @@ final class ReaderWakeConnector {
         return requestID
     }
 
+    /// Check the Apple radio before asking an online reader to leave Wi-Fi.
+    /// This requests no peripheral connection and sends no reader command.
+    func ensureAvailable() async throws {
+        guard pending == nil else { throw Failure.unavailable }
+        reader = nil
+        try await begin()
+    }
+
     func wake(_ reader: RememberedBluetoothReader) async throws {
         guard pending == nil else { throw Failure.unavailable }
-        try Task.checkCancellation()
         self.reader = reader
+        try await begin()
+    }
+
+    private func begin() async throws {
+        try Task.checkCancellation()
         requestID = ""
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -82,7 +94,8 @@ final class ReaderWakeConnector {
     }
 
     private func connectIfReady() {
-        guard phase == .waiting, transport.isAvailable, let reader else { return }
+        guard phase == .waiting, transport.isAvailable else { return }
+        guard let reader else { finish(.success(())); return }
         phase = .connecting
         observe?(.connecting)
         discoveryTimer = scheduler.schedule(after: 8, keepAwake: false) { [weak self] in
@@ -94,15 +107,19 @@ final class ReaderWakeConnector {
     }
 
     private func handle(_ event: ReaderLinkTransportEvent) {
-        guard pending != nil, let reader else { return }
+        guard pending != nil else { return }
+        if case .availabilityChanged(let available) = event {
+            if available { connectIfReady() } else { finish(.failure(Failure.unavailable)) }
+            return
+        }
+        guard let reader else { return }
         switch event {
         case .connectionReset: observe?(.connectionReset)
         case .pendingConnectionCancelled: observe?(.pendingConnectionCancelled)
         case .reconnectRequested: observe?(.reconnectRequested)
         case .discoveryStarted: observe?(.discoveryStarted)
         case .knownAdvertisement: observe?(.knownAdvertisement)
-        case .availabilityChanged(let available):
-            if available { connectIfReady() } else { finish(.failure(Failure.unavailable)) }
+        case .availabilityChanged: break // Handled before the reader-specific events.
         case .connected(let identifier):
             guard phase == .connecting else { return }
             guard identifier == reader.peripheralID else { finish(.failure(Failure.wrongReader)); return }

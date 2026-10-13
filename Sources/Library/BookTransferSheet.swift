@@ -203,7 +203,7 @@ struct BookTransferSheet<Connection: View>: View {
             Button("Stop") { model.pauseBookTransferJob(jobID) }.buttonStyle(.bordered)
                 .accessibilityIdentifier("book-transfer-stop")
         case .completed:
-            Text("Reading positions are exchanged separately.").font(.caption).foregroundStyle(.secondary)
+            Text("On your reader, leave Sync and open Library to start reading. Reading positions are exchanged separately.").font(.caption).foregroundStyle(.secondary)
             Button("View Reader Library", action: onInventory).buttonStyle(.bordered)
         case .discarded:
             EmptyView()

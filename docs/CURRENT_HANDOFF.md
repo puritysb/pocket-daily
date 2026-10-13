@@ -1,5 +1,64 @@
 # 현재 인수인계 — 2026-10-13
 
+
+## Short onboarding failure/recovery — 2026-10-13 (passed)
+
+- Scope: Mac/X3 onboarding recovery, offline start and first reading; no X4,
+  simulator or long-duration tests. App and firmware changes are committed
+  together with this acceptance record; private evidence stays ignored.
+- App fixes: cancelled BLE permission requests ignore late radio callbacks;
+  denial/radio loss release ownership; retry waits for radio initialization;
+  stale writes cannot overwrite cancellation. Wi-Fi form edits clear old
+  outcomes, submitted passwords are cleared, and explicit cancel actions remain.
+  Discovery errors explain permission recovery; saved books explain leaving
+  Sync for Library. Before asking an online X3 to leave Wi-Fi, radio readiness
+  is checked so a stalled Mac permission service cannot strand the reader.
+- `scripts/verify_reader_interface.py --onboarding` forces physical Mac/X3 scope,
+  tests isolated permission/form failures and offline Welcome/import/resume, then
+  actual BLE failed-network rollback, file interfaces, EPUB continuation and
+  short screen/sleep/wake capture. Firmware `--x3-only` rejects other/unknown
+  models before hardware mutation. Missing evidence/restoration cannot pass.
+- User re-enabled Mac Bluetooth permission and returned X3 to Same Wi-Fi.
+  Firmware runs `20261013T123357-2b1439` and `20261013T125240-1037b9` passed
+  provisioning rollback and all 10 interface cases, then failed at first reading
+  capture. `20261013T124005-21c357` reproduced the same HTTP 409 in isolation.
+- First-install reset had archived `/.pocket`; reader-capture ticket writes did
+  not recreate it. Earlier framebuffer-first tests masked the missing directory.
+  Added directory creation through HAL, strict missing-parent/open/short-write
+  regression, and read-only capture admission evidence. The negative control
+  without mkdir fails (`.build/onboarding-capture-mutation.log`).
+- Firmware fix run `20261013T125844-4d5717`: 935 host tests, 135 Python tests,
+  strict analysis and default/standby builds passed; installed
+  `0.1.0-dev-main-e6eb88d5-ble-standby-wdc00da92`. First real X3 reading capture
+  now passed before any screen capture. Later app-position setup timed out;
+  generated short-book navigation now targets exact paragraph characters instead
+  of a fixed 5% progress tolerance. The new actual Mac reader regression passed.
+  The physical run later observed page-start progress 0.4167 for its middle
+  target, outside the old 0.48±0.05 assumption.
+- Run `20261013T130932-715ca1` exposed a second recovery race: the X3 returned
+  with a failed-association receipt after the app ended three fast searches.
+  Confirmation now observes the single command for a 90-second window without
+  replaying credentials. Delayed-result, timeout and cancellation regressions
+  pass; latest Mac selection is 139 passed/0 failed and iOS device build passed.
+- Final aggregate PASSED:
+  `.build/interface-runs/20261013T131302-494933/report.json`; physical firmware
+  run `20261013T131358-21d2ed`. Latest Mac regressions: 139 passed, no failures
+  or skips. X3: BLE failed-association rollback, all 10 file/interface cases,
+  both forward/backward continuation rounds (5 captures), all 14 screen captures
+  including actual short sleep and wake, and both restoration checks passed.
+  Package validation and diff checks passed. No simulator or physical X4 ran.
+- Earlier full Mac suite: 140 passed/4 explicit skips/0 failures, six Mac captures
+  and package checks passed (`.build/onboarding-checks/capture-reports/20261013T115710-40969/`).
+  Post-radio-fix Mac selection: 135 passed/0 failed; iOS device SDK build passed
+  (`.build/onboarding-ios.log`). App report negative controls: 2 passed.
+- Boundaries: injected permission outcomes are not real OS denial dialogs;
+  non-reset hardware tests do not press first-boot Read offline or navigate
+  physical Library buttons. Developer capture enters the real EPUB activity.
+  Existing fresh BLE setup evidence remains separate. Secrets, user books and
+  the local SDK storage patch are preserved. The legacy NearbySyncProtocolTests
+  remains iOS-only: its sandbox loopback/shared-radio fixtures need separate work
+  before extending Mac membership; isolated NearbyOnboardingTests is shared.
+
 ## Active first-use acceptance — 2026-10-13
 
 - Run `20261012T230749-c2f495` passed host 934, Python 134, strict analysis,

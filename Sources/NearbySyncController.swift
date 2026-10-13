@@ -55,11 +55,13 @@ final class NearbySyncController: NSObject, ObservableObject {
     private var connectionTimeout: Task<Void, Never>?
 
     private let ownershipChanged: ((Bool) -> Void)?
+    private let persistsTrace: Bool
 
-    init(ownershipChanged: ((Bool) -> Void)? = nil) {
+    init(persistsTrace: Bool = true, ownershipChanged: ((Bool) -> Void)? = nil) {
+        self.persistsTrace = persistsTrace
         self.ownershipChanged = ownershipChanged
         super.init()
-        traceEntries = Self.loadTrace()
+        traceEntries = persistsTrace ? Self.loadTrace() : []
         record("Pocket BLE controller initialized")
     }
 
@@ -93,13 +95,39 @@ final class NearbySyncController: NSObject, ObservableObject {
             self.central = CBCentralManager(delegate: self, queue: .main)
             return
         }
-        switch central.state {
-        case .poweredOn:
+        if prepareScan(for: central.state) {
             beginScan(central)
-        case .unauthorized:
-            state = .failed(Self.unauthorizedMessage)
+        }
+    }
+
+    /// Returns whether the caller should start the radio scan now. Keeping the
+    /// state transition separate lets recovery tests run without a central manager.
+    func prepareScan(for radioState: CBManagerState) -> Bool {
+        disconnect()
+        scanRequested = true
+        state = .scanning
+        return updateBluetoothState(radioState)
+    }
+
+    func updateBluetoothState(_ radioState: CBManagerState) -> Bool {
+        switch radioState {
+        case .poweredOn:
+            guard scanRequested else { return false }
+            scanRequested = false
+            return true
+        case .unknown, .resetting:
+            return false
         default:
-            state = .bluetoothUnavailable
+            // Ignore late terminal notifications after the user has cancelled.
+            guard scanRequested || ownsBluetooth || peripheral != nil || hotspotLease != nil else { return false }
+            disconnect()
+            if radioState == .unauthorized {
+                record("Bluetooth access denied")
+                state = .failed(Self.unauthorizedMessage)
+            } else {
+                state = .bluetoothUnavailable
+            }
+            return false
         }
     }
 
@@ -177,6 +205,11 @@ final class NearbySyncController: NSObject, ObservableObject {
         state = .failed(Self.failureMessage(for: error))
     }
 
+    func handleWriteFailure(_ error: Error, peripheralID: UUID) {
+        guard peripheral?.identifier == peripheralID else { return }
+        fail(error)
+    }
+
     /// The reader keeps two bonds and drops the oldest when a third device pairs,
     /// and a firmware reinstall can erase them; this device then still holds keys
     /// the reader refuses. Only the system can forget them.
@@ -204,6 +237,7 @@ final class NearbySyncController: NSObject, ObservableObject {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         traceEntries.append("\(timestamp) \(message)")
         if traceEntries.count > 80 { traceEntries.removeFirst(traceEntries.count - 80) }
+        guard persistsTrace else { return }
         let report = traceReport
         let url = Self.traceURL
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -251,24 +285,7 @@ final class NearbySyncController: NSObject, ObservableObject {
 extension NearbySyncController: CBCentralManagerDelegate {
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
         Task { @MainActor in
-            switch central.state {
-            case .poweredOn:
-                if scanRequested {
-                    scanRequested = false
-                    beginScan(central)
-                } else if state == .bluetoothUnavailable {
-                    state = .idle
-                }
-            case .unauthorized:
-                scanRequested = false
-                record("Bluetooth access denied")
-                state = .failed(Self.unauthorizedMessage)
-            case .unknown, .resetting:
-                break
-            default:
-                scanRequested = false
-                state = .bluetoothUnavailable
-            }
+            if updateBluetoothState(central.state) { beginScan(central) }
         }
     }
 
@@ -436,6 +453,10 @@ extension NearbySyncController: CBPeripheralDelegate {
         didWriteValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        if let error { Task { @MainActor in fail(error) } }
+        if let error {
+            Task { @MainActor in
+                handleWriteFailure(error, peripheralID: peripheral.identifier)
+            }
+        }
     }
 }

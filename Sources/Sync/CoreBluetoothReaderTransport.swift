@@ -106,10 +106,12 @@ final class CoreBluetoothReaderTransport: NSObject, ReaderLinkTransport {
 
     func cancelConnection() {
         rediscovery.reset()
-        central?.stopScan()
-        for candidate in restored { central?.cancelPeripheralConnection(candidate) }
+        if let central, central.state == .poweredOn {
+            central.stopScan()
+            for candidate in restored { central.cancelPeripheralConnection(candidate) }
+            if let peripheral { central.cancelPeripheralConnection(peripheral) }
+        }
         restored = []
-        if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         peripheral = nil
         reset()
     }
@@ -159,7 +161,6 @@ extension CoreBluetoothReaderTransport: CBCentralManagerDelegate {
             case .unknown, .resetting: break
             default:
                 rediscovery.reset()
-                central.stopScan()
                 peripheral = nil
                 reset()
                 onEvent?(.availabilityChanged(false))

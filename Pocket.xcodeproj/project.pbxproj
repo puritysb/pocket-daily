@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		006A187A0A910C359AD9B57B /* NearbyOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2703A1EDF6D2168144924903 /* NearbyOnboardingTests.swift */; };
 		01350DEC54E38B1639531575 /* libc++.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D46C68C6D1477B48D78B01C /* libc++.tbd */; };
 		01E9D5D84BF3B5FC1D0D0BA2 /* SyncChannels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84CD34B492D9F53B4A13338F /* SyncChannels.swift */; };
 		027B8D3D1CFD3717E3A2B527 /* ArticleInboxModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8222B6BE7D8BFA048BAF8A5 /* ArticleInboxModel.swift */; };
@@ -180,6 +181,7 @@
 		84184BA21AEF770C970ED58A /* FirmwareImageValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037226D140697D15166E6091 /* FirmwareImageValidator.swift */; };
 		8575068CDA0D5C739498021F /* ReaderWakeConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C2914644259D9755FF540D3 /* ReaderWakeConnector.swift */; };
 		86E634244B23C47205D8B382 /* NearbySyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBC4897C49040DA94CB6DC3A /* NearbySyncController.swift */; };
+		885A4E4B89B0E08A64B6996E /* NearbyOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2703A1EDF6D2168144924903 /* NearbyOnboardingTests.swift */; };
 		88CC475A30E6F5D6AFDA43C8 /* ReaderWakeConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C2914644259D9755FF540D3 /* ReaderWakeConnector.swift */; };
 		894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */; };
 		8A697CB091BC1C2AEB626F75 /* ReaderStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CD0FA4176A1D030F77579CE /* ReaderStorage.swift */; };
@@ -405,6 +407,7 @@
 		2438136E43779E85BB2ABEBA /* MyCardsEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyCardsEditor.swift; sourceTree = "<group>"; };
 		251C8F71E21953C60FD129A0 /* ReaderButtonDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderButtonDiagram.swift; sourceTree = "<group>"; };
 		268C2440109B903279B4AB08 /* ReaderScreenCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderScreenCapture.swift; sourceTree = "<group>"; };
+		2703A1EDF6D2168144924903 /* NearbyOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NearbyOnboardingTests.swift; sourceTree = "<group>"; };
 		28FC5BB6E5BAF17FBE651A95 /* ScreenPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPresentationTests.swift; sourceTree = "<group>"; };
 		2C783315F5ED047FCCC49FD1 /* CoreBluetoothReaderTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBluetoothReaderTransport.swift; sourceTree = "<group>"; };
 		2CA7BFCB0841E604519208ED /* ReaderHardwareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderHardwareTests.swift; sourceTree = "<group>"; };
@@ -753,6 +756,7 @@
 				17315F0BDA2C370AC1F56ACA /* KOReaderDocumentDigestTests.swift */,
 				4E3422134442A4A01012C7B2 /* LibraryTests.swift */,
 				C5893AB01049A60E87A4353F /* LiveSyncTests.swift */,
+				2703A1EDF6D2168144924903 /* NearbyOnboardingTests.swift */,
 				16886CF79DC58ED5FF77A60A /* NearbySyncProtocolTests.swift */,
 				D61604ADB60E9E92E71D22DB /* PocketProfileTests.swift */,
 				843588A7F0919F618B2D9680 /* ProfileDraftPersistenceTests.swift */,
@@ -1241,6 +1245,7 @@
 				155D53ACA2BAE90AFC65D350 /* KOReaderDocumentDigestTests.swift in Sources */,
 				43BA99135624FB102463734E /* LibraryTests.swift in Sources */,
 				B85297D8D94F38E58CA81630 /* LiveSyncTests.swift in Sources */,
+				006A187A0A910C359AD9B57B /* NearbyOnboardingTests.swift in Sources */,
 				894E765DD7FC372DBB2DC127 /* NearbySyncProtocolTests.swift in Sources */,
 				E9883E6E71F42D344D105192 /* PocketProfileTests.swift in Sources */,
 				6B69B3FC14EBB5D176DAF7C7 /* ProfileDraftPersistenceTests.swift in Sources */,
@@ -1515,6 +1520,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9D9BC54E3102E108499AF8F4 /* DeviceSnapshotTests.swift in Sources */,
+				885A4E4B89B0E08A64B6996E /* NearbyOnboardingTests.swift in Sources */,
 				4FE8262F7F07D37E69BE406D /* PocketMacReaderTests.swift in Sources */,
 				1B9BC14978B72E51ACAB9456 /* PocketMacScreenshotTests.swift in Sources */,
 				6D5DBE1AC82BF62AA1B9B01A /* PocketProfileTests.swift in Sources */,

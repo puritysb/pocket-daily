@@ -17,6 +17,40 @@ final class ReaderWakeConnectorTests: XCTestCase {
         XCTAssertEqual(transport.connects, [reader.peripheralID])
     }
 
+    func testBluetoothPreflightDoesNotConnectOrWriteAndReleasesItsDeadline() async throws {
+        let transport = Transport(), scheduler = Scheduler()
+        transport.isAvailable = false
+        let connector = ReaderWakeConnector(transport: transport, scheduler: scheduler)
+        let task = Task { try await connector.ensureAvailable() }
+        for _ in 0..<100 where transport.activations == 0 { await Task.yield() }
+        XCTAssertEqual(transport.activations, 1)
+        XCTAssertTrue(transport.connects.isEmpty)
+        transport.isAvailable = true
+        transport.send(.availabilityChanged(true))
+        try await task.value
+        XCTAssertTrue(transport.connects.isEmpty)
+        XCTAssertTrue(transport.writes.isEmpty)
+        XCTAssertTrue(scheduler.pending.isEmpty)
+    }
+
+    func testBluetoothPreflightTimeoutAndDenialCannotSendReaderCommands() async {
+        for deny in [false, true] {
+            let transport = Transport(), scheduler = Scheduler()
+            transport.isAvailable = false
+            let connector = ReaderWakeConnector(transport: transport, scheduler: scheduler)
+            let task = Task { try await connector.ensureAvailable() }
+            for _ in 0..<100 where transport.activations == 0 { await Task.yield() }
+            if deny { transport.send(.availabilityChanged(false)) } else { scheduler.fire(20) }
+            do { try await task.value; XCTFail("Unavailable radio must fail preflight") }
+            catch { XCTAssertEqual(error as? ReaderWakeConnector.Failure, deny ? .unavailable : .timedOut(.waiting)) }
+            transport.isAvailable = true
+            transport.send(.availabilityChanged(true))
+            XCTAssertTrue(transport.connects.isEmpty)
+            XCTAssertTrue(transport.writes.isEmpty)
+            XCTAssertTrue(scheduler.pending.isEmpty)
+        }
+    }
+
     func testBondedRequestRequiresMatchingAcknowledgement() async throws {
         let transport = Transport(), scheduler = Scheduler()
         transport.known = [reader.peripheralID]

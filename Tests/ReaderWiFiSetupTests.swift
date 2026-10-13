@@ -4,6 +4,113 @@ import XCTest
 
 @MainActor
 final class ReaderWiFiSetupTests: XCTestCase {
+    func testConfirmationWaitsForRollbackBeyondThreeFastSearches() async throws {
+        var time: TimeInterval = 0
+        var polls = 0
+        let message = try await ReaderWiFiConfirmation.observe(now: { time }, pause: { time += 5 }) {
+            polls += 1
+            return time >= 45 ? "Verified old-network rollback" : nil
+        }
+        XCTAssertEqual(message, "Verified old-network rollback")
+        XCTAssertEqual(polls, 9)
+        XCTAssertEqual(time, 45)
+    }
+
+    func testUnconfirmedWiFiResultStopsAtDeadline() async throws {
+        var time: TimeInterval = 0
+        var polls = 0
+        let message = try await ReaderWiFiConfirmation.observe(now: { time }, pause: { time += 5 }) {
+            polls += 1
+            return nil
+        }
+        XCTAssertNil(message)
+        XCTAssertEqual(time, 90)
+        XCTAssertEqual(polls, 18)
+    }
+
+    func testCancelledWiFiObservationDoesNotPollAgain() async {
+        var polls = 0
+        do {
+            _ = try await ReaderWiFiConfirmation.observe(pause: { throw CancellationError() }) {
+                polls += 1
+                return nil
+            }
+            XCTFail("Cancellation must propagate")
+        } catch is CancellationError {} catch { XCTFail("Unexpected error: \(error)") }
+        XCTAssertEqual(polls, 0)
+    }
+
+    func testUnavailableMacBluetoothKeepsTheOnlineReaderOnWiFi() async throws {
+        let domain = "Pocket.wifi-preflight." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(domain)
+        defer { defaults.removePersistentDomain(forName: domain); try? FileManager.default.removeItem(at: root) }
+        let store = RememberedBluetoothReaderStore(defaults: defaults)
+        store.reader = RememberedBluetoothReader(peripheralID: UUID(), readerID: "89ABCDEF", model: "X3")
+        let link = ReaderBluetoothLink(transport: ReaderBluetoothLinkTests.FakeTransport(), store: store,
+            sync: ReadingSync(defaults: defaults, iCloudAvailable: { false }), books: { [] },
+            scheduler: ReaderBluetoothLinkTests.ManualScheduler())
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RejectOnboardingNetwork.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let model = PocketModel(discoveryIO: EmptyReaderDiscoveryIO(), client: CrossPointClient(session: session),
+            sessionStorage: ReaderSessionStorage(root: root, defaults: defaults), bluetoothLink: link)
+        defer { model.pauseForBackground() }
+        for _ in 0..<100 where model.bookTransferJobsLoading { try await Task.sleep(for: .milliseconds(10)) }
+        model.readerStatus = try JSONDecoder().decode(CrossPointStatus.self, from: Data(
+            #"{"deviceID":"89ABCDEF","version":"dev","device":"X3","ip":"192.0.2.1","mode":"STA","rssi":-50,"freeHeap":70000,"uptime":1,"wifiSetup":1}"#.utf8))
+        var checked = 0, sent = 0
+        model.prepareReaderBluetooth = { checked += 1; throw ReaderWakeConnector.Failure.timedOut(.waiting) }
+        model.sendReaderWiFi = { _, _ in sent += 1; return "01ABCDEF" }
+        model.configureReaderWiFi(ReaderWiFiCredentials(ssid: "Test only", password: "test-password"))
+        XCTAssertTrue(model.isConfiguringReaderWiFi)
+        for _ in 0..<100 where model.isWorking || model.isConfiguringReaderWiFi { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(checked, 1)
+        XCTAssertEqual(sent, 0)
+        XCTAssertEqual(model.readerStatus?.deviceID, "89ABCDEF")
+        XCTAssertFalse(model.isConfiguringReaderWiFi)
+        XCTAssertTrue(model.readerWiFiSetupMessage.contains("Bluetooth did not become ready"))
+        XCTAssertTrue(model.readerWiFiSetupMessage.contains("No Wi-Fi details were sent"))
+    }
+
+    func testRetryEditingClearsOldOutcomeAndRequiresNewPassword() throws {
+        var form = ReaderWiFiSetupForm()
+        form.ssid = "Example"
+        form.password = "test-password"
+        let sent = try XCTUnwrap(form.submit())
+        XCTAssertEqual(sent.password, "test-password")
+        XCTAssertEqual(form.password, "")
+        XCTAssertTrue(form.submitted, "Clearing a sent secret must keep its result visible")
+        XCTAssertNil(form.submit(), "Never replay credentials cleared after an attempt")
+        form.ssid = "Corrected network"
+        XCTAssertFalse(form.submitted, "An old failure/success must not label edited credentials")
+        XCTAssertNotNil(form.validation, "Retry needs a new password after failure")
+        form.password = "correct-password"
+        XCTAssertNil(form.validation)
+        XCTAssertEqual(form.submit()?.ssid, "Corrected network")
+        form.password = "another-password"
+        XCTAssertFalse(form.submitted)
+        form.openNetwork = true
+        XCTAssertEqual(form.password, "")
+        XCTAssertEqual(form.submit()?.password, "")
+        form.openNetwork = false
+        XCTAssertFalse(form.submitted)
+        XCTAssertNotNil(form.validation)
+    }
+
+    func testDeniedAutofillStillAllowsExplicitManualSubmission() async throws {
+        let lookup = CurrentWiFiName(fetch: { throw CurrentWiFiName.Failure.permission })
+        let name = await lookup.read()
+        XCTAssertNil(name)
+        var form = ReaderWiFiSetupForm()
+        form.ssid = "Manually entered"
+        XCTAssertNil(form.submit(), "Missing keychain password is not an open network")
+        form.password = "manual-password"
+        XCTAssertEqual(form.submit()?.ssid, "Manually entered")
+        XCTAssertEqual(form.password, "")
+    }
+
     func testPairingEncryptionFailuresExplainRecoveryWithoutHidingOtherFailures() {
         for code in [CBATTError.Code.insufficientEncryption, .insufficientAuthentication] {
             let message = NearbySyncController.failureMessage(for: CBATTError(code))
@@ -154,4 +261,14 @@ final class ReaderWiFiSetupTests: XCTestCase {
         XCTAssertFalse(model.isConfiguringReaderWiFi)
         XCTAssertFalse(model.canConfigureReaderWiFi)
     }
+}
+
+private final class RejectOnboardingNetwork: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        XCTFail("Bluetooth preflight failure must not send an HTTP request to the reader")
+        client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
+    }
+    override func stopLoading() {}
 }

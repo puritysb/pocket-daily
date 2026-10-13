@@ -265,3 +265,42 @@ other applications, OS Bluetooth records or permission decisions.
 For a reader-side fresh start, use the firmware guide's explicitly acknowledged
 `dev/fresh-start` operation. Reconnecting or pairing after the reset consumes the
 initial-setup state; leave both sides unpaired for the person rehearsing it.
+
+## Short onboarding acceptance (Mac/X3)
+
+```sh
+python3 scripts/verify_reader_interface.py --onboarding
+```
+
+This option forces physical-only scope and rejects simulator, iPhone, screenshot
+and extended standby options. It runs isolated permission/cancellation and Wi-Fi
+form regressions, opens/turns/reopens Welcome in the shipping Mac reader without
+a companion model, recovers from an unsupported import, and checks that deleting
+the guide does not reinsert it. Then the firmware runner verifies failed BLE
+Wi-Fi provisioning with a unique nonexistent SSID and unchanged saved networks,
+connection/inventory/transfers, actual X3 EPUB rendering, bidirectional reading
+acceptance and short timer sleep/wake. Original reader data must be restored.
+No real password is read for the failure test. Normal initial enrollment and
+OS permissions are prerequisites; an unavailable reader uses existing discovery.
+
+Before asking an online reader to leave Wi-Fi for setup, the app checks that
+the Apple Bluetooth radio becomes ready within its bounded deadline. An
+unavailable radio or stalled permission service leaves the existing reader
+connection intact and explains how to retry; no credentials or reader setup
+command are sent. This preflight does not prove that a later peripheral
+connection or authentication will succeed.
+
+After BLE accepts the single setup command, verification observes its matching
+receipt with a 90-second observation window instead of three search attempts.
+A failed association can return to the saved network after those searches have
+already finished. This only extends observation; it never resends credentials.
+Cancellation and absent/mismatched receipts cannot produce success.
+
+A missing rollback, missing reading capture or failed restoration cannot pass.
+Run the report's negative controls with
+`python3 -m unittest discover -s scripts -p test_reader_onboarding.py`.
+The automatic report distinguishes injected permission outcomes from actual OS
+permission dialogs. It does not claim physical first-boot Read offline presses
+or navigation through the reader Library: developer capture enters the real
+reader activity directly. Pairing-system prompts cannot be bypassed. Existing
+fresh BLE first-install success evidence remains separate from this non-reset run.

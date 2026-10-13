@@ -10,6 +10,89 @@ import XCTest
 /// keyboard path, and draws text.
 final class PocketMacReaderTests: XCTestCase {
     @MainActor
+    func testShortContinuityBookNavigatesToExactParagraphs() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ShortContinuity-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storage = BookLibrary(root: root)
+        let document = EPUBDocument(title: "Short continuity", language: "en", chapters:
+            ["Amber orchard", "Silver meadow", "Violet harbor"].map { name in
+                .init(title: name, paragraphs: (1...35).map { index in
+                    "\(name) checkpoint \(index). The quiet traveler reads beside the river and remembers this place. A lantern lights the path through the garden."
+                })
+            })
+        let book = try await storage.importDocument(document, origin: .written)
+        let url = try await storage.fileURL(for: book)
+        let (session, window) = open(url)
+        defer { window.orderOut(nil) }
+        try await waitUntil("short book ready") { session.phase == .ready && session.position != nil }
+        for chapter in [2, 1, 3] {
+            let pointer = "/body/DocFragment[\(chapter)]/body/p[17]/text().0"
+            session.go(to: ReadingPosition(fraction: 0, xpointer: pointer, cfi: nil, chapter: nil, updatedAt: Date()))
+            try await waitUntil("exact chapter \(chapter)") { session.position?.xpointer?.hasPrefix("/body/DocFragment[\(chapter)]/") == true }
+            let visible = try await session.webView.callAsyncJavaScript(ReaderContinuityPosition.visibleCharacter,
+                arguments: ["pointer": pointer], in: nil, contentWorld: .page) as? Bool
+            XCTAssertEqual(visible, true, "Exact checkpoint must be on the visible page")
+        }
+    }
+
+    /// No companion model, account, radios or demo data: use the shipping local
+    /// library and WebKit reader, then recreate storage as after app relaunch.
+    @MainActor
+    func testOfflineFirstUseImportRecoveryAndReadingResume() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("OfflineStart-\(UUID().uuidString)")
+        let domain = "Pocket.offline-start." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain); try? FileManager.default.removeItem(at: root) }
+        let storage = BookLibrary(root: root.appendingPathComponent("library"))
+        let library = LibraryModel(storage: storage, defaults: defaults)
+        await library.load()
+        XCTAssertNil(library.error)
+        XCTAssertEqual(library.books.count, 1)
+        let welcome = try XCTUnwrap(library.books.first)
+        XCTAssertEqual(welcome.origin, .welcome)
+        let url = try await library.fileURL(for: welcome)
+        let (session, window) = open(url)
+        defer { window.orderOut(nil) }
+        try await waitUntil("offline Welcome page") { session.phase == .ready && session.position != nil }
+        let first = try XCTUnwrap(session.position)
+        session.next()
+        try await waitUntil("offline page turn") { (session.position?.fraction ?? 0) > first.fraction }
+        let position = try XCTUnwrap(session.position)
+        library.savePosition(position, for: welcome.id)
+        await library.flushPositions()
+        let reopened = LibraryModel(storage: BookLibrary(root: root.appendingPathComponent("library")), defaults: defaults)
+        await reopened.load()
+        XCTAssertEqual(reopened.books.count, 1, "Reopening must not duplicate Welcome")
+        let saved = try XCTUnwrap(reopened.book(welcome.id)?.position)
+        let (restored, restoredWindow) = open(url, at: saved)
+        defer { restoredWindow.orderOut(nil) }
+        try await waitUntil("offline restored page") { restored.phase == .ready && restored.position != nil }
+        XCTAssertEqual(restored.position?.xpointer, saved.xpointer)
+
+        let bad = root.appendingPathComponent("unsupported.xtc")
+        try Data("not an EPUB".utf8).write(to: bad)
+        let rejected = await reopened.importFiles([bad])
+        XCTAssertNil(rejected)
+        XCTAssertNotNil(reopened.error)
+        let text = root.appendingPathComponent("My first book.txt")
+        try String(repeating: "Offline reading needs no paired reader.\n\n", count: 40).write(to: text, atomically: true, encoding: .utf8)
+        let importResult = await reopened.importFiles([text])
+        let imported = try XCTUnwrap(importResult)
+        XCTAssertNil(reopened.error, "A corrected import must clear the old failure")
+        let importedURL = try await reopened.fileURL(for: imported)
+        let (ownBook, ownWindow) = open(importedURL)
+        defer { ownWindow.orderOut(nil) }
+        try await waitUntil("own book after import failure") { ownBook.phase == .ready && ownBook.position != nil }
+        await reopened.remove(welcome)
+        await reopened.load()
+        XCTAssertEqual(reopened.books.map(\.id), [imported.id], "Removed Welcome must stay removed")
+        await reopened.remove(imported)
+        await reopened.load()
+        XCTAssertTrue(reopened.books.isEmpty, "An intentionally empty library must remain usable")
+        XCTAssertNil(reopened.error)
+    }
+
+    @MainActor
     func testGuideBookRendersAndTurnsPages() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("MacReader-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }

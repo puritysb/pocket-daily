@@ -1,4 +1,21 @@
 import Foundation
+
+enum ReaderWiFiConfirmation {
+    /// Observe a single accepted command; association and old-network rollback
+    /// can outlast three fast LAN searches. Never replay credentials here.
+    @MainActor
+    static func observe(now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+                        pause: () async throws -> Void = { try await Task.sleep(for: .seconds(5)) },
+                        poll: () async throws -> String?) async throws -> String? {
+        let deadline = now() + 90
+        while now() < deadline {
+            try await pause()
+            try Task.checkCancellation()
+            if let message = try await poll() { return message }
+        }
+        return nil
+    }
+}
 import SwiftUI
 
 /// User-selected credentials exist only for this foreground operation. Never
@@ -44,27 +61,42 @@ struct ReaderWiFiSetupReceipt: Codable, Equatable {
     }
 }
 
+/// Foreground-only form state. Editing after a result starts a new attempt;
+/// submitting clears the secret without hiding the result of that attempt.
+struct ReaderWiFiSetupForm {
+    var ssid = "" { didSet { if ssid != oldValue { submitted = false } } }
+    var password = "" { didSet { if password != oldValue { submitted = false } } }
+    var openNetwork = false {
+        didSet { if openNetwork != oldValue { password = ""; submitted = false } }
+    }
+    private(set) var submitted = false
+
+    var credentials: ReaderWiFiCredentials {
+        ReaderWiFiCredentials(ssid: ssid, password: openNetwork ? "" : password)
+    }
+    var validation: String? {
+        if !openNetwork && password.isEmpty { return "Enter the Wi-Fi password." }
+        return credentials.validationMessage
+    }
+    mutating func submit() -> ReaderWiFiCredentials? {
+        guard validation == nil else { return nil }
+        let value = credentials
+        password = ""
+        submitted = true
+        return value
+    }
+}
+
 struct ReaderWiFiSetupView: View {
     @ObservedObject var model: PocketModel
     @ObservedObject var nearby: NearbySyncController
     @ObservedObject var link: ReaderBluetoothLink
     @Environment(\.dismiss) private var dismiss
-    @State private var ssid = ""
-    @State private var password = ""
-    @State private var openNetwork = false
-    @State private var submitted = false
+    @State private var form = ReaderWiFiSetupForm()
     @StateObject private var currentWiFi = CurrentWiFiName()
     @State private var lookupID = 0
     @State private var isFillingWiFi = false
     @State private var autofillMessage: String?
-
-    private var credentials: ReaderWiFiCredentials {
-        ReaderWiFiCredentials(ssid: ssid, password: openNetwork ? "" : password)
-    }
-    private var validation: String? {
-        if !openNetwork && password.isEmpty { return "Enter the Wi-Fi password." }
-        return credentials.validationMessage
-    }
 
     var body: some View {
         ScrollView {
@@ -83,6 +115,8 @@ struct ReaderWiFiSetupView: View {
                     .disabled(model.isDemoMode || model.isWorking || nearby.ownsBluetooth)
                 if nearby.ownsBluetooth {
                     ProgressView("Finding and pairing your reader…").font(.caption)
+                    Button("Cancel Pairing") { nearby.disconnect() }
+                        .accessibilityIdentifier("reader-wifi-cancel-pairing")
                 }
                 if let failure = nearby.state.failureMessage { Text(failure).foregroundStyle(.red) }
             } else {
@@ -109,44 +143,47 @@ struct ReaderWiFiSetupView: View {
             if let autofillMessage {
                 Text(autofillMessage).font(.caption).foregroundStyle(.secondary)
             }
-            TextField("Wi-Fi name", text: $ssid)
+            TextField("Wi-Fi name", text: $form.ssid)
                 .textContentType(.none).autocorrectionDisabled()
 #if os(iOS)
                 .textInputAutocapitalization(.never)
 #endif
                 .accessibilityIdentifier("reader-wifi-name")
                 .disabled(isFillingWiFi || model.isConfiguringReaderWiFi)
-            if !openNetwork {
-                SecureField("Wi-Fi password", text: $password)
+            if !form.openNetwork {
+                SecureField("Wi-Fi password", text: $form.password)
                     .textContentType(.none)
                     .accessibilityIdentifier("reader-wifi-password")
                     .disabled(isFillingWiFi || model.isConfiguringReaderWiFi)
             }
-            Toggle("Open network (no password)", isOn: $openNetwork)
+            Toggle("Open network (no password)", isOn: $form.openNetwork)
                 .disabled(isFillingWiFi || model.isConfiguringReaderWiFi)
-                .onChange(of: openNetwork) { _, _ in password = "" }
+
             Text("Use a 2.4 GHz personal Wi-Fi network. Networks requiring a browser sign-in or enterprise account are not supported. Your Mac or iPhone stays on its current Wi-Fi.")
                 .font(.caption).foregroundStyle(.secondary)
-            if let validation, !ssid.isEmpty, !submitted, !model.isConfiguringReaderWiFi {
+            if let validation = form.validation, !form.ssid.isEmpty, !form.submitted, !model.isConfiguringReaderWiFi {
                 Text(validation).font(.caption).foregroundStyle(.secondary)
             }
-            if submitted || model.isConfiguringReaderWiFi {
+            if form.submitted || model.isConfiguringReaderWiFi {
                 Text(model.readerWiFiSetupMessage).font(.callout)
                     .accessibilityIdentifier("reader-wifi-result")
             }
             HStack {
-                if model.isConfiguringReaderWiFi { ProgressView().controlSize(.small) }
+                if model.isConfiguringReaderWiFi {
+                    ProgressView().controlSize(.small)
+                    Button("Stop Waiting") { model.cancelConnectionAttempt() }
+                        .disabled(!model.canCancelConnection)
+                        .accessibilityIdentifier("reader-wifi-stop-waiting")
+                }
                 Button("Save and Connect") {
-                    let value = credentials
-                    password = ""
+                    guard let value = form.submit() else { return }
                     autofillMessage = nil
-                    submitted = true
                     nearby.disconnect()
                     model.configureReaderWiFi(value)
                 }
                 .buttonStyle(.borderedProminent).tint(PocketPalette.accent)
                 .accessibilityIdentifier("reader-wifi-submit")
-                .disabled(isFillingWiFi || validation != nil || link.rememberedReader == nil || model.isWorking || model.isDemoMode || model.hasDirectSession)
+                .disabled(isFillingWiFi || form.validation != nil || link.rememberedReader == nil || model.isWorking || model.isDemoMode || model.hasDirectSession)
             }
         }
         .textFieldStyle(.roundedBorder)
@@ -167,18 +204,18 @@ struct ReaderWiFiSetupView: View {
             autofillMessage = nil
             defer { isFillingWiFi = false }
             if let name = await currentWiFi.read(), !Task.isCancelled {
-                if name != ssid {
-                    password = ""
-                    openNetwork = false
+                if name != form.ssid {
+                    form.password = ""
+                    form.openNetwork = false
                 }
-                ssid = name
+                form.ssid = name
 #if os(macOS)
                 autofillMessage = "Waiting for macOS keychain approval. Approve or cancel the system request to continue."
                 let saved = await CurrentWiFiName.savedPassword(for: name)
                 guard !Task.isCancelled else { return }
                 if let saved {
-                    password = saved
-                    openNetwork = false
+                    form.openNetwork = false
+                    form.password = saved
                     autofillMessage = "Saved password filled in. Choose Save and Connect when you’re ready."
                 } else {
                     autofillMessage = "Wi-Fi name filled in. macOS did not provide a saved password; enter it yourself, or select Open network if it has no password."
@@ -186,6 +223,6 @@ struct ReaderWiFiSetupView: View {
 #endif
             }
         }
-        .onDisappear { password = ""; nearby.disconnect() }
+        .onDisappear { form.password = ""; nearby.disconnect() }
     }
 }
